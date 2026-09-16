@@ -19,6 +19,26 @@ El instalador construye el binario localmente, lo coloca en
 `.installed-commit`. No instala aún una unidad de sistema ni abre un puerto
 público.
 
+### Ruta personalizada
+
+La instalación puede vivir fuera de `/opt`. Por ejemplo, para usar
+`/home/wachi/launcher_manager`:
+
+```bash
+sudo git clone https://github.com/wachipayox/BootOptimDistribution.git /home/wachi/launcher_manager
+sudo BOOTOPTIM_DISTRIBUTION_HOME=/home/wachi/launcher_manager \
+  /home/wachi/launcher_manager/scripts/install.sh
+```
+
+Usa la misma variable en cada actualización:
+
+```bash
+sudo BOOTOPTIM_DISTRIBUTION_HOME=/home/wachi/launcher_manager \
+  /home/wachi/launcher_manager/scripts/update.sh --check
+sudo BOOTOPTIM_DISTRIBUTION_HOME=/home/wachi/launcher_manager \
+  /home/wachi/launcher_manager/scripts/update.sh --apply
+```
+
 ## Prueba manual
 
 En una terminal, arranca el proceso limitado al propio servidor:
