@@ -14,7 +14,7 @@ if [[ ! -d "$repo_dir/.git" ]]; then
   echo "Expected a checked-out private repository at $repo_dir." >&2
   exit 1
 fi
-command -v go >/dev/null || { echo "Go 1.22+ is required to build the service." >&2; exit 1; }
+command -v go >/dev/null || { echo "Install the distribution package 'golang-go' before running this script." >&2; exit 1; }
 
 cd "$repo_dir"
 commit="$(git rev-parse HEAD)"
