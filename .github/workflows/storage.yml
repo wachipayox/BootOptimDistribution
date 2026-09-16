@@ -25,7 +25,10 @@ jobs:
       - name: Resolve module graph
         run: go mod tidy
       - name: Show generated module files
-        run: git diff -- go.mod go.sum
+        run: |
+          cat go.mod
+          echo '--- GO.SUM ---'
+          cat go.sum
       - name: gofmt
         run: test -z "$(gofmt -l internal/storage)"
       - name: Focused tests
