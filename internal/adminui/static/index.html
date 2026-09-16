@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BootOptim Distribution · Admin development shell</title>
+  <link rel="stylesheet" href="/admin/assets/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div>
+      <p class="eyebrow">BootOptimDistribution</p>
+      <h1>Administrative development shell</h1>
+    </div>
+    <p class="mode" aria-label="UI mode">Local · read-only · development</p>
+  </header>
+
+  <main id="main">
+    <section class="notice" aria-labelledby="boundary-title">
+      <h2 id="boundary-title">Not an authentication boundary</h2>
+      <p>This shell is disabled by default and contains no publish, promote, rollback, signing, object upload, or player actions. Production use requires administrator authentication and reverse-proxy policy before this UI may be enabled.</p>
+    </section>
+
+    <section aria-labelledby="build-title">
+      <h2 id="build-title">Build</h2>
+      <dl class="build-grid">
+        <div><dt>Version</dt><dd id="build-version">loading…</dd></div>
+        <div><dt>Commit</dt><dd id="build-commit">loading…</dd></div>
+      </dl>
+    </section>
+
+    <section aria-labelledby="profiles-title">
+      <div class="section-heading">
+        <div>
+          <h2 id="profiles-title">Profiles and channels</h2>
+          <p>Future read models will surface immutable revisions, pinned inheritance, overrides, promotion state, and signed rollback status.</p>
+        </div>
+      </div>
+      <div id="profiles" class="empty-state" role="status" aria-live="polite">
+        <h3>No administrative profile data is connected</h3>
+        <p>This is expected until the signed revision domain and durable storage adapters exist.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Administrative UI shell only. No player or launcher controls.</p>
+  </footer>
+  <script src="/admin/assets/app.js" defer></script>
+</body>
+</html>
