@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="${BOOTOPTIM_DISTRIBUTION_HOME:-/opt/bootoptim-distribution}"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+repo_dir="${BOOTOPTIM_DISTRIBUTION_HOME:-$(cd "$script_dir/.." && pwd -P)}"
 mode="${1:---check}"
 
 if [[ "${EUID}" -ne 0 ]]; then

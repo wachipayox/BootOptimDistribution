@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="${BOOTOPTIM_DISTRIBUTION_HOME:-/opt/bootoptim-distribution}"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+repo_dir="${BOOTOPTIM_DISTRIBUTION_HOME:-$(cd "$script_dir/.." && pwd -P)}"
 bin_dir="$repo_dir/bin"
 target="$bin_dir/bootoptim-distribution"
 previous="$bin_dir/bootoptim-distribution.previous"

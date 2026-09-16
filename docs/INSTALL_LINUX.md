@@ -26,17 +26,15 @@ La instalación puede vivir fuera de `/opt`. Por ejemplo, para usar
 
 ```bash
 sudo git clone https://github.com/wachipayox/BootOptimDistribution.git /home/wachi/launcher_manager
-sudo BOOTOPTIM_DISTRIBUTION_HOME=/home/wachi/launcher_manager \
-  /home/wachi/launcher_manager/scripts/install.sh
+sudo /home/wachi/launcher_manager/scripts/install.sh
 ```
 
-Usa la misma variable en cada actualización:
+Los scripts detectan automáticamente su propia carpeta, así que después de
+clonar en esa ruta no hace falta conservar ni repetir una variable de entorno:
 
 ```bash
-sudo BOOTOPTIM_DISTRIBUTION_HOME=/home/wachi/launcher_manager \
-  /home/wachi/launcher_manager/scripts/update.sh --check
-sudo BOOTOPTIM_DISTRIBUTION_HOME=/home/wachi/launcher_manager \
-  /home/wachi/launcher_manager/scripts/update.sh --apply
+sudo /home/wachi/launcher_manager/scripts/update.sh --check
+sudo /home/wachi/launcher_manager/scripts/update.sh --apply
 ```
 
 ## Prueba manual
