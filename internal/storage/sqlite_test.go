@@ -111,7 +111,7 @@ func TestPublicationRecoveryIdempotencyAndImmutability(t *testing.T) {
 	}
 
 	changed := publication
-	changed.Manifest = manifestFor([]byte(`{"changed":true}`))
+	changed.Manifest = manifestFor([]byte("{\"changed\":true}"))
 	if err := reopened.PublishRevision(ctx, changed); !errors.Is(err, ErrImmutableConflict) {
 		t.Fatalf("changed immutable revision error = %v, want ErrImmutableConflict", err)
 	}
@@ -208,7 +208,7 @@ func newStores(t *testing.T) (*CAS, *SQLiteStore) {
 }
 
 func publicationFor(id, profile string, sequence int64, objects []Object) RevisionPublication {
-	manifest := []byte(`{"already_validated":true,"id":"` + id + `"}`)
+	manifest := []byte("{\"already_validated\":true,\"id\":\"" + id + "\"}")
 	return RevisionPublication{
 		RevisionID:      id,
 		ProfileID:       profile,
