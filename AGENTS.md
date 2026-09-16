@@ -3,9 +3,11 @@
 This repository is the Linux-side distribution service for the private
 Wachiland Elite modpack. Read `README.md` before changing code.
 
-- `main` is the only deployable branch. Do not add a workflow that connects
-  from GitHub into the home server; the server pulls only after an explicit
-  administrator request.
+- `main` is the only deployable branch. `agent/integration-current` is the
+  integration authority for service development; work branches start from it
+  and target it with a PR. Do not add a workflow that connects from GitHub into
+  the home server; the server pulls only after an explicit administrator
+  request.
 - Never store a release signing private key, GitHub token, deploy private key,
   player inventory or Microsoft token in the repository, service config or
   logs.
