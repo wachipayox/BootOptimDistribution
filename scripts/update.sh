@@ -21,12 +21,14 @@ cd "$repo_dir"
 git fetch --quiet origin main
 installed="$(cat .installed-commit 2>/dev/null || git rev-parse HEAD)"
 available="$(git rev-parse origin/main)"
+installed_version="$(tr -d '[:space:]' < VERSION)"
+available_version="$(git show origin/main:VERSION | tr -d '[:space:]')"
 
 if [[ "$installed" == "$available" ]]; then
-  echo "No update: installed and origin/main are both $installed."
+  echo "No update: installed and origin/main are both $installed_version ($installed)."
   exit 0
 fi
-echo "Update available: installed $installed -> main $available"
+echo "Update available: $installed_version ($installed) -> $available_version ($available) from main"
 if [[ "$mode" == "--check" ]]; then
   exit 0
 fi

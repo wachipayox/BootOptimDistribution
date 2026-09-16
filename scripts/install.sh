@@ -18,7 +18,11 @@ command -v go >/dev/null || { echo "Go 1.22+ is required to build the service." 
 
 cd "$repo_dir"
 commit="$(git rev-parse HEAD)"
-version="$(git describe --tags --always --dirty)"
+version="$(tr -d '[:space:]' < VERSION)"
+if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+  echo "VERSION must contain a semantic version, got: $version" >&2
+  exit 1
+fi
 mkdir -p "$bin_dir"
 staging="$(mktemp "$bin_dir/.bootoptim-distribution.XXXXXX")"
 
