@@ -195,7 +195,7 @@ func signRollbackEvent(t *testing.T, statement RollbackStatement, priv ed25519.P
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(canonical)
-	envent := RollbackEvent{
+	event := RollbackEvent{
 		EventID: "rollback-test-0001", StatementSHA256: hex.EncodeToString(digest[:]), Statement: statementRaw,
 		Signature: Signature{KeyID: "test-release-key", Algorithm: SignatureAlgorithm, Value: base64.RawURLEncoding.EncodeToString(ed25519.Sign(priv, canonical))},
 	}
@@ -211,7 +211,7 @@ func fakeVerified(profileID, revisionID, digest string, base *ParentRef, maxDept
 		SchemaVersion: 1,
 		Profile:       Profile{ID: profileID, Official: true},
 		Revision:      Revision{ID: revisionID, Sequence: 1},
-		Game:          Game{Minecraft: "1.22.1", NeoForge: "21.1.0"},
+		Game:          Game{Minecraft: "1.21.1", NeoForge: "21.1.0"},
 		Base:          base, Permissions: Permissions{MaxInheritanceDepth: maxDepth},
 	}, digest: digest}
 }
