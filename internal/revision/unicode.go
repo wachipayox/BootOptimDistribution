@@ -24,10 +24,10 @@ func validateJSONStringUnicode(raw []byte) error {
 				}
 				i++
 				if raw[i] != 'u' {
-					if !strings.ContainsRune(`"\\/bfnrt`, rune(raw[i]) {
+					if !strings.ContainsRune(`"\\/bfnrt`, rune(raw[i])) {
 						return errors.New("invalid string escape")
-				}
-				continue
+					}
+					continue
 				}
 				unit, next, err := parseUTF16Escape(raw, i)
 				if err != nil {
