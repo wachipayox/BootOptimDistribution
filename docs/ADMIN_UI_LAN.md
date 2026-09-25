@@ -40,9 +40,10 @@ navegador.
 ## Datos que muestra el panel
 
 El panel consulta SQLite y presenta revisiones publicadas, SHA-256, secuencia,
-herencia y agregados del almacenamiento CAS. La consulta está limitada a las
-100 revisiones más recientes; las métricas son agregados SQL y no recorren el
-árbol de objetos. No lee ni inspecciona directorios de Minecraft.
+herencia y conteos/tamaño de los objetos referenciados por revisiones publicadas.
+La lista está limitada a las 100 revisiones más recientes; las métricas son
+agregados SQL y no recorren el árbol de objetos. No lee ni inspecciona
+directorios de Minecraft.
 
 Las operaciones de carga, publicación, promoción y rollback aún no están
 expuestas por HTTP. No se habilitarán hasta tener autenticación de administrador
