@@ -9,9 +9,11 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/wachipayox/BootOptimDistribution/internal/adminui"
+	"github.com/wachipayox/BootOptimDistribution/internal/storage"
 )
 
 var (
@@ -36,22 +38,40 @@ type handlerConfig struct {
 func main() {
 	listen := flag.String("listen", envOr("BOOTOPTIM_LISTEN", "127.0.0.1:8088"), "HTTP listen address")
 	devAdminUI := flag.Bool("dev-admin-ui", false, "enable the local development-only administrative UI (loopback listeners only)")
+	dataDir := flag.String("data-dir", envOr("BOOTOPTIM_DATA_DIR", "./data"), "directory for private CAS objects and SQLite metadata")
 	flag.Parse()
 
 	if err := validateAdminUIExposure(*devAdminUI, *listen); err != nil {
 		log.Fatal(err)
 	}
 
+	var model adminui.ReadModel = adminui.EmptyReadModel{}
+	var store *storage.SQLiteStore
+	if *devAdminUI {
+		cas, err := storage.OpenCAS(*dataDir, storage.DefaultMaxObjectBytes)
+		if err != nil {
+			log.Fatalf("open content store: %v", err)
+		}
+		store, err = storage.OpenSQLite(filepath.Join(*dataDir, "metadata.sqlite3"), cas)
+		if err != nil {
+			log.Fatalf("open metadata store: %v", err)
+		}
+		defer store.Close()
+		model = adminui.SQLiteReadModel{Store: store}
+	}
 	server := &http.Server{
 		Addr: *listen,
 		Handler: securityHeaders(newHandlerWithConfig(handlerConfig{
 			AdminUIEnabled: *devAdminUI,
-			AdminUIModel:   adminui.EmptyReadModel{},
+			AdminUIModel:   model,
 		})),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       30 * time.Second,
 	}
 	log.Printf("bootoptim distribution %s (%s) listening on %s", buildVersion, buildCommit, *listen)
+	if *devAdminUI {
+		log.Printf("admin UI enabled in read-only mode; state directory %s", *dataDir)
+	}
 	log.Fatal(server.ListenAndServe())
 }
 

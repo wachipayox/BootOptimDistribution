@@ -7,20 +7,24 @@ feature lands there through a reviewed PR before a deliberate promotion to
 
 ## Short term — required before the first Beta-profile test
 
-1. Implement the signed immutable revision model from Pandora PR #35:
+1. [Implemented in the current integration candidate; still requires PR review]
+   Signed immutable revision model from Pandora PR #35:
    SQLite metadata, filesystem CAS, revision validation, pinned inheritance,
    anti-rollback and Ed25519 verification. Private signing keys remain outside
    this repository and the service.
-2. Implement read/admin HTTP endpoints with test-only local authentication
-   boundaries. No player filesystem inventory, no launcher Start endpoint and
-   no public listener by default.
+2. Implement authenticated distribution read/admin HTTP endpoints. The current
+   panel reads the local SQLite inventory only; there is no object download API,
+   release-token validation or player filesystem inventory, and no launcher
+   Start endpoint.
 3. Integrate the compatible Pandora client flow only after its persistent
    ownership/recovery stack is promoted; it must preserve local overlays and
    never scan the whole `.minecraft` at Start just to look for updates.
-4. Add an **administrative web interface**: profile/channel overview, immutable
-   revision history, inherited/overridden entries, publication/promotion and
-   rollback status. It will be served only behind explicit administrator
-   authentication/reverse-proxy policy; it is not a player launcher UI.
+4. [Read-only inventory implemented in the current integration candidate]
+   The **administrative web interface** shows persisted profiles/revisions,
+   pinned inheritance and CAS aggregates through a loopback-only process behind
+   authenticated HTTPS Caddy on the LAN. Publication, promotion and rollback
+   controls remain blocked until their signed admin API exists. It is not a
+   player launcher UI.
 5. Add an unprivileged `systemd` unit, durable `/var/lib` state, `/etc`
    configuration, backup/restore instructions and a loopback-first deployment
    smoke test.

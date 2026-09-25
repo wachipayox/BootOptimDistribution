@@ -4,10 +4,15 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
+
+	"github.com/wachipayox/BootOptimDistribution/internal/revision"
+	"github.com/wachipayox/BootOptimDistribution/internal/storage"
 )
 
 // BuildInfo is intentionally limited to non-sensitive build identity.
@@ -21,7 +26,7 @@ type ProfileView struct {
 	ID          string        `json:"id"`
 	DisplayName string        `json:"display_name"`
 	Official    bool          `json:"official"`
-	Visibility  string        `json:"visibility"`
+	Visibility  string        `json:"visibility,omitempty"`
 	Channels    []ChannelView `json:"channels"`
 }
 
@@ -34,6 +39,8 @@ type ChannelView struct {
 
 // RevisionSummary exposes immutable revision identity and pinned inheritance.
 type RevisionSummary struct {
+	ProfileID      string            `json:"profile_id"`
+	ProfileName    string            `json:"profile_name"`
 	ID             string            `json:"id"`
 	Sequence       uint64            `json:"sequence"`
 	ManifestSHA256 string            `json:"manifest_sha256"`
@@ -60,7 +67,15 @@ type RevisionDeltaView struct {
 
 // Overview is the only projection consumed by this development shell today.
 type Overview struct {
-	Profiles []ProfileView `json:"profiles"`
+	Profiles        []ProfileView     `json:"profiles"`
+	RecentRevisions []RevisionSummary `json:"recent_revisions"`
+	Storage         StorageView       `json:"storage"`
+}
+
+type StorageView struct {
+	RevisionCount int64 `json:"revision_count"`
+	ObjectCount   int64 `json:"object_count"`
+	ObjectBytes   int64 `json:"object_bytes"`
 }
 
 // ReadModel defines the future domain boundary needed by the UI. Implementations
@@ -75,7 +90,76 @@ type ReadModel interface {
 type EmptyReadModel struct{}
 
 func (EmptyReadModel) Overview(context.Context) (Overview, error) {
-	return Overview{Profiles: []ProfileView{}}, nil
+	return Overview{Profiles: []ProfileView{}, RecentRevisions: []RevisionSummary{}}, nil
+}
+
+type revisionInventory interface {
+	ListRevisions(context.Context, int) ([]storage.StoredRevision, error)
+	Stats(context.Context) (storage.StorageStats, error)
+}
+
+// SQLiteReadModel projects only persisted, already-published immutable
+// manifests. It does not imply that their release signatures were verified at
+// read time; publication must remain behind the signed admin API boundary.
+type SQLiteReadModel struct{ Store revisionInventory }
+
+func (m SQLiteReadModel) Overview(ctx context.Context) (Overview, error) {
+	if m.Store == nil {
+		return Overview{}, errors.New("revision inventory is not configured")
+	}
+	revisions, err := m.Store.ListRevisions(ctx, 100)
+	if err != nil {
+		return Overview{}, err
+	}
+	stats, err := m.Store.Stats(ctx)
+	if err != nil {
+		return Overview{}, err
+	}
+	profiles := make(map[string]*ProfileView)
+	view := Overview{
+		Profiles:        []ProfileView{},
+		RecentRevisions: make([]RevisionSummary, 0, len(revisions)),
+		Storage: StorageView{
+			RevisionCount: stats.RevisionCount,
+			ObjectCount:   stats.ObjectCount,
+			ObjectBytes:   stats.ObjectBytes,
+		},
+	}
+	for _, stored := range revisions {
+		var manifest revision.Manifest
+		if err := json.Unmarshal(stored.Manifest, &manifest); err != nil {
+			return Overview{}, err
+		}
+		profile := profiles[stored.ProfileID]
+		if profile == nil {
+			profile = &ProfileView{
+				ID: stored.ProfileID, DisplayName: manifest.Profile.Name,
+				Official: manifest.Profile.Official,
+				Channels: []ChannelView{},
+			}
+			profiles[stored.ProfileID] = profile
+		}
+		summary := RevisionSummary{
+			ProfileID: stored.ProfileID, ProfileName: manifest.Profile.Name,
+			ID: stored.RevisionID, Sequence: uint64(stored.Sequence),
+			ManifestSHA256: stored.ManifestSHA256, PublishedAt: stored.CreatedAt,
+			Changes: RevisionDeltaView{
+				AddedOrUpdatedMods: len(manifest.Mods), RemovedMods: len(manifest.RemoveMods),
+				AddedOrUpdatedConfigs: len(manifest.Configs), RemovedConfigs: len(manifest.RemoveConfigs),
+				OtherObjects: len(manifest.Objects),
+			},
+		}
+		if manifest.Base != nil {
+			summary.Base = &PinnedBaseView{ProfileID: manifest.Base.ProfileID,
+				RevisionID: manifest.Base.RevisionID, ManifestSHA256: manifest.Base.ManifestSHA256}
+		}
+		view.RecentRevisions = append(view.RecentRevisions, summary)
+	}
+	for _, profile := range profiles {
+		view.Profiles = append(view.Profiles, *profile)
+	}
+	sort.Slice(view.Profiles, func(i, j int) bool { return view.Profiles[i].ID < view.Profiles[j].ID })
+	return view, nil
 }
 
 type overviewResponse struct {

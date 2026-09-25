@@ -46,6 +46,12 @@ type StoredRevision struct {
 	CreatedAt      time.Time
 }
 
+type StorageStats struct {
+	RevisionCount int64
+	ObjectCount   int64
+	ObjectBytes   int64
+}
+
 type RevisionPublisher interface {
 	PublishRevision(context.Context, RevisionPublication) error
 }
@@ -222,6 +228,51 @@ func (s *SQLiteStore) Revision(ctx context.Context, revisionID string) (StoredRe
 	}
 	stored.CreatedAt = parsed
 	return stored, nil
+}
+
+// ListRevisions returns the newest immutable revision records for an
+// administrative inventory. It deliberately returns signed manifest bytes
+// unchanged; callers decide which validated fields are safe to project.
+func (s *SQLiteStore) ListRevisions(ctx context.Context, limit int) ([]StoredRevision, error) {
+	if limit < 1 || limit > 500 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, profile_id, sequence, manifest_sha256, manifest, created_at
+		 FROM revisions ORDER BY julianday(created_at) DESC, profile_id, sequence DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var revisions []StoredRevision
+	for rows.Next() {
+		var stored StoredRevision
+		var created string
+		if err := rows.Scan(&stored.RevisionID, &stored.ProfileID, &stored.Sequence,
+			&stored.ManifestSHA256, &stored.Manifest, &created); err != nil {
+			return nil, err
+		}
+		stored.CreatedAt, err = time.Parse(time.RFC3339Nano, created)
+		if err != nil {
+			return nil, fmt.Errorf("parse revision timestamp: %w", err)
+		}
+		revisions = append(revisions, stored)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return revisions, nil
+}
+
+func (s *SQLiteStore) Stats(ctx context.Context) (StorageStats, error) {
+	var stats StorageStats
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM revisions`).Scan(&stats.RevisionCount); err != nil {
+		return StorageStats{}, err
+	}
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(size), 0) FROM objects`).Scan(&stats.ObjectCount, &stats.ObjectBytes); err != nil {
+		return StorageStats{}, err
+	}
+	return stats, nil
 }
 
 func (s *SQLiteStore) IsObjectPublished(ctx context.Context, digest string) (bool, error) {

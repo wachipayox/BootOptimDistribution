@@ -1,12 +1,21 @@
-# Administrative UI development shell
+# Administrative UI
 
-This repository contains a deliberately non-functional administrative UI shell. It is not a player or launcher UI, and it is not an authentication mechanism.
+The admin UI is an operator panel, not a player or launcher UI. Its listener is
+loopback-only; LAN access requires the authenticated HTTPS Caddy proxy described
+in `ADMIN_UI_LAN.md`.
 
 ## Activation and exposure
 
-The UI is disabled unless the process is started with `--dev-admin-ui`. When that flag is present, the process refuses to start unless `--listen` contains a literal loopback IP (`127.0.0.0/8` or `::1`). The shell is therefore intended only for local development while the real domain, storage, and authentication layers are incomplete.
+The UI is disabled unless the process is started with `--dev-admin-ui`. When
+that flag is present, the process refuses to start unless `--listen` contains a
+literal loopback IP (`127.0.0.0/8` or `::1`). The flag name is retained from the
+initial development shell; the page now reads SQLite revision/CAS metadata.
 
-The UI does not enable CORS. Its handler accepts only `GET` and `HEAD`; there are no HTML forms and no routes that publish revisions, upload objects, promote channels, or perform rollback.
+The UI does not enable CORS. Its handler accepts only `GET` and `HEAD`; there
+are no routes that publish revisions, upload objects, promote channels, or
+perform rollback. Authentication for remote browsers is enforced by the Caddy
+proxy; never expose the app's loopback listener through a separate unprotected
+port forward.
 
 Example local-only invocation:
 
@@ -14,11 +23,14 @@ Example local-only invocation:
 ./bootoptim-distribution --listen 127.0.0.1:8088 --dev-admin-ui
 ```
 
-Then open `http://127.0.0.1:8088/admin/` locally.
+Then open `http://127.0.0.1:8088/admin/` locally, or use the HTTPS Caddy LAN
+address after following `ADMIN_UI_LAN.md`.
 
 ## View-model boundary
 
-`internal/adminui.ReadModel` is the typed boundary between this shell and the future administrative domain adapter. The shell currently wires `EmptyReadModel`, which returns no profile data and contains no community fixtures.
+`internal/adminui.ReadModel` is the typed boundary between presentation and
+storage. The process currently wires `SQLiteReadModel`, which projects stored
+revision manifests and CAS aggregates into a read-only overview.
 
 The presentation model is intentionally narrower than the signed wire/persistence model. It is expected to expose only already-authorized administrative projections:
 
@@ -41,7 +53,9 @@ GET /v1/admin/ui/profiles/{profile_id}/revisions
 GET /v1/admin/ui/revisions/{revision_id}
 ```
 
-Those projection endpoints are not implemented by this change. They must be authenticated as administrator endpoints and must preserve hidden-not-found behavior where applicable.
+The current local panel serves its projection at `/admin/api/overview`. A
+future external/admin API must preserve hidden-not-found behavior where
+applicable and use the Pandora administrator authentication contract.
 
 The actual state-changing contract remains the Pandora PR #35 contract and must not be redefined by the UI:
 
@@ -56,13 +70,18 @@ A later UI may invoke those endpoints only after the domain implementations and 
 
 ## Authentication boundary
 
-Serving an admin page is not authentication. Production enablement requires an explicit administrator authentication and reverse-proxy policy before the UI is exposed beyond local development. The Pandora contract defines dedicated short-lived OIDC-compatible API credentials, an `admin` role, and optional reverse-proxy mTLS for `/v1/admin/**`; Microsoft/Minecraft game tokens are not distribution credentials.
+Serving an admin page is not authentication. The documented LAN path uses
+Caddy HTTPS and Basic authentication at the reverse proxy. This is an
+operator-only UI boundary, separate from the future distribution API, which
+must use dedicated short-lived OIDC-compatible API credentials, an `admin`
+role, and optional reverse-proxy mTLS for `/v1/admin/**`. Microsoft/Minecraft
+game tokens are not distribution credentials.
 
 Release signing remains separate from administrator authentication. The service/UI may validate signed material, but the Ed25519 release private key remains off the service host and outside this repository, environment, database, browser, and proxy configuration.
 
 ## Blocked dependencies
 
-This shell intentionally stops before functional administration. It is blocked on:
+Mutating administration is not yet implemented. It remains blocked on:
 
 - Agent 191: signed revision types/validation, pinned inheritance and anti-rollback domain behavior;
 - Agent 192: durable SHA-256 CAS and SQLite metadata; and
