@@ -5,11 +5,49 @@ en la LAN, termina HTTPS y exige autenticación HTTP Basic. No configures el
 servicio para escuchar en `0.0.0.0`; tampoco reenvíes el puerto del proxy desde
 el router a Internet.
 
+## Instalar el servicio
+
+La unidad de ejemplo está en `deploy/bootoptim-distribution.service`. Una vez
+que el cambio esté promovido a `main` y el binario actualizado en
+`/opt/bootoptim-distribution/bin/`:
+
+```bash
+sudo useradd --system --user-group --home-dir /var/lib/bootoptim-distribution --shell /usr/sbin/nologin bootoptim-distribution
+sudo install -o root -g root -m 0644 deploy/bootoptim-distribution.service /etc/systemd/system/bootoptim-distribution.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now bootoptim-distribution
+sudo systemctl status bootoptim-distribution
+```
+
+Si la cuenta ya existe, omite `useradd`. `StateDirectory` deja que systemd cree
+y asigne `/var/lib/bootoptim-distribution`; la unidad limita la escritura al
+estado y ejecuta el proceso sin privilegios.
+
 ## Preparar Caddy
 
 Instala Caddy en el servidor y copia `deploy/Caddyfile.lan.example` a su
-directorio de configuración. El ejemplo requiere estas variables en el entorno
-del servicio Caddy:
+directorio de configuración. Copia `deploy/caddy-bootoptim.env.example` a
+`/etc/caddy/bootoptim-admin.env`, cambia la dirección LAN y el usuario, y
+genera el hash ejecutando `caddy hash-password` sin argumentos. Sustituye el
+placeholder del archivo por el hash. Restringe el archivo con
+`sudo chown root:caddy /etc/caddy/bootoptim-admin.env` y
+`sudo chmod 0640 /etc/caddy/bootoptim-admin.env`.
+
+Añade `/etc/systemd/system/caddy.service.d/bootoptim.conf`:
+
+```ini
+[Service]
+EnvironmentFile=/etc/caddy/bootoptim-admin.env
+```
+
+Después recarga systemd y reinicia Caddy:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart caddy
+```
+
+El archivo de entorno proporciona estas variables:
 
 - `BOOTOPTIM_LAN_HOST`: IP LAN estática del servidor o nombre DNS local que
   usarás en el navegador.
@@ -17,6 +55,8 @@ del servicio Caddy:
   ejemplo `192.168.1.20`.
 - `BOOTOPTIM_ADMIN_USER`: nombre de usuario administrativo.
 - `BOOTOPTIM_ADMIN_PASSWORD_HASH`: hash bcrypt generado con `caddy hash-password`.
+
+No guardes la contraseña sin hash en el Caddyfile ni en el repositorio.
 
 El proceso Caddy atiende `https://<BOOTOPTIM_LAN_HOST>:8443` y reenvía al
 servicio por loopback. El firewall del servidor debe permitir TCP/8443 sólo

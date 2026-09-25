@@ -25,9 +25,9 @@ feature lands there through a reviewed PR before a deliberate promotion to
    authenticated HTTPS Caddy on the LAN. Publication, promotion and rollback
    controls remain blocked until their signed admin API exists. It is not a
    player launcher UI.
-5. Add an unprivileged `systemd` unit, durable `/var/lib` state, `/etc`
-   configuration, backup/restore instructions and a loopback-first deployment
-   smoke test.
+5. [Unit example and loopback-first installation instructions now exist in the
+   current candidate.] Run the first deployment smoke test, then add automated
+   backup/restore and certificate-trust procedures.
 
 ## First acceptance test
 
