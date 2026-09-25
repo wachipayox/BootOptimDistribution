@@ -1,0 +1,30 @@
+name: Storage checks
+
+on:
+  pull_request:
+    branches: [agent/integration-current]
+    paths:
+      - 'internal/storage/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'docs/STORAGE.md'
+      - '.github/workflows/storage.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  storage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache: false
+      - name: Download modules
+        run: go mod download
+      - name: gofmt
+        run: test -z "$(gofmt -l internal/storage)"
+      - name: Focused tests
+        run: go test ./internal/storage
