@@ -1,0 +1,32 @@
+[Unit]
+Description=BootOptim private distribution service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=bootoptim-distribution
+Group=bootoptim-distribution
+WorkingDirectory=/
+StateDirectory=bootoptim-distribution
+StateDirectoryMode=0700
+UMask=0077
+ExecStart=/usr/local/bin/bootoptim-distribution --listen 127.0.0.1:8088 --dev-admin-ui --data-dir /var/lib/bootoptim-distribution
+Restart=on-failure
+RestartSec=5s
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

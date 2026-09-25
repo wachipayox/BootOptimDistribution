@@ -44,3 +44,18 @@ curl http://127.0.0.1:8088/v1/meta/version
 
 Los endpoints de distribución sólo se abrirán junto con autenticación,
 verificación Ed25519, manifiestos canónicos y pruebas de herencia/anti-rollback.
+
+## Panel de administración en red local
+
+El panel muestra perfiles y revisiones persistidas, herencia fijada y métricas
+del CAS. Sigue siendo de sólo lectura mientras no estén implementadas las
+operaciones HTTP de publicación/promoción con verificación de firma. El proceso
+acepta el panel únicamente sobre loopback; para abrirlo en la LAN se coloca
+Caddy delante con HTTPS interno y contraseña:
+
+```bash
+/usr/local/bin/bootoptim-distribution --listen 127.0.0.1:8088 --dev-admin-ui --data-dir /var/lib/bootoptim-distribution
+```
+
+Consulta `docs/ADMIN_UI_LAN.md` para la configuración de Caddy y la confianza
+del certificado. No expongas directamente el puerto 8088 a la LAN o Internet.
