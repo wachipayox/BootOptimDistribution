@@ -1,8 +1,9 @@
 # Administrative UI
 
-The admin UI is an operator panel, not a player or launcher UI. Its listener is
-loopback-only; LAN access requires the authenticated HTTPS Caddy proxy described
-in `ADMIN_UI_LAN.md`.
+The admin UI is an operator panel, not a player or launcher UI. It is disabled
+by default. It can run locally on loopback or directly on one private LAN
+interface with an explicit allowed client subnet, as described in
+`ADMIN_UI_LAN.md`.
 
 ## Activation and exposure
 
@@ -11,11 +12,18 @@ that flag is present, the process refuses to start unless `--listen` contains a
 literal loopback IP (`127.0.0.0/8` or `::1`). The flag name is retained from the
 initial development shell; the page now reads SQLite revision/CAS metadata.
 
+For direct trusted-LAN access, use `--admin-ui-lan` instead and set both
+`--listen` to a literal private address and `--admin-ui-allow-cidr` to the
+trusted subnet. That mode binds only the selected interface and denies requests
+whose source IP is outside the CIDR. It does not add login or TLS; see
+`ADMIN_UI_LAN.md` for the tradeoff and firewall setup.
+
 The UI does not enable CORS. Its handler accepts only `GET` and `HEAD`; there
 are no routes that publish revisions, upload objects, promote channels, or
-perform rollback. Authentication for remote browsers is enforced by the Caddy
-proxy; never expose the app's loopback listener through a separate unprotected
-port forward.
+perform rollback. In LAN mode the service binds only to a private address and
+checks every request's source IP against the configured private CIDR. This is
+network-level restriction, not user authentication or encryption. Use that mode
+only on a trusted LAN and do not port-forward it.
 
 Example local-only invocation:
 
@@ -23,8 +31,8 @@ Example local-only invocation:
 ./bootoptim-distribution --listen 127.0.0.1:8088 --dev-admin-ui
 ```
 
-Then open `http://127.0.0.1:8088/admin/` locally, or use the HTTPS Caddy LAN
-address after following `ADMIN_UI_LAN.md`.
+Then open `http://127.0.0.1:8088/admin/` locally. For direct LAN access, follow
+`ADMIN_UI_LAN.md` and use the configured private address.
 
 ## View-model boundary
 
@@ -70,12 +78,14 @@ A later UI may invoke those endpoints only after the domain implementations and 
 
 ## Authentication boundary
 
-Serving an admin page is not authentication. The documented LAN path uses
-Caddy HTTPS and Basic authentication at the reverse proxy. This is an
-operator-only UI boundary, separate from the future distribution API, which
-must use dedicated short-lived OIDC-compatible API credentials, an `admin`
-role, and optional reverse-proxy mTLS for `/v1/admin/**`. Microsoft/Minecraft
-game tokens are not distribution credentials.
+Serving an admin page is not authentication. The current direct LAN mode has no
+user authentication and no TLS; all devices in the configured trusted subnet
+can read the panel over HTTP. It is deliberately read-only. Before adding
+mutations or using an untrusted/shared network, add an authenticated encrypted
+boundary. The future distribution API must use dedicated short-lived
+OIDC-compatible API credentials, an `admin` role, and optional mTLS for
+`/v1/admin/**`. Microsoft/Minecraft game tokens are not distribution
+credentials.
 
 Release signing remains separate from administrator authentication. The service/UI may validate signed material, but the Ed25519 release private key remains off the service host and outside this repository, environment, database, browser, and proxy configuration.
 
@@ -85,4 +95,4 @@ Mutating administration is not yet implemented. It remains blocked on:
 
 - Agent 191: signed revision types/validation, pinned inheritance and anti-rollback domain behavior;
 - Agent 192: durable SHA-256 CAS and SQLite metadata; and
-- a later authentication/reverse-proxy implementation before any production UI exposure.
+- a later authenticated and encrypted access boundary before any UI operations that modify production state.

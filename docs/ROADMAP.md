@@ -21,13 +21,14 @@ feature lands there through a reviewed PR before a deliberate promotion to
    never scan the whole `.minecraft` at Start just to look for updates.
 4. [Read-only inventory implemented in the current integration candidate]
    The **administrative web interface** shows persisted profiles/revisions,
-   pinned inheritance and CAS aggregates through a loopback-only process behind
-   authenticated HTTPS Caddy on the LAN. Publication, promotion and rollback
-   controls remain blocked until their signed admin API exists. It is not a
-   player launcher UI.
+   pinned inheritance and CAS aggregates. Direct LAN mode binds one private
+   interface and restricts requests by trusted subnet CIDR; it is read-only,
+   unauthenticated and HTTP-only, so use it only on a trusted LAN. Publication,
+   promotion and rollback controls remain blocked until their authenticated
+   signed admin API exists. It is not a player launcher UI.
 5. [Unit example and loopback-first installation instructions now exist in the
    current candidate.] Run the first deployment smoke test, then add automated
-   backup/restore and certificate-trust procedures.
+   backup/restore procedures.
 
 ## First acceptance test
 
