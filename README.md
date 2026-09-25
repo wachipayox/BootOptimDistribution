@@ -54,7 +54,7 @@ acepta el panel únicamente sobre loopback; para abrirlo en la LAN se coloca
 Caddy delante con HTTPS interno y contraseña:
 
 ```bash
-/opt/bootoptim-distribution/bin/bootoptim-distribution --listen 127.0.0.1:8088 --dev-admin-ui --data-dir /var/lib/bootoptim-distribution
+/usr/local/bin/bootoptim-distribution --listen 127.0.0.1:8088 --dev-admin-ui --data-dir /var/lib/bootoptim-distribution
 ```
 
 Consulta `docs/ADMIN_UI_LAN.md` para la configuración de Caddy y la confianza

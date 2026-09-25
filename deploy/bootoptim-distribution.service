@@ -7,11 +7,11 @@ Wants=network.target
 Type=simple
 User=bootoptim-distribution
 Group=bootoptim-distribution
-WorkingDirectory=/opt/bootoptim-distribution
+WorkingDirectory=/
 StateDirectory=bootoptim-distribution
 StateDirectoryMode=0700
 UMask=0077
-ExecStart=/opt/bootoptim-distribution/bin/bootoptim-distribution --listen 127.0.0.1:8088 --dev-admin-ui --data-dir /var/lib/bootoptim-distribution
+ExecStart=/usr/local/bin/bootoptim-distribution --listen 127.0.0.1:8088 --dev-admin-ui --data-dir /var/lib/bootoptim-distribution
 Restart=on-failure
 RestartSec=5s
 

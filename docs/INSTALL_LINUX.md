@@ -14,9 +14,10 @@ sudo git clone https://github.com/wachipayox/BootOptimDistribution.git /opt/boot
 sudo /opt/bootoptim-distribution/scripts/install.sh
 ```
 
-El instalador construye el binario localmente, lo coloca en
-`/opt/bootoptim-distribution/bin/`, y anota el commit instalado en
-`.installed-commit`. No instala aún una unidad de sistema ni abre un puerto
+El instalador construye el binario localmente, lo conserva bajo `bin/` en el
+checkout, publica un ejecutable root-owned en
+`/usr/local/bin/bootoptim-distribution` y anota el commit instalado en
+`.installed-commit`. El servicio seguirá limitado a loopback; no abre un puerto
 público.
 
 ### Ruta personalizada
@@ -42,7 +43,7 @@ sudo /home/wachi/launcher_manager/scripts/update.sh --apply
 En una terminal, arranca el proceso limitado al propio servidor:
 
 ```bash
-/opt/bootoptim-distribution/bin/bootoptim-distribution --listen 127.0.0.1:8088
+/usr/local/bin/bootoptim-distribution --listen 127.0.0.1:8088
 ```
 
 En otra terminal:
@@ -67,14 +68,15 @@ sudo /opt/bootoptim-distribution/scripts/update.sh --apply
 `--check` compara `.installed-commit` con `origin/main` y muestra ambas
 versiones. `--apply` descarga exclusivamente el tip de `main`, compila antes
 de sustituir el binario y conserva el binario previo como
-`bin/bootoptim-distribution.previous`.
+`bin/bootoptim-distribution.previous` y
+`/usr/local/bin/bootoptim-distribution.previous`.
 
 No hay polling, GitHub no se conecta a tu red doméstica y las ramas que no sean
 `main` nunca se instalan mediante este mecanismo.
 
-## Próximo paso
+## Panel LAN
 
-Cuando la API de revisiones firmadas esté implementada, se añadirá una unidad
-`systemd` sin privilegios, directorios de datos bajo `/var/lib`, configuración
-bajo `/etc`, y el reverse proxy/autenticación que sea necesario. No expongas
-el listener loopback actual a Internet.
+El ejemplo de unidad `systemd` sin privilegios y el reverse proxy HTTPS con
+autenticación están en `deploy/` y `docs/ADMIN_UI_LAN.md`. El listener del
+servicio debe permanecer en loopback. El panel es de solo lectura: todavía no
+publica revisiones ni promueve canales.

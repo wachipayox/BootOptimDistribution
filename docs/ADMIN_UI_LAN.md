@@ -7,9 +7,12 @@ el router a Internet.
 
 ## Instalar el servicio
 
-La unidad de ejemplo está en `deploy/bootoptim-distribution.service`. Una vez
-que el cambio esté promovido a `main` y el binario actualizado en
-`/opt/bootoptim-distribution/bin/`:
+La unidad de ejemplo está en `deploy/bootoptim-distribution.service`. El
+instalador conserva su binario bajo el checkout y publica una copia ejecutable
+en `/usr/local/bin/bootoptim-distribution`; así el servicio dedicado no necesita
+permisos de lectura sobre `/home/wachi/launcher_manager` ni sobre la clave de
+Git. Una vez que el cambio esté promovido a `main`, actualiza el checkout con el
+script habitual y configura la unidad:
 
 ```bash
 sudo useradd --system --user-group --home-dir /var/lib/bootoptim-distribution --shell /usr/sbin/nologin bootoptim-distribution
@@ -45,6 +48,13 @@ Después recarga systemd y reinicia Caddy:
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl restart caddy
+```
+
+Después de cada `update.sh --apply`, reinicia el servicio para que use el nuevo
+binario:
+
+```bash
+sudo systemctl restart bootoptim-distribution
 ```
 
 El archivo de entorno proporciona estas variables:
