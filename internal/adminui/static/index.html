@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BootOptim Distribution · Administración</title>
+  <link rel="stylesheet" href="/admin/assets/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div>
+      <p class="eyebrow">BootOptimDistribution</p>
+      <h1>Wachiland · Distribución</h1>
+    </div>
+    <p class="mode" aria-label="UI mode">Administración · lectura</p>
+  </header>
+
+  <main id="main">
+    <section aria-labelledby="build-title">
+      <h2 id="build-title">Servicio</h2>
+      <dl class="build-grid">
+        <div><dt>Version</dt><dd id="build-version">loading…</dd></div>
+        <div><dt>Commit</dt><dd id="build-commit">loading…</dd></div>
+      </dl>
+    </section>
+
+    <section aria-labelledby="storage-title">
+      <h2 id="storage-title">Almacenamiento</h2>
+      <dl class="build-grid">
+        <div><dt>Revisiones</dt><dd id="revision-count">—</dd></div>
+        <div><dt>Objetos publicados</dt><dd id="object-count">—</dd></div>
+        <div><dt>Tamaño publicado</dt><dd id="object-bytes">—</dd></div>
+      </dl>
+    </section>
+
+    <section aria-labelledby="profiles-title">
+      <div class="section-heading">
+        <div>
+          <h2 id="profiles-title">Perfiles publicados</h2>
+          <p>Perfiles y revisiones inmutables almacenados en el servidor.</p>
+        </div>
+      </div>
+      <div id="profiles" class="empty-state" role="status" aria-live="polite">
+        <h3>No hay revisiones publicadas</h3>
+        <p>Cuando publiques una revisión firmada, aparecerá aquí.</p>
+      </div>
+    </section>
+
+    <section aria-labelledby="history-title">
+      <h2 id="history-title">Últimas revisiones</h2>
+      <div id="revisions" class="empty-state" role="status">Sin revisiones.</div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Servicio privado. No se recopilan archivos ni datos de jugadores.</p>
+  </footer>
+  <script src="/admin/assets/app.js" defer></script>
+</body>
+</html>

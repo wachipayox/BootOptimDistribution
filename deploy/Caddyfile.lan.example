@@ -1,0 +1,15 @@
+https://{$BOOTOPTIM_LAN_HOST}:8443 {
+	bind {$BOOTOPTIM_LAN_BIND}
+	tls internal
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+	}
+	basic_auth {
+		{$BOOTOPTIM_ADMIN_USER} {$BOOTOPTIM_ADMIN_PASSWORD_HASH}
+	}
+	reverse_proxy 127.0.0.1:8088
+}
