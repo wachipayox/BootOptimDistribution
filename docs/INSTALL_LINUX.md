@@ -76,7 +76,8 @@ No hay polling, GitHub no se conecta a tu red doméstica y las ramas que no sean
 
 ## Panel LAN
 
-El ejemplo de unidad `systemd` sin privilegios y el reverse proxy HTTPS con
-autenticación están en `deploy/` y `docs/ADMIN_UI_LAN.md`. El listener del
-servicio debe permanecer en loopback. El panel es de solo lectura: todavía no
-publica revisiones ni promueve canales.
+El ejemplo de unidad `systemd` y el modo directo de acceso LAN están en
+`deploy/` y `docs/ADMIN_UI_LAN.md`. El modo LAN enlaza una IP privada concreta
+y filtra por CIDR, pero no cifra ni autentica usuarios; úsalo sólo en una red de
+confianza y nunca reenvíes el puerto desde el router. El panel es de solo
+lectura: todavía no publica revisiones ni promueve canales.

@@ -49,13 +49,17 @@ verificación Ed25519, manifiestos canónicos y pruebas de herencia/anti-rollbac
 
 El panel muestra perfiles y revisiones persistidas, herencia fijada y métricas
 del CAS. Sigue siendo de sólo lectura mientras no estén implementadas las
-operaciones HTTP de publicación/promoción con verificación de firma. El proceso
-acepta el panel únicamente sobre loopback; para abrirlo en la LAN se coloca
-Caddy delante con HTTPS interno y contraseña:
+operaciones HTTP de publicación/promoción con verificación de firma. Por
+defecto el proceso sólo acepta loopback. Para uso directo en una LAN de
+confianza, enlázalo a una IP privada concreta y permite únicamente el CIDR de
+esa red:
 
 ```bash
-/usr/local/bin/bootoptim-distribution --listen 127.0.0.1:8088 --dev-admin-ui --data-dir /var/lib/bootoptim-distribution
+/usr/local/bin/bootoptim-distribution --listen 192.168.1.20:8088 --admin-ui-lan --admin-ui-allow-cidr 192.168.1.0/24 --data-dir /var/lib/bootoptim-distribution
 ```
 
-Consulta `docs/ADMIN_UI_LAN.md` para la configuración de Caddy y la confianza
-del certificado. No expongas directamente el puerto 8088 a la LAN o Internet.
+Consulta `docs/ADMIN_UI_LAN.md` para el firewall y la instalación. No uses
+`0.0.0.0`, no permitas el puerto desde redes invitadas y no lo reenvíes desde
+el router a Internet. Todo dispositivo del CIDR permitido podrá ver este panel
+de sólo lectura; antes de añadir operaciones de escritura hará falta una capa
+de autenticación y transporte cifrado.
