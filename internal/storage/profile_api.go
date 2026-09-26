@@ -126,6 +126,16 @@ func (s *SQLiteStore) PublishSignedRevision(ctx context.Context, publication Rev
 		return nil
 	}
 
+	var maxSequence sql.NullInt64
+	if err := tx.QueryRowContext(ctx,
+		`SELECT MAX(sequence) FROM revisions WHERE profile_id = ?`,
+		publication.ProfileID).Scan(&maxSequence); err != nil {
+		return fmt.Errorf("read profile sequence head: %w", err)
+	}
+	if maxSequence.Valid && publication.Sequence <= maxSequence.Int64 {
+		return fmt.Errorf("%w: revision sequence must advance profile head", ErrImmutableConflict)
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, object := range objects {
 		if _, err := tx.ExecContext(ctx,
