@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	RoleAdmin Role = "admin"
+	RoleAdmin  Role = "admin"
 	CSRFHeader      = "X-CSRF-Token"
 
 	sessionCookieName   = "__Host-bootoptim_admin"
