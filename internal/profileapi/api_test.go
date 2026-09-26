@@ -57,11 +57,18 @@ func TestSyntheticPublicationReadPromotionAndRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/objects/sha256/"+strings.Repeat("0", 64), nil)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("fresh object lookup status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
 	objectBytes := []byte("synthetic mod bytes")
 	objectDigest := sha256.Sum256(objectBytes)
 	objectHex := hex.EncodeToString(objectDigest[:])
-	req := httptest.NewRequest(http.MethodPost, "/v1/admin/objects/sha256/"+objectHex, strings.NewReader(string(objectBytes)))
-	rec := httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/admin/objects/sha256/"+objectHex, strings.NewReader(string(objectBytes)))
+	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("stage object status=%d body=%s", rec.Code, rec.Body.String())
@@ -75,6 +82,28 @@ func TestSyntheticPublicationReadPromotionAndRollback(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("publish first status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	firstDigest := manifestDigest(t, firstManifest)
+	childManifest := testChildManifest("profile_child", "rev_1000000000000001", firstDigest)
+	childEnvelope := signEnvelope(t, childManifest, priv)
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/admin/revisions", strings.NewReader(string(childEnvelope)))
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("publish child status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	badChildManifest := testChildManifest("profile_badchild", "rev_2000000000000001", strings.Repeat("f", 64))
+	badChildEnvelope := signEnvelope(t, badChildManifest, priv)
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/admin/revisions", strings.NewReader(string(badChildEnvelope)))
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "parent_pin_mismatch") {
+		t.Fatalf("bad parent pin status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, err := store.Revision(ctx, "rev_2000000000000001"); !errors.Is(err, storage.ErrRevisionNotFound) {
+		t.Fatalf("bad child became visible: %v", err)
 	}
 
 	rec = httptest.NewRecorder()
@@ -245,6 +274,44 @@ func testManifest(revisionID string, sequence int64, digest string, size int64) 
 		panic(err)
 	}
 	return raw
+}
+
+func testChildManifest(profileID, revisionID, parentDigest string) []byte {
+	manifest := revision.Manifest{
+		SchemaVersion: 1,
+		Revision: revision.Revision{
+			ID: revisionID, Sequence: 1, CreatedAt: "2026-09-26T12:00:00Z",
+		},
+		Profile: revision.Profile{ID: profileID, Name: "Synthetic child", Official: true},
+		Game:    revision.Game{Minecraft: "1.21.1", NeoForge: "21.1.0"},
+		Base: &revision.ParentRef{
+			ProfileID: "profile_root", RevisionID: "rev_0000000000000001", ManifestSHA256: parentDigest,
+		},
+		Permissions: revision.Permissions{
+			DeriveLocal:         true,
+			Mods:                revision.ModPermissions{Add: true, Remove: true},
+			Configs:             revision.ConfigPermissions{OverrideEnforced: false, OverrideDefaultOnce: true},
+			MaxInheritanceDepth: 8,
+		},
+		Mods: []revision.ModEntry{}, RemoveMods: []revision.RemoveMod{},
+		Configs: []revision.ConfigEntry{}, RemoveConfigs: []revision.RemoveConfig{},
+		Objects: []revision.ObjectEntry{},
+	}
+	raw, err := json.Marshal(manifest)
+	if err != nil {
+		panic(err)
+	}
+	return raw
+}
+
+func manifestDigest(t *testing.T, manifest []byte) string {
+	t.Helper()
+	canonical, err := jcs.Transform(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(canonical)
+	return hex.EncodeToString(digest[:])
 }
 
 func signEnvelope(t *testing.T, manifest []byte, private ed25519.PrivateKey) []byte {
