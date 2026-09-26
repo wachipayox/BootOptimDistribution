@@ -55,6 +55,53 @@ func TestAdminUIRequiresLiteralLoopbackWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestAdminHTTPSRequiresPrivateBindAndCIDR(t *testing.T) {
+	if _, err := validateAdminExposureModes(false, false, true, "192.168.1.20:8443", "192.168.1.0/24"); err != nil {
+		t.Fatalf("valid HTTPS LAN exposure rejected: %v", err)
+	}
+	for _, tc := range []struct {
+		listen string
+		cidr   string
+	}{
+		{"0.0.0.0:8443", "192.168.1.0/24"},
+		{"127.0.0.1:8443", "127.0.0.0/8"},
+		{"192.168.1.20:8443", ""},
+		{"192.168.1.20:8443", "10.0.0.0/8"},
+		{"localhost:8443", "192.168.1.0/24"},
+	} {
+		if _, err := validateAdminExposureModes(false, false, true, tc.listen, tc.cidr); err == nil {
+			t.Fatalf("HTTPS exposure %q / %q succeeded, want error", tc.listen, tc.cidr)
+		}
+	}
+}
+
+func TestAdminModesAreMutuallyExclusive(t *testing.T) {
+	if _, err := validateAdminExposureModes(false, true, true, "192.168.1.20:8443", "192.168.1.0/24"); err == nil {
+		t.Fatal("legacy LAN HTTP and authenticated HTTPS modes were accepted together")
+	}
+}
+
+func TestAdminHTTPSOptionsAreExplicit(t *testing.T) {
+	if err := validateAdminHTTPSOptions(true, "server.crt", "server.key", "operator", "/etc/bootoptim/admin-password.hash"); err != nil {
+		t.Fatalf("valid HTTPS options rejected: %v", err)
+	}
+	for _, tc := range []struct {
+		cert, key, user, hash string
+	}{
+		{"", "server.key", "operator", "/etc/bootoptim/admin-password.hash"},
+		{"server.crt", "", "operator", "/etc/bootoptim/admin-password.hash"},
+		{"server.crt", "server.key", "", "/etc/bootoptim/admin-password.hash"},
+		{"server.crt", "server.key", "operator", ""},
+	} {
+		if err := validateAdminHTTPSOptions(true, tc.cert, tc.key, tc.user, tc.hash); err == nil {
+			t.Fatalf("incomplete HTTPS options accepted: %#v", tc)
+		}
+	}
+	if err := validateAdminHTTPSOptions(false, "server.crt", "", "", ""); err == nil {
+		t.Fatal("TLS certificate option accepted without --admin-ui-https")
+	}
+}
+
 func TestAdminUIActivationContainsNoSensitiveData(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	newHandlerWithConfig(handlerConfig{AdminUIEnabled: true}).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/", nil))
@@ -66,5 +113,19 @@ func TestAdminUIActivationContainsNoSensitiveData(t *testing.T) {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("admin UI contains forbidden sensitive marker %q", forbidden)
 		}
+	}
+}
+
+func TestHTTPSAddsHSTSOnlyInSecureMode(t *testing.T) {
+	plain := httptest.NewRecorder()
+	securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })).ServeHTTP(plain, httptest.NewRequest(http.MethodGet, "/", nil))
+	if got := plain.Header().Get("Strict-Transport-Security"); got != "" {
+		t.Fatalf("plain handler unexpectedly sets HSTS: %q", got)
+	}
+
+	secure := httptest.NewRecorder()
+	securityHeadersForHTTPS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }), true).ServeHTTP(secure, httptest.NewRequest(http.MethodGet, "/", nil))
+	if got := secure.Header().Get("Strict-Transport-Security"); got == "" {
+		t.Fatal("secure handler did not set HSTS")
 	}
 }
