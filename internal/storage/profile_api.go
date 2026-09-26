@@ -206,6 +206,9 @@ func (s *SQLiteStore) ProfileHead(ctx context.Context, profileID string) (Stored
 }
 
 func (s *SQLiteStore) PublishedObject(ctx context.Context, digest string) (Object, error) {
+	if err := s.ensureProfileAPISchema(ctx); err != nil {
+		return Object{}, err
+	}
 	if !validDigest(digest) {
 		return Object{}, ErrInvalidDigest
 	}
