@@ -1,61 +1,352 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>BootOptim Distribution · Administración</title>
   <link rel="stylesheet" href="/admin/assets/style.css">
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to content</a>
+  <a class="skip-link" href="#main">Ir al contenido</a>
+
   <header class="site-header">
-    <div>
-      <p class="eyebrow">BootOptimDistribution</p>
-      <h1>Wachiland · Distribución</h1>
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">B</span>
+      <div>
+        <p class="eyebrow">BootOptim Distribution</p>
+        <h1>Administración</h1>
+      </div>
     </div>
-    <p class="mode" aria-label="UI mode">Administración · lectura</p>
+    <div class="header-state">
+      <span id="api-state" class="status-pill status-neutral">Comprobando servicio</span>
+      <span class="private-label">Servicio privado</span>
+    </div>
   </header>
 
+  <nav class="main-nav" aria-label="Administración">
+    <a href="#resumen" data-nav="resumen">Resumen</a>
+    <a href="#perfiles" data-nav="perfiles">Perfiles globales</a>
+    <a href="#crear" data-nav="crear" class="nav-primary">Crear perfil global</a>
+    <a href="#servicio" data-nav="servicio">Servicio</a>
+  </nav>
+
   <main id="main">
-    <section aria-labelledby="build-title">
-      <h2 id="build-title">Servicio</h2>
-      <dl class="build-grid">
-        <div><dt>Version</dt><dd id="build-version">loading…</dd></div>
-        <div><dt>Commit</dt><dd id="build-commit">loading…</dd></div>
-      </dl>
-    </section>
+    <div id="global-alerts" class="alert-stack" aria-live="polite"></div>
 
-    <section aria-labelledby="storage-title">
-      <h2 id="storage-title">Almacenamiento</h2>
-      <dl class="build-grid">
-        <div><dt>Revisiones</dt><dd id="revision-count">—</dd></div>
-        <div><dt>Objetos publicados</dt><dd id="object-count">—</dd></div>
-        <div><dt>Tamaño publicado</dt><dd id="object-bytes">—</dd></div>
-      </dl>
-    </section>
-
-    <section aria-labelledby="profiles-title">
-      <div class="section-heading">
+    <section class="view" data-view="resumen" aria-labelledby="overview-title">
+      <div class="page-heading">
         <div>
-          <h2 id="profiles-title">Perfiles publicados</h2>
-          <p>Perfiles y revisiones inmutables almacenados en el servidor.</p>
+          <p class="eyebrow">Resumen</p>
+          <h2 id="overview-title">Perfiles, revisiones y actividad</h2>
+          <p class="lede">Estado operativo de las publicaciones globales privadas.</p>
+        </div>
+        <a class="button button-primary" href="#crear">Crear perfil global</a>
+      </div>
+
+      <div class="metric-grid" aria-label="Resumen de publicación">
+        <article class="metric-card">
+          <span class="metric-label">Perfiles globales</span>
+          <strong id="metric-profiles">—</strong>
+          <span id="metric-profiles-note">Cargando…</span>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Revisiones visibles</span>
+          <strong id="metric-revisions">—</strong>
+          <span>Historial inmutable publicado</span>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Actividad reciente</span>
+          <strong id="metric-activity">—</strong>
+          <span>Últimas revisiones disponibles</span>
+        </article>
+      </div>
+
+      <div class="dashboard-grid">
+        <section class="panel" aria-labelledby="overview-profiles-title">
+          <div class="section-heading">
+            <div>
+              <h3 id="overview-profiles-title">Perfiles globales</h3>
+              <p>Revisiones actuales y acceso al historial.</p>
+            </div>
+            <a href="#perfiles" class="text-link">Ver todos</a>
+          </div>
+          <div id="overview-profiles" class="empty-state" role="status">No hay perfiles para mostrar.</div>
+        </section>
+
+        <section class="panel" aria-labelledby="activity-title">
+          <div class="section-heading">
+            <div>
+              <h3 id="activity-title">Actividad</h3>
+              <p>Publicaciones recientes conocidas por el servicio.</p>
+            </div>
+          </div>
+          <div id="activity-list" class="empty-state" role="status">Sin actividad reciente.</div>
+        </section>
+      </div>
+    </section>
+
+    <section class="view" data-view="perfiles" aria-labelledby="profiles-title" hidden>
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">Perfiles globales</p>
+          <h2 id="profiles-title">Historial publicado</h2>
+          <p class="lede">Consulta identidades globales y sus revisiones inmutables.</p>
+        </div>
+        <a class="button button-primary" href="#crear">Crear perfil global</a>
+      </div>
+      <div id="profiles-list" class="profile-grid empty-state" role="status">Cargando perfiles…</div>
+    </section>
+
+    <section class="view" data-view="crear" aria-labelledby="create-title" hidden>
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">Publicación</p>
+          <h2 id="create-title">Crear perfil global</h2>
+          <p class="lede">Selecciona una carpeta, revisa el diff, sube los objetos a staging y firma fuera del navegador.</p>
+        </div>
+        <span class="security-note">La clave Ed25519 privada nunca entra aquí.</span>
+      </div>
+
+      <div class="workflow-layout">
+        <div class="workflow-main">
+          <section class="panel step" aria-labelledby="identity-title">
+            <div class="step-heading">
+              <span class="step-number">1</span>
+              <div>
+                <h3 id="identity-title">Identidad y revisión madre</h3>
+                <p>Para un perfil raíz deja la revisión madre en “Sin revisión madre”.</p>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <label>
+                <span>ID del perfil</span>
+                <input id="profile-id" autocomplete="off" placeholder="perfil-global-ejemplo">
+              </label>
+              <label>
+                <span>Nombre visible</span>
+                <input id="profile-name" autocomplete="off" placeholder="Perfil global de prueba">
+              </label>
+              <label>
+                <span>ID de revisión</span>
+                <input id="revision-id" autocomplete="off" placeholder="revision-001">
+              </label>
+              <label>
+                <span>Secuencia</span>
+                <input id="revision-sequence" type="number" min="1" step="1" value="1">
+              </label>
+              <label>
+                <span>Minecraft</span>
+                <input id="minecraft-version" autocomplete="off" placeholder="Versión requerida">
+              </label>
+              <label>
+                <span>NeoForge</span>
+                <input id="neoforge-version" autocomplete="off" placeholder="Versión requerida">
+              </label>
+              <label class="span-2">
+                <span>Notas de la revisión <small>(opcional)</small></span>
+                <textarea id="release-notes" rows="2" maxlength="4000" placeholder="Qué cambia en esta revisión"></textarea>
+              </label>
+              <label class="check-row span-2">
+                <input id="profile-official" type="checkbox" checked>
+                <span>Marcar como perfil oficial</span>
+              </label>
+              <label>
+                <span>Perfil madre</span>
+                <select id="parent-profile">
+                  <option value="">Sin revisión madre</option>
+                </select>
+              </label>
+              <label>
+                <span>Revisión madre</span>
+                <select id="parent-revision" disabled>
+                  <option value="">Selecciona un perfil primero</option>
+                </select>
+              </label>
+            </div>
+            <p id="parent-status" class="inline-status" role="status">Publicación raíz: no se comparará contra una revisión anterior.</p>
+          </section>
+
+          <section class="panel step" aria-labelledby="folder-title">
+            <div class="step-heading">
+              <span class="step-number">2</span>
+              <div>
+                <h3 id="folder-title">Carpeta del pack</h3>
+                <p>Los archivos se leen localmente para calcular hashes y el diff. No se inventaría una publicación si el API no acepta el staging.</p>
+              </div>
+            </div>
+
+            <div class="action-row">
+              <button id="pick-directory" class="button button-primary" type="button">Elegir carpeta</button>
+              <label class="button button-secondary file-button" for="folder-fallback">Alternativa de selección</label>
+              <input id="folder-fallback" class="visually-hidden" type="file" multiple webkitdirectory>
+              <button id="load-synthetic" class="button button-secondary" type="button">Cargar pack sintético</button>
+            </div>
+            <div class="callout callout-info">
+              <strong>Primera prueba recomendada:</strong>
+              <span id="synthetic-hint">usa el pack sintético para validar el flujo antes de seleccionar datos reales.</span>
+            </div>
+            <p id="folder-status" class="inline-status" role="status">Aún no se ha seleccionado ninguna carpeta.</p>
+            <p id="picker-support" class="microcopy"></p>
+          </section>
+
+          <section class="panel step" aria-labelledby="diff-title">
+            <div class="step-heading">
+              <span class="step-number">3</span>
+              <div>
+                <h3 id="diff-title">Previsualización del diff</h3>
+                <p>Altas, cambios, eliminaciones, políticas y tamaño antes de subir bytes.</p>
+              </div>
+            </div>
+
+            <div class="metric-grid compact">
+              <article class="metric-card"><span class="metric-label">Altas</span><strong id="diff-added">0</strong></article>
+              <article class="metric-card"><span class="metric-label">Cambios</span><strong id="diff-changed">0</strong></article>
+              <article class="metric-card"><span class="metric-label">Eliminaciones</span><strong id="diff-removed">0</strong></article>
+              <article class="metric-card"><span class="metric-label">Bytes a staging</span><strong id="diff-bytes">0 B</strong></article>
+            </div>
+
+            <div id="diff-warning" class="alert alert-warning" hidden></div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Cambio</th>
+                    <th>Ruta</th>
+                    <th>Tipo</th>
+                    <th>Política</th>
+                    <th>Tamaño</th>
+                  </tr>
+                </thead>
+                <tbody id="diff-body">
+                  <tr><td colspan="5" class="muted-cell">Selecciona una carpeta para calcular el diff.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel step" aria-labelledby="publish-title">
+            <div class="step-heading">
+              <span class="step-number">4</span>
+              <div>
+                <h3 id="publish-title">Staging, firma externa y publicación</h3>
+                <p>Primero se suben solo los objetos cambiados; después se descarga la solicitud para el firmante local.</p>
+              </div>
+            </div>
+
+            <div class="publish-stage">
+              <div>
+                <strong>A. Preparar y subir staging</strong>
+                <p>Calcula el manifest canónico y sube los objetos por SHA-256.</p>
+              </div>
+              <button id="stage-button" class="button button-primary" type="button">Preparar y subir staging</button>
+            </div>
+            <p id="stage-status" class="inline-status" role="status">Pendiente.</p>
+            <progress id="stage-progress" max="1" value="0" hidden></progress>
+
+            <div class="publish-stage">
+              <div>
+                <strong>B. Firmar fuera del navegador</strong>
+                <p>Descarga la solicitud, fírmala con la herramienta local y vuelve con el envelope firmado.</p>
+              </div>
+              <button id="download-request" class="button button-secondary" type="button" disabled>Descargar solicitud de firma</button>
+            </div>
+
+            <div class="publish-stage">
+              <div>
+                <strong>C. Cargar envelope firmado</strong>
+                <p>Se comprueba que el envelope corresponde exactamente al diff preparado antes de habilitar la publicación.</p>
+              </div>
+              <label class="button button-secondary file-button" for="signed-envelope">Elegir envelope firmado</label>
+              <input id="signed-envelope" class="visually-hidden" type="file" accept="application/json,.json">
+            </div>
+            <p id="envelope-status" class="inline-status" role="status">Ningún envelope cargado.</p>
+
+            <div class="publish-final">
+              <label class="check-row">
+                <input id="confirm-diff" type="checkbox">
+                <span>He revisado el diff mostrado arriba.</span>
+              </label>
+              <button id="publish-button" class="button button-danger" type="button" disabled>Publicar revisión firmada</button>
+            </div>
+            <p id="publish-status" class="inline-status" role="status"></p>
+          </section>
+        </div>
+
+        <aside class="workflow-side">
+          <section class="panel sticky-card" aria-labelledby="advanced-title">
+            <h3 id="advanced-title">Permisos del perfil</h3>
+            <p class="microcopy">Forman parte del manifest firmado. No cambian la autenticación del servicio.</p>
+            <label class="check-row"><input id="derive-local" type="checkbox" checked><span>Permitir derivación local</span></label>
+            <label class="check-row"><input id="mods-add" type="checkbox" checked><span>Permitir añadir mods</span></label>
+            <label class="check-row"><input id="mods-remove" type="checkbox" checked><span>Permitir retirar mods</span></label>
+            <label class="check-row"><input id="config-enforced" type="checkbox"><span>Permitir override de config enforced</span></label>
+            <label class="check-row"><input id="config-default" type="checkbox" checked><span>Permitir override de default_once</span></label>
+            <label>
+              <span>Profundidad máxima de herencia</span>
+              <input id="max-depth" type="number" min="1" max="8" value="8">
+            </label>
+          </section>
+        </aside>
+      </div>
+    </section>
+
+    <section class="view" data-view="servicio" aria-labelledby="service-title" hidden>
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">Servicio</p>
+          <h2 id="service-title">Detalles y compatibilidad</h2>
+          <p class="lede">Diagnóstico secundario del servicio y del navegador.</p>
         </div>
       </div>
-      <div id="profiles" class="empty-state" role="status" aria-live="polite">
-        <h3>No hay revisiones publicadas</h3>
-        <p>Cuando publiques una revisión firmada, aparecerá aquí.</p>
-      </div>
-    </section>
 
-    <section aria-labelledby="history-title">
-      <h2 id="history-title">Últimas revisiones</h2>
-      <div id="revisions" class="empty-state" role="status">Sin revisiones.</div>
+      <div class="dashboard-grid">
+        <section class="panel" aria-labelledby="service-runtime-title">
+          <h3 id="service-runtime-title">Servicio</h3>
+          <dl class="detail-list">
+            <div><dt>Versión</dt><dd id="service-version">—</dd></div>
+            <div><dt>Commit</dt><dd id="service-commit">—</dd></div>
+            <div><dt>Revisiones almacenadas</dt><dd id="service-revisions">—</dd></div>
+            <div><dt>Objetos almacenados</dt><dd id="service-objects">—</dd></div>
+            <div><dt>Tamaño de objetos</dt><dd id="service-bytes">—</dd></div>
+          </dl>
+        </section>
+
+        <section class="panel" aria-labelledby="browser-title">
+          <h3 id="browser-title">Navegador</h3>
+          <dl class="detail-list">
+            <div><dt>Selector de directorio</dt><dd id="service-picker">—</dd></div>
+            <div><dt>Contexto seguro</dt><dd id="service-secure">—</dd></div>
+            <div><dt>Web Crypto SHA-256</dt><dd id="service-crypto">—</dd></div>
+          </dl>
+          <p class="microcopy">Si el selector moderno no está disponible, la alternativa mantiene los archivos seleccionados en esta pestaña mientras preparas el diff.</p>
+        </section>
+      </div>
+
+      <section class="panel" aria-labelledby="service-contract-title">
+        <h3 id="service-contract-title">Límites de esta interfaz</h3>
+        <p>Este panel no contiene claves privadas, no configura red/TLS/auth por rutas no publicadas y no convierte un error HTTP en éxito visual. Los ajustes de servicio sin endpoint en el contrato se muestran solo como diagnóstico.</p>
+      </section>
     </section>
   </main>
 
   <footer>
-    <p>Servicio privado. No se recopilan archivos ni datos de jugadores.</p>
+    <p>BootOptim Distribution · Administración privada de perfiles globales. Los archivos locales solo se leen al seleccionar un pack.</p>
   </footer>
+
+  <dialog id="publish-dialog" aria-labelledby="publish-dialog-title">
+    <form method="dialog">
+      <h2 id="publish-dialog-title">Confirmar publicación</h2>
+      <p>Se enviará el envelope firmado al servicio. Esta acción no modifica revisiones anteriores.</p>
+      <pre id="publish-dialog-summary"></pre>
+      <div class="dialog-actions">
+        <button class="button button-secondary" value="cancel">Cancelar</button>
+        <button id="dialog-publish" class="button button-danger" value="publish">Publicar</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="/admin/assets/app.js" defer></script>
 </body>
 </html>
