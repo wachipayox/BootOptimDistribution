@@ -1,98 +1,120 @@
 # Administrative UI
 
-The admin UI is an operator panel, not a player or launcher UI. It is disabled
-by default. It can run locally on loopback or directly on one private LAN
-interface with an explicit allowed client subnet, as described in
-`ADMIN_UI_LAN.md`.
+The admin UI is an operator panel, not a player or launcher UI. It can run in
+the loopback development mode, the legacy read-only direct-LAN HTTP mode, or
+the authenticated HTTPS mode. Profile publication and other state-changing
+routes are available only through authenticated HTTPS.
 
-## Activation and exposure
+## Exposure modes
 
-The UI is disabled unless the process is started with `--dev-admin-ui`. When
-that flag is present, the process refuses to start unless `--listen` contains a
-literal loopback IP (`127.0.0.0/8` or `::1`). The flag name is retained from the
-initial development shell; the page now reads SQLite revision/CAS metadata.
+The process has three mutually exclusive admin UI modes:
 
-For direct trusted-LAN access, use `--admin-ui-lan` instead and set both
-`--listen` to a literal private address and `--admin-ui-allow-cidr` to the
-trusted subnet. That mode binds only the selected interface and denies requests
-whose source IP is outside the CIDR. It does not add login or TLS; see
-`ADMIN_UI_LAN.md` for the tradeoff and firewall setup.
+- `--dev-admin-ui`: loopback-only HTTP for local development.
+- `--admin-ui-lan`: the existing direct private-LAN HTTP mode. It requires a
+  private literal `--listen` address plus `--admin-ui-allow-cidr` and remains
+  read-only and unauthenticated.
+- `--admin-ui-https`: Distribution-native HTTPS with local administrator login.
+  It requires the same private bind/CIDR restriction plus an explicit server
+  certificate/key and local administrator verifier.
 
-The UI does not enable CORS. Its handler accepts only `GET` and `HEAD`; there
-are no routes that publish revisions, upload objects, promote channels, or
-perform rollback. In LAN mode the service binds only to a private address and
-checks every request's source IP against the configured private CIDR. This is
-network-level restriction, not user authentication or encryption. Use that mode
-only on a trusted LAN and do not port-forward it.
+The default listener remains `127.0.0.1:8088`. No mode accepts `0.0.0.0` for a
+LAN admin listener, and the CIDR filter uses the socket peer address rather than
+`X-Forwarded-For`. CIDR filtering is defense in depth, not authentication.
 
-Example local-only invocation:
+The HTTPS mode requires all of these options:
 
-```bash
-./bootoptim-distribution --listen 127.0.0.1:8088 --dev-admin-ui
+```text
+--listen <private-ip:port>
+--admin-ui-https
+--admin-ui-allow-cidr <private-cidr>
+--tls-cert-file <server-certificate-chain.pem>
+--tls-key-file <server-private-key.pem>
+--admin-username <local-admin-name>
+--admin-password-hash-file <0600-password-verifier-file>
 ```
 
-Then open `http://127.0.0.1:8088/admin/` locally. For direct LAN access, follow
-`ADMIN_UI_LAN.md` and use the configured private address.
+Optionally, pass this flag to enable verification of signed releases:
+
+```text
+--release-public-keys-file <trusted-release-public-keys.json>
+```
+
+There is no default administrator identity. The public-key file is optional
+while bringing up the panel; without it, signed publication fails closed. Its
+JSON object maps each signer key ID to a 32-byte unpadded base64url Ed25519
+public key. The password verifier file uses the
+format documented in `ADMIN_UI_LAN.md`; the cleartext password is never stored
+by Distribution. The TLS key is only the server transport key. Release-signing
+Ed25519 private keys remain outside the service host, repository, database and
+browser.
+
+## Login and session boundary
+
+`--admin-ui-https` serves HTTPS directly from the Go service with TLS 1.3 or
+newer. `/admin/login` is a local form login. Successful authentication creates
+an opaque random server-side session with an eight-hour absolute lifetime.
+Sessions are memory-only and are invalidated by service restart.
+
+The session cookie is host-only (`__Host-` prefix), `Secure`, `HttpOnly`,
+`SameSite=Strict`, and `Path=/`. Login has its own CSRF cookie and form token.
+Credential failures return the same generic error whether the username or
+password was wrong.
+
+The existing panel and `/admin/api/overview` require the authenticated admin
+session in HTTPS mode. `GET /admin/api/session` returns the authenticated
+principal and that session's CSRF token for same-origin browser code. Logout is
+`POST /admin/logout` and also requires the session CSRF token.
+
+The legacy `--admin-ui-lan` mode deliberately does not gain login or TLS in this
+change. Its handler remains GET/HEAD-only so the old trusted-LAN read path does
+not become an unauthenticated mutation boundary.
+
+## Admin API middleware contract
+
+Profile API code should import `internal/adminauth`; it does not need to know
+how passwords or sessions are stored.
+
+1. The server places `Manager.Authenticate` outside the mux so a valid session
+   becomes a request-context principal.
+2. Any admin read route wraps its handler with `adminauth.RequireAdmin`.
+3. Any state-changing admin route additionally wraps the handler with
+   `manager.RequireCSRF`. The browser sends the token in `X-CSRF-Token`.
+4. Domain code can read the authenticated identity with
+   `adminauth.PrincipalFromContext(ctx)`. The only role currently issued by the
+   local login is `admin` (`adminauth.RoleAdmin`).
+
+Composition for a future mutation route is intentionally small:
+
+```go
+mux.Handle("/v1/admin/revisions",
+    adminauth.RequireAdmin(manager.RequireCSRF(revisionHandler)))
+```
+
+That mux must itself be served through `manager.Authenticate(...)`, as the
+current HTTPS admin wiring already does. `RequireAdmin` returns `401` for an
+anonymous request. `RequireCSRF` returns `403` for an unsafe request without
+the per-session token. Neither middleware treats a matching client CIDR as an
+identity or role.
 
 ## View-model boundary
 
-`internal/adminui.ReadModel` is the typed boundary between presentation and
-storage. The process currently wires `SQLiteReadModel`, which projects stored
-revision manifests and CAS aggregates into a read-only overview.
+`internal/adminui.ReadModel` remains the typed boundary between presentation and
+storage. The process wires `SQLiteReadModel` for storage metrics and overview
+data, while the signed profile API supplies verified profile history. The UI is
+not a source of truth for signature validity, inheritance validity,
+anti-rollback, object existence, or authorization.
 
-The presentation model is intentionally narrower than the signed wire/persistence model. It is expected to expose only already-authorized administrative projections:
+The presentation model exposes only administrative projections such as profile
+identity, immutable revision IDs/sequences/hashes, exact pinned inheritance,
+change summaries and storage aggregates. It never receives a release private
+key.
 
-- official profile identity and visibility;
-- channels and their immutable current revision heads;
-- immutable revision id, monotonic sequence, manifest SHA-256 and publication time;
-- exact pinned inheritance (`profile_id`, `revision_id`, `manifest_sha256`), never `latest`;
-- summarized additions/removals/overrides; and
-- channel rollback status.
+## Profile distribution API
 
-The UI must never become a source of truth for signature validity, inheritance validity, anti-rollback, object existence, or authorization. Agents implementing those domains own those decisions.
-
-## Future endpoint contract
-
-Once the signed revision and storage domains exist, the administrative HTTP layer may adapt them to read-only UI projections. The UI needs the equivalent of:
-
-```text
-GET /v1/admin/ui/overview
-GET /v1/admin/ui/profiles/{profile_id}/revisions
-GET /v1/admin/ui/revisions/{revision_id}
-```
-
-The current local panel serves its projection at `/admin/api/overview`. A
-future external/admin API must preserve hidden-not-found behavior where
-applicable and use the Pandora administrator authentication contract.
-
-The actual state-changing contract remains the Pandora PR #35 contract and must not be redefined by the UI:
-
-```text
-PUT  /v1/admin/objects/sha256/{sha256}
-POST /v1/admin/revisions
-POST /v1/admin/profiles/{profile_id}/channels/{channel}/promote
-POST /v1/admin/profiles/{profile_id}/channels/{channel}/rollback
-```
-
-A later UI may invoke those endpoints only after the domain implementations and authentication boundary exist. It must never sign a release in-browser or receive release private keys.
-
-## Authentication boundary
-
-Serving an admin page is not authentication. The current direct LAN mode has no
-user authentication and no TLS; all devices in the configured trusted subnet
-can read the panel over HTTP. It is deliberately read-only. Before adding
-mutations or using an untrusted/shared network, add an authenticated encrypted
-boundary. The future distribution API must use dedicated short-lived
-OIDC-compatible API credentials, an `admin` role, and optional mTLS for
-`/v1/admin/**`. Microsoft/Minecraft game tokens are not distribution
-credentials.
-
-Release signing remains separate from administrator authentication. The service/UI may validate signed material, but the Ed25519 release private key remains off the service host and outside this repository, environment, database, browser, and proxy configuration.
-
-## Blocked dependencies
-
-Mutating administration is not yet implemented. It remains blocked on:
-
-- Agent 191: signed revision types/validation, pinned inheritance and anti-rollback domain behavior;
-- Agent 192: durable SHA-256 CAS and SQLite metadata; and
-- a later authenticated and encrypted access boundary before any UI operations that modify production state.
+The protocol authority remains `PROFILE_PROTOCOL.md`. In HTTPS mode, launcher
+clients on the permitted CIDR can read `GET /v1/profiles`, signed revision
+envelopes and published objects. Admin-session and CSRF checks protect object
+staging and signed revision publication. The API verifies the signer key,
+manifest digest, object hashes, pinned inheritance and anti-rollback rules
+independently of browser code. Channel promotion/rollback is implemented in the
+API, while the panel workflow for those operations remains a later step.

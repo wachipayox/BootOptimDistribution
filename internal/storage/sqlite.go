@@ -127,7 +127,20 @@ func (s *SQLiteStore) initialize() error {
 	return nil
 }
 
+type publicationHooks struct {
+	existing     func(context.Context, *sql.Tx, RevisionPublication) error
+	beforeInsert func(context.Context, *sql.Tx, RevisionPublication) error
+	afterInsert  func(context.Context, *sql.Tx, RevisionPublication) error
+}
+
 func (s *SQLiteStore) PublishRevision(ctx context.Context, publication RevisionPublication) error {
+	return s.publishRevision(ctx, publication, publicationHooks{})
+}
+
+// publishRevision is the single durable publication primitive. HTTP-facing
+// extensions may add metadata/policy checks through hooks, but object
+// verification, immutable revision insertion and the commit boundary stay here.
+func (s *SQLiteStore) publishRevision(ctx context.Context, publication RevisionPublication, hooks publicationHooks) error {
 	objects, err := normalizePublication(publication)
 	if err != nil {
 		return err
@@ -162,7 +175,15 @@ func (s *SQLiteStore) PublishRevision(ctx context.Context, publication RevisionP
 		return err
 	}
 	if identical {
+		if hooks.existing != nil {
+			return hooks.existing(ctx, tx, publication)
+		}
 		return nil
+	}
+	if hooks.beforeInsert != nil {
+		if err := hooks.beforeInsert(ctx, tx, publication); err != nil {
+			return err
+		}
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -197,6 +218,11 @@ func (s *SQLiteStore) PublishRevision(ctx context.Context, publication RevisionP
 			`INSERT INTO revision_objects(revision_id, object_sha256) VALUES(?, ?)`,
 			publication.RevisionID, object.SHA256); err != nil {
 			return fmt.Errorf("record revision object %s: %w", object.SHA256, err)
+		}
+	}
+	if hooks.afterInsert != nil {
+		if err := hooks.afterInsert(ctx, tx, publication); err != nil {
+			return err
 		}
 	}
 	if err := tx.Commit(); err != nil {

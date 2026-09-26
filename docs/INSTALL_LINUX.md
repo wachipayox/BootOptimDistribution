@@ -17,8 +17,8 @@ sudo /opt/bootoptim-distribution/scripts/install.sh
 El instalador construye el binario localmente, lo conserva bajo `bin/` en el
 checkout, publica un ejecutable root-owned en
 `/usr/local/bin/bootoptim-distribution` y anota el commit instalado en
-`.installed-commit`. El servicio seguirá limitado a loopback; no abre un puerto
-público.
+`.installed-commit`. El servicio seguirá limitado a loopback salvo que el
+administrador configure explícitamente uno de los modos LAN.
 
 ### Ruta personalizada
 
@@ -76,8 +76,16 @@ No hay polling, GitHub no se conecta a tu red doméstica y las ramas que no sean
 
 ## Panel LAN
 
-El ejemplo de unidad `systemd` y el modo directo de acceso LAN están en
-`deploy/` y `docs/ADMIN_UI_LAN.md`. El modo LAN enlaza una IP privada concreta
-y filtra por CIDR, pero no cifra ni autentica usuarios; úsalo sólo en una red de
-confianza y nunca reenvíes el puerto desde el router. El panel es de solo
-lectura: todavía no publica revisiones ni promueve canales.
+La unidad `deploy/bootoptim-distribution.service` sigue arrancando el panel en
+loopback por defecto. `docs/ADMIN_UI_LAN.md` documenta dos configuraciones
+opcionales:
+
+- `--admin-ui-lan`: HTTP directo, sin login y estrictamente de solo lectura para
+  una LAN de confianza;
+- `--admin-ui-https`: HTTPS servido por Distribution con certificado/clave
+  explícitos, login local, cookie de sesión segura y protección CSRF.
+
+Ambos modos LAN exigen una IP privada literal y `--admin-ui-allow-cidr`. El CIDR
+es una defensa adicional y no sustituye la autenticación. No uses un listener
+comodín, una red invitada ni port forwarding hacia Internet. No instales claves
+Ed25519 privadas de release en este host.
