@@ -1,9 +1,10 @@
 # Private profile protocol contract (draft v1)
 
 This is the shared boundary for Distribution admin/publishing and Pandora
-profile discovery/update. It is a product contract for implementation work;
-the existing service has not implemented these routes yet. Change it only by
-updating both this document and the Pandora integration plan.
+profile discovery/update. It is the product contract for the first service
+implementation; changes must update both this document and the Pandora
+integration plan. The profile API and panel composition are in review and have
+not yet landed on `agent/integration-current`.
 
 ## Authorities and identifiers
 
@@ -39,6 +40,11 @@ Policy semantics to preserve in the client-facing manifest:
   local. Reject unsupported/ambiguous selectors at publication, never perform
   broad format-agnostic text replacement.
 
+These are target semantics, not all current schema capabilities. The current
+validator accepts only `enforced` and `default_once`; the explicit `user_owned`
+policy and option-level config selectors remain unimplemented and must not be
+claimed as publishable until the Distribution and Pandora schemas agree.
+
 ## HTTP shape to implement
 
 All state-changing admin routes require authenticated administrator session and
@@ -59,6 +65,7 @@ Administrator routes:
 
 ```text
 GET  /v1/admin/profiles
+GET  /v1/admin/profiles/{profile_id}/revisions
 POST /v1/admin/objects/sha256/{sha256}                 # authenticated staged upload
 POST /v1/admin/revisions                              # signed immutable envelope
 POST /v1/admin/profiles/{profile_id}/channels/{name}/promote
@@ -71,7 +78,7 @@ that have not yet been referenced are not visible as a profile/revision and
 must be eligible for later orphan collection. Promotion/rollback changes only
 channel state; it never mutates the published revision.
 
-Admin read-model routes may include:
+Presentation-only read-model routes may include:
 
 ```text
 GET /v1/admin/ui/overview
@@ -79,11 +86,11 @@ GET /v1/admin/ui/profiles/{profile_id}/revisions
 GET /v1/admin/ui/revisions/{revision_id}
 ```
 
-The current embedded panel route `/admin/api/overview` remains a presentation
-adapter until the authenticated API is implemented. Responses use JSON,
-explicit protocol/schema versions, bounded payloads, and stable error codes.
-Unauthorized objects/profiles should not disclose existence where that
-distinction leaks private state.
+The embedded overview remains at `/admin/api/overview`; profile history uses
+the authenticated `/v1/admin/profiles/{profile_id}/revisions` API route.
+Responses use JSON, explicit protocol/schema versions, bounded payloads, and
+stable error codes. Unauthorized objects/profiles should not disclose existence
+where that distinction leaks private state.
 
 ## Browser publication flow
 
@@ -94,9 +101,10 @@ distinction leaks private state.
    removals, size, policies, and unsupported paths.
 3. The panel uploads changed bytes to authenticated staging endpoints and
    downloads a canonical signing request. It never accesses a private key.
-4. The separate local signer displays profile/parent identity and digest,
-   validates the request shape, then signs it. The admin returns the signed
-   envelope to the panel for atomic publication.
+4. A separate local signer must display profile/parent identity and digest,
+   validate the request shape, then sign it. The admin returns the signed
+   envelope to the panel for atomic publication. The signer tool is not yet
+   included in the current implementation.
 5. The service verifies authorization, signature, parent pin, object hashes,
    policies, sequence and anti-rollback invariants before making the revision
    visible.

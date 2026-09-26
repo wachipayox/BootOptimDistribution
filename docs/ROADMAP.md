@@ -7,6 +7,15 @@ does not yet publish or distribute profiles. The running panel observed at
 `192.168.1.69:8088/admin/` is therefore an operational shell, not a profile
 manager.
 
+The in-review Distribution vertical slice now adds native HTTPS/admin sessions,
+CSRF-protected signed profile publication, LAN-restricted launcher reads, and
+the first browser folder-to-revision workflow. It is not integrated until its
+PR passes Linux CI. The local signer utility, trusted-key bootstrap UX, channel
+controls in the panel, structured config selectors, and Pandora's end-to-end
+install/update/repair flow remain open work. Current schema policies are only
+`enforced` and `default_once`; do not treat the planned `user_owned` and
+option-selector semantics below as implemented.
+
 The product is a private profile distribution service, not a public modpack
 catalog. The Linux service owns immutable global profiles/revisions and their
 content objects. Pandora owns local profiles and the user's running game
@@ -34,6 +43,8 @@ participates in the launch path.
 
 ### 1. Authenticated LAN administration
 
+Status: implemented in the in-review vertical slice; awaiting CI and merge.
+
 Replace the current read-only badge/page with a useful admin shell and clear
 navigation for Overview, Global profiles, and Service settings. The overview
 prioritizes profiles, current revisions, publication/update activity, and
@@ -46,6 +57,9 @@ session cookies, CSRF protection, and explicit bind-address configuration.
 Do not add Caddy as a dependency and do not expose unauthenticated write APIs.
 
 ### 2. Global profile publication and test profile creation
+
+Status: publication API and initial browser workflow are in review. The local
+signer and a complete synthetic-pack run remain required for acceptance.
 
 Implement the service API and browser workflow to create a global profile,
 select a local folder, inspect additions/changes/removals, and publish a new
@@ -61,6 +75,10 @@ partially visible revision. Start with a small synthetic profile that exercises
 one mod, one config, one resource pack, and one removal.
 
 ### 3. Branch graph and effective profile resolution
+
+Status: planned. Pandora's local ownership/reconciliation backend is in a
+separate in-review PR; server/client schema agreement and end-to-end checks are
+still outstanding.
 
 Allow multiple child profiles per parent, with one pinned parent revision per
 child revision. Support global-to-global and global-to-local derivation on the
