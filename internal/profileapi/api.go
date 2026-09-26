@@ -150,11 +150,11 @@ type channelView struct {
 }
 
 type profileView struct {
-	ProfileID       string        `json:"profile_id"`
-	Name            string        `json:"name"`
-	LatestRevision  revisionRef   `json:"latest_revision"`
-	Channels        []channelView `json:"channels"`
-	PublishedCount  int           `json:"published_revision_count,omitempty"`
+	ProfileID      string        `json:"profile_id"`
+	Name           string        `json:"name"`
+	LatestRevision revisionRef   `json:"latest_revision"`
+	Channels       []channelView `json:"channels"`
+	PublishedCount int           `json:"published_revision_count,omitempty"`
 }
 
 func (a *API) serveRead(w http.ResponseWriter, r *http.Request) {
@@ -329,7 +329,7 @@ func (a *API) handlePublishRevision(w http.ResponseWriter, r *http.Request) {
 		}
 		pub := storage.RevisionPublication{
 			RevisionID: verified.RevisionID(), ProfileID: verified.ProfileID(), Sequence: verified.Sequence(),
-			Manifest: storage.ValidatedManifest{Bytes: verified.CanonicalManifest(), SHA256: verified.ManifestSHA256()},
+			Manifest:        storage.ValidatedManifest{Bytes: verified.CanonicalManifest(), SHA256: verified.ManifestSHA256()},
 			ExpectedObjects: objects,
 		}
 		if err := a.store.PublishSignedRevision(r.Context(), pub, canonicalEnvelope); err != nil {
@@ -378,7 +378,7 @@ func (a *API) handlePublishRevision(w http.ResponseWriter, r *http.Request) {
 	}
 	pub := storage.RevisionPublication{
 		RevisionID: verified.RevisionID(), ProfileID: verified.ProfileID(), Sequence: verified.Sequence(),
-		Manifest: storage.ValidatedManifest{Bytes: verified.CanonicalManifest(), SHA256: verified.ManifestSHA256()},
+		Manifest:        storage.ValidatedManifest{Bytes: verified.CanonicalManifest(), SHA256: verified.ManifestSHA256()},
 		ExpectedObjects: objects,
 	}
 	if err := a.store.PublishSignedRevision(r.Context(), pub, canonicalEnvelope); err != nil {
@@ -489,7 +489,7 @@ func (a *API) handleProfiles(w http.ResponseWriter, r *http.Request, admin bool)
 	channelByProfile := make(map[string][]channelView)
 	for _, ch := range channels {
 		channelByProfile[ch.ProfileID] = append(channelByProfile[ch.ProfileID], channelView{
-			Name: ch.Channel,
+			Name:        ch.Channel,
 			revisionRef: revisionRef{RevisionID: ch.RevisionID, Sequence: ch.Sequence, ManifestSHA256: ch.ManifestSHA256},
 		})
 	}
@@ -508,10 +508,10 @@ func (a *API) handleProfiles(w http.ResponseWriter, r *http.Request, admin bool)
 			i = len(views)
 			index[item.ProfileID] = i
 			views = append(views, profileView{
-				ProfileID: item.ProfileID,
-				Name: manifest.Profile.Name,
+				ProfileID:      item.ProfileID,
+				Name:           manifest.Profile.Name,
 				LatestRevision: revisionRef{RevisionID: item.RevisionID, Sequence: item.Sequence, ManifestSHA256: item.ManifestSHA256},
-				Channels: channelByProfile[item.ProfileID],
+				Channels:       channelByProfile[item.ProfileID],
 			})
 		}
 		if admin {

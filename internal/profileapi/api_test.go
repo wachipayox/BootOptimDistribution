@@ -132,7 +132,7 @@ func TestSyntheticPublicationReadPromotionAndRollback(t *testing.T) {
 		ProfileID: "profile_root", Channel: "stable",
 		FromRevisionID: "rev_0000000000000002", FromSequence: 2,
 		ToRevisionID: "rev_0000000000000001",
-		Reason: "synthetic rollback", IssuedAt: "2026-09-26T12:00:00Z",
+		Reason:       "synthetic rollback", IssuedAt: "2026-09-26T12:00:00Z",
 	}, priv)
 	rollbackBody, err := json.Marshal(map[string]interface{}{
 		"revision_id":    "rev_0000000000000001",
@@ -228,9 +228,9 @@ func testManifest(revisionID string, sequence int64, digest string, size int64) 
 		Game:    revision.Game{Minecraft: "1.21.1", NeoForge: "21.1.0"},
 		Base:    nil,
 		Permissions: revision.Permissions{
-			DeriveLocal: true,
-			Mods: revision.ModPermissions{Add: true, Remove: true},
-			Configs: revision.ConfigPermissions{OverrideEnforced: false, OverrideDefaultOnce: true},
+			DeriveLocal:         true,
+			Mods:                revision.ModPermissions{Add: true, Remove: true},
+			Configs:             revision.ConfigPermissions{OverrideEnforced: false, OverrideDefaultOnce: true},
 			MaxInheritanceDepth: 8,
 		},
 		Mods: []revision.ModEntry{{
@@ -282,9 +282,9 @@ func signRollback(t *testing.T, statement revision.RollbackStatement, private ed
 	}
 	digest := sha256.Sum256(canonical)
 	event := revision.RollbackEvent{
-		EventID: "rollback-relay211-0001",
+		EventID:         "rollback-relay211-0001",
 		StatementSHA256: hex.EncodeToString(digest[:]),
-		Statement: statementRaw,
+		Statement:       statementRaw,
 		Signature: revision.Signature{
 			KeyID: "test-key", Algorithm: revision.SignatureAlgorithm,
 			Value: base64.RawURLEncoding.EncodeToString(ed25519.Sign(private, canonical)),
