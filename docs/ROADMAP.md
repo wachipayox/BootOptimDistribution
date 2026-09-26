@@ -1,20 +1,20 @@
 # Distribution service roadmap
 
 `agent/integration-current` is the service integration authority; `main` alone
-is deployable. The current integrated build (`e89e325`, 2026-09-26) provides a
-direct-LAN, read-only admin page and the initial service/version endpoints. It
-does not yet publish or distribute profiles. The running panel observed at
-`192.168.1.69:8088/admin/` is therefore an operational shell, not a profile
-manager.
+is deployable. The current integration (`4c164b4`, 2026-09-26) contains the
+authenticated native-HTTPS admin panel, signed profile API, LAN-restricted
+launcher reads, and browser folder-to-revision publication workflow. These
+features are not yet in `main`, so the service currently installed on the
+server does not provide them. The local signer utility and a full synthetic
+publication/client run remain required before the first release. The panel
+also lets the operator point a profile's `stable` channel at a published
+revision from its history.
 
-The in-review Distribution vertical slice now adds native HTTPS/admin sessions,
-CSRF-protected signed profile publication, LAN-restricted launcher reads, and
-the first browser folder-to-revision workflow. It is not integrated until its
-PR passes Linux CI. The local signer utility, trusted-key bootstrap UX, channel
-controls in the panel, structured config selectors, and Pandora's end-to-end
-install/update/repair flow remain open work. Current schema policies are only
-`enforced` and `default_once`; do not treat the planned `user_owned` and
-option-selector semantics below as implemented.
+Current schema policies are only `enforced` and `default_once`; do not treat
+the planned `user_owned` and option-selector semantics as implemented. The
+launcher has profile discovery/install/update foundations on its own
+integration branch, but it still needs a simple HTTPS/protocol connection
+check and end-to-end validation against a published synthetic profile.
 
 The product is a private profile distribution service, not a public modpack
 catalog. The Linux service owns immutable global profiles/revisions and their
@@ -43,7 +43,8 @@ participates in the launch path.
 
 ### 1. Authenticated LAN administration
 
-Status: implemented in the in-review vertical slice; awaiting CI and merge.
+Status: implemented on `agent/integration-current`; not yet released from
+`main`.
 
 Replace the current read-only badge/page with a useful admin shell and clear
 navigation for Overview, Global profiles, and Service settings. The overview
@@ -58,15 +59,16 @@ Do not add Caddy as a dependency and do not expose unauthenticated write APIs.
 
 ### 2. Global profile publication and test profile creation
 
-Status: publication API and initial browser workflow are in review. The local
+Status: publication API and initial browser workflow are integrated. The local
 signer and a complete synthetic-pack run remain required for acceptance.
 
-Implement the service API and browser workflow to create a global profile,
-select a local folder, inspect additions/changes/removals, and publish a new
-immutable revision. A separate local signer signs the canonical revision
-payload; the admin browser stages a publication request and completes it with
-the signature without ever handling the private key. The server verifies the
-signature and object hashes before atomically making the revision visible.
+The service API and browser workflow create a global profile, select a local
+folder, inspect additions/changes/removals, and stage a new immutable revision.
+Profile history also supports promoting a revision to `stable`, which the
+overview displays. Next, provide a separate local signer for the canonical
+revision request; the admin browser must never handle the private key. Then
+validate publication with a synthetic pack and verify the service rejects
+invalid signatures/hashes without exposing a partial revision.
 
 Use the existing SQLite/CAS and signed-revision design. Preserve immutable
 history, pinned parent references, anti-rollback checks, path validation,
@@ -94,9 +96,9 @@ publication time. Avoid format-agnostic text replacement.
 
 ### 4. Client protocol and operational hardening
 
-Implement public-profile discovery, immutable revision resolution, and
-authenticated object download endpoints required by Pandora. Publish a protocol
-version and capability set so client/server compatibility is explicit. Add
+Public-profile discovery, immutable revision resolution, authenticated object
+downloads, protocol version, and capability reporting are integrated. Next,
+validate client connection/discovery against the LAN HTTPS deployment, then add
 backup/restore, retention, audit-safe publication diagnostics, and a
 loopback/LAN deployment smoke path. The service still stores only global
 profile data and never receives a client filesystem listing.

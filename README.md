@@ -41,9 +41,15 @@ curl http://127.0.0.1:8088/v1/meta/version
 - `GET /healthz` — disponibilidad del proceso.
 - `GET /v1/meta/version` — versión semántica, commit instalado, esquema de
   protocolo y capacidades expuestas.
+- `GET /v1/profiles`, revisiones y objetos por SHA-256 — catálogo y contenido
+  global para el launcher en modo HTTPS autenticado.
+- `/v1/admin/...` — publicación e historial protegidos por sesión admin y
+  CSRF en modo HTTPS.
 
-Los endpoints de distribución sólo se abrirán junto con autenticación,
-verificación Ed25519, manifiestos canónicos y pruebas de herencia/anti-rollback.
+La lista de capacidades de `/v1/meta/version` indica si los endpoints de
+perfiles están habilitados. La publicación valida firmas Ed25519, manifiestos
+canónicos, objetos y reglas de secuencia/herencia; la herramienta local que
+firma las solicitudes todavía está pendiente.
 
 ## Panel de administración en red local
 
