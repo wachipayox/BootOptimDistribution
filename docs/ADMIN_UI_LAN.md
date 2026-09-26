@@ -1,91 +1,71 @@
-# Abrir el panel en la red local
+# Abrir el panel directamente en la red local
 
-El servicio BootOptim escucha sólo en `127.0.0.1:8088`. Caddy publica el panel
-en la LAN, termina HTTPS y exige autenticación HTTP Basic. No configures el
-servicio para escuchar en `0.0.0.0`; tampoco reenvíes el puerto del proxy desde
-el router a Internet.
+No hace falta instalar un reverse proxy. El servicio puede servir el panel
+directamente por HTTP en una interfaz LAN privada concreta y restringir todas
+las peticiones al CIDR configurado. El panel actual es de sólo lectura y no
+solicita contraseña: cualquier dispositivo dentro de ese CIDR puede consultar
+el inventario y las métricas que muestra.
 
-## Instalar el servicio
+Este modo no cifra el tráfico. Úsalo sólo en una red local de confianza, bloquea
+el puerto en el firewall para cualquier otra red y no configures port forwarding
+en el router. No lo uses en Wi-Fi público o compartido. Si el panel incorpora
+operaciones de escritura, antes habrá que añadir autenticación y HTTPS.
 
-La unidad de ejemplo está en `deploy/bootoptim-distribution.service`. El
-instalador conserva su binario bajo el checkout y publica una copia ejecutable
-en `/usr/local/bin/bootoptim-distribution`; así el servicio dedicado no necesita
-permisos de lectura sobre `/home/wachi/launcher_manager` ni sobre la clave de
-Git. Una vez que el cambio esté promovido a `main`, actualiza el checkout con el
-script habitual y configura la unidad:
+## Activar modo LAN
 
-```bash
-sudo useradd --system --user-group --home-dir /var/lib/bootoptim-distribution --shell /usr/sbin/nologin bootoptim-distribution
-sudo install -o root -g root -m 0644 deploy/bootoptim-distribution.service /etc/systemd/system/bootoptim-distribution.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now bootoptim-distribution
-sudo systemctl status bootoptim-distribution
-```
+Escoge la IP privada del servidor y el CIDR de la subred de confianza. Por
+ejemplo, si el servidor tiene `192.168.1.20` y los equipos de confianza están
+en `192.168.1.x`, usa `192.168.1.20:8088` y `192.168.1.0/24`. La IP de escucha
+debe estar dentro del CIDR. Se aceptan rangos IPv4 privados y IPv6 ULA; no se
+aceptan comodines como `0.0.0.0` ni listeners públicos.
 
-Si la cuenta ya existe, omite `useradd`. `StateDirectory` deja que systemd cree
-y asigne `/var/lib/bootoptim-distribution`; la unidad limita la escritura al
-estado y ejecuta el proceso sin privilegios.
-
-## Preparar Caddy
-
-Instala Caddy en el servidor y copia `deploy/Caddyfile.lan.example` a su
-directorio de configuración. Copia `deploy/caddy-bootoptim.env.example` a
-`/etc/caddy/bootoptim-admin.env`, cambia la dirección LAN y el usuario, y
-genera el hash ejecutando `caddy hash-password` sin argumentos. Sustituye el
-placeholder del archivo por el hash. Restringe el archivo con
-`sudo chown root:caddy /etc/caddy/bootoptim-admin.env` y
-`sudo chmod 0640 /etc/caddy/bootoptim-admin.env`.
-
-Añade `/etc/systemd/system/caddy.service.d/bootoptim.conf`:
+Con una unidad existente, conserva su usuario, ruta del binario y demás
+restricciones. Cambia sólo los argumentos de `ExecStart` para añadir el modo
+LAN. Ejemplo:
 
 ```ini
-[Service]
-EnvironmentFile=/etc/caddy/bootoptim-admin.env
+ExecStart=/usr/local/bin/bootoptim-distribution --listen 192.168.1.20:8088 --admin-ui-lan --admin-ui-allow-cidr 192.168.1.0/24 --data-dir /var/lib/bootoptim-distribution
 ```
 
-Después recarga systemd y reinicia Caddy:
+El directorio de datos debe ser escribible por el usuario de la unidad. Para
+una unidad que corre como `bootoptim-distribution`:
 
 ```bash
+sudo install -d -o bootoptim-distribution -g bootoptim-distribution -m 0700 /var/lib/bootoptim-distribution
 sudo systemctl daemon-reload
-sudo systemctl restart caddy
+sudo systemctl restart bootoptim-distribution
+sudo systemctl status bootoptim-distribution --no-pager
 ```
 
-Después de cada `update.sh --apply`, reinicia el servicio para que use el nuevo
-binario:
+Si ya tienes una unidad con otro usuario, asigna el directorio a ese usuario y
+grupo en vez de cambiar la identidad del servicio. No apuntes `--data-dir` a
+otra ubicación si ya contiene una base de datos o CAS que quieras conservar.
+
+El listener normal continúa siendo loopback. `--dev-admin-ui` es para acceso
+local; no se combina con `--admin-ui-lan`. El modo LAN exige explícitamente un
+listener privado concreto y `--admin-ui-allow-cidr`; además comprueba la IP de
+origen de cada petición y responde `403` fuera del rango. No confía en
+`X-Forwarded-For`.
+
+## Firewall y acceso
+
+Permite TCP/8088 únicamente desde la subred de confianza. Por ejemplo, con
+UFW, reemplaza la subred por la tuya:
 
 ```bash
-sudo systemctl restart bootoptim-distribution
+sudo ufw allow from 192.168.1.0/24 to 192.168.1.20 port 8088 proto tcp
 ```
 
-El archivo de entorno proporciona estas variables:
+Comprueba también que no haya una regla más amplia permitiendo el puerto y que
+el router no lo reenvíe hacia Internet. Fija una reserva DHCP para que la IP
+privada del servidor no cambie. Desde un dispositivo dentro de la subred abre:
 
-- `BOOTOPTIM_LAN_HOST`: IP LAN estática del servidor o nombre DNS local que
-  usarás en el navegador.
-- `BOOTOPTIM_LAN_BIND`: la IP LAN en la que Caddy acepta conexiones, por
-  ejemplo `192.168.1.20`.
-- `BOOTOPTIM_ADMIN_USER`: nombre de usuario administrativo.
-- `BOOTOPTIM_ADMIN_PASSWORD_HASH`: hash bcrypt generado con `caddy hash-password`.
+```text
+http://192.168.1.20:8088/admin/
+```
 
-No guardes la contraseña sin hash en el Caddyfile ni en el repositorio.
-
-El proceso Caddy atiende `https://<BOOTOPTIM_LAN_HOST>:8443` y reenvía al
-servicio por loopback. El firewall del servidor debe permitir TCP/8443 sólo
-desde la subred local de confianza. No permitas que clientes invitados o
-dispositivos no confiables alcancen ese puerto.
-
-## Certificado HTTPS interno
-
-`tls internal` usa la CA local de Caddy. En el servidor, ejecuta `caddy trust`
-para confiar en ella localmente. Para abrir el panel desde otro PC, exporta la
-CA raíz que Caddy creó en su directorio de datos y añádela al almacén de
-autoridades raíz de ese PC. Hazlo sólo en dispositivos de confianza y protege
-el archivo de CA; la clave privada de la CA no se debe copiar. Después abre
-`https://<BOOTOPTIM_LAN_HOST>:8443/admin/` y autentícate con el usuario y la
-contraseña que configuraste.
-
-Si la IP del servidor cambia, fija una reserva DHCP o actualiza las variables y
-el firewall. El certificado debe cubrir exactamente la IP/nombre usado en el
-navegador.
+Desde fuera del CIDR, el servicio responde `403`; conexiones a otras interfaces
+no llegan al listener porque éste se enlaza sólo a la IP privada configurada.
 
 ## Datos que muestra el panel
 
@@ -98,5 +78,4 @@ directorios de Minecraft.
 Las operaciones de carga, publicación, promoción y rollback aún no están
 expuestas por HTTP. No se habilitarán hasta tener autenticación de administrador
 compatible con el contrato de Pandora, verificación de firma, resolución de
-herencia y compare-and-swap de canal. El panel no debe interpretarse como
-autorización de esos flujos.
+herencia y compare-and-swap de canal.
