@@ -183,6 +183,48 @@ func (s *SQLiteStore) ListSignedRevisions(ctx context.Context, limit int) ([]Sto
 	return revisions, nil
 }
 
+func (s *SQLiteStore) ListSignedRevisionsForProfile(ctx context.Context, profileID string, limit int) ([]StoredSignedRevision, error) {
+	if err := s.ensureProfileAPISchema(ctx); err != nil {
+		return nil, err
+	}
+	if profileID == "" {
+		return []StoredSignedRevision{}, nil
+	}
+	if limit < 1 || limit > 1000 {
+		limit = 500
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT r.id, r.profile_id, r.sequence, r.manifest_sha256, r.manifest, r.created_at, e.envelope
+		 FROM revisions r
+		 JOIN revision_envelopes e ON e.revision_id = r.id
+		 WHERE r.profile_id = ?
+		 ORDER BY r.sequence DESC, r.id
+		 LIMIT ?`, profileID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	revisions := make([]StoredSignedRevision, 0)
+	for rows.Next() {
+		var stored StoredSignedRevision
+		var created string
+		if err := rows.Scan(&stored.RevisionID, &stored.ProfileID, &stored.Sequence,
+			&stored.ManifestSHA256, &stored.Manifest, &created, &stored.Envelope); err != nil {
+			return nil, err
+		}
+		stored.CreatedAt, err = time.Parse(time.RFC3339Nano, created)
+		if err != nil {
+			return nil, fmt.Errorf("parse revision timestamp: %w", err)
+		}
+		revisions = append(revisions, stored)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return revisions, nil
+}
+
 func (s *SQLiteStore) ProfileHead(ctx context.Context, profileID string) (StoredRevision, error) {
 	var stored StoredRevision
 	var created string

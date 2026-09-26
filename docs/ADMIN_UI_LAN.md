@@ -76,8 +76,24 @@ No hay usuario predeterminado. Elige uno explícitamente al arrancar el servicio
   --tls-key-file /etc/bootoptim-distribution/admin-tls.key \
   --admin-username operator \
   --admin-password-hash-file /etc/bootoptim-distribution/admin-password.hash \
+  --release-public-keys-file /etc/bootoptim-distribution/release-public-keys.json \
   --data-dir /var/lib/bootoptim-distribution
 ```
+
+The release public key file is a JSON object from signer key IDs to 32-byte
+Ed25519 public keys encoded as unpadded base64url. The signing private key stays
+offline on the administrator's computer. For example:
+
+```json
+{"wachi-release-2026":"BASE64URL_PUBLIC_KEY"}
+```
+
+Without this file, profile reads and the panel still work, but signed revision
+publication fails closed because no release signer is trusted. When configured,
+the file lets the service verify signed revisions before publishing them. HTTPS
+mode also enables the launcher read API on the same CIDR-restricted listener.
+Admin routes require the login session and a CSRF token; profile reads are
+available to launcher clients on the trusted LAN.
 
 Después abre `https://192.168.1.20:8443/admin/`. Una petición sin sesión se
 redirige a `/admin/login`. La cookie de sesión es `Secure`, `HttpOnly`,
@@ -100,7 +116,7 @@ Ejemplo de override:
 ```ini
 [Service]
 ExecStart=
-ExecStart=/usr/local/bin/bootoptim-distribution --listen 192.168.1.20:8443 --admin-ui-https --admin-ui-allow-cidr 192.168.1.0/24 --tls-cert-file /etc/bootoptim-distribution/admin-tls.crt --tls-key-file /etc/bootoptim-distribution/admin-tls.key --admin-username operator --admin-password-hash-file /etc/bootoptim-distribution/admin-password.hash --data-dir /var/lib/bootoptim-distribution
+ExecStart=/usr/local/bin/bootoptim-distribution --listen 192.168.1.20:8443 --admin-ui-https --admin-ui-allow-cidr 192.168.1.0/24 --tls-cert-file /etc/bootoptim-distribution/admin-tls.crt --tls-key-file /etc/bootoptim-distribution/admin-tls.key --admin-username operator --admin-password-hash-file /etc/bootoptim-distribution/admin-password.hash --release-public-keys-file /etc/bootoptim-distribution/release-public-keys.json --data-dir /var/lib/bootoptim-distribution
 ```
 
 Recarga y reinicia:
@@ -124,7 +140,8 @@ sustituye al login: sólo es una defensa adicional.
 
 ## Límites
 
-El panel incrustado continúa siendo de solo lectura. Este cambio no implementa
-upload, publicación, promoción ni rollback. Tampoco almacena claves privadas de
-firma de releases, credenciales Microsoft/Minecraft ni dependencias de identidad
-externas.
+La primera versión permite publicar revisiones globales firmadas, consultar su
+historial y servir objetos publicados. La promoción/rollback de canales y la
+integración de reparación aún requieren cerrar su flujo de operador y cliente.
+El servicio nunca almacena claves privadas de firma de releases, credenciales
+Microsoft/Minecraft ni dependencias de identidad externas.

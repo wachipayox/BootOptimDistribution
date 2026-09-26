@@ -1,9 +1,9 @@
 # Administrative UI
 
-The admin UI is an operator panel, not a player or launcher UI. The embedded
-panel remains read-only. It can still run in the existing loopback development
-mode or in the legacy direct-LAN HTTP mode, but state-changing admin routes must
-use the authenticated HTTPS boundary described below.
+The admin UI is an operator panel, not a player or launcher UI. It can run in
+the loopback development mode, the legacy read-only direct-LAN HTTP mode, or
+the authenticated HTTPS mode. Profile publication and other state-changing
+routes are available only through authenticated HTTPS.
 
 ## Exposure modes
 
@@ -33,7 +33,16 @@ The HTTPS mode requires all of these options:
 --admin-password-hash-file <0600-password-verifier-file>
 ```
 
-There is no default administrator identity. The password verifier file uses the
+Optionally, pass this flag to enable verification of signed releases:
+
+```text
+--release-public-keys-file <trusted-release-public-keys.json>
+```
+
+There is no default administrator identity. The public-key file is optional
+while bringing up the panel; without it, signed publication fails closed. Its
+JSON object maps each signer key ID to a 32-byte unpadded base64url Ed25519
+public key. The password verifier file uses the
 format documented in `ADMIN_UI_LAN.md`; the cleartext password is never stored
 by Distribution. The TLS key is only the server transport key. Release-signing
 Ed25519 private keys remain outside the service host, repository, database and
@@ -90,21 +99,22 @@ identity or role.
 ## View-model boundary
 
 `internal/adminui.ReadModel` remains the typed boundary between presentation and
-storage. The process wires `SQLiteReadModel`, which projects already-persisted
-revision manifests and CAS aggregates into a read-only overview. The UI is not
-a source of truth for signature validity, inheritance validity, anti-rollback,
-object existence, or authorization.
+storage. The process wires `SQLiteReadModel` for storage metrics and overview
+data, while the signed profile API supplies verified profile history. The UI is
+not a source of truth for signature validity, inheritance validity,
+anti-rollback, object existence, or authorization.
 
 The presentation model exposes only administrative projections such as profile
 identity, immutable revision IDs/sequences/hashes, exact pinned inheritance,
 change summaries and storage aggregates. It never receives a release private
 key.
 
-## Future profile routes
+## Profile distribution API
 
-The protocol authority remains `PROFILE_PROTOCOL.md`. State-changing routes
-such as object staging, revision publication, promotion and rollback are not
-implemented by this change. When the profile API lands, its mutation handlers
-must use the admin-session + CSRF contract above and must continue to enforce
-the signed revision, object hash, pinned inheritance and anti-rollback domain
-rules independently.
+The protocol authority remains `PROFILE_PROTOCOL.md`. In HTTPS mode, launcher
+clients on the permitted CIDR can read `GET /v1/profiles`, signed revision
+envelopes and published objects. Admin-session and CSRF checks protect object
+staging and signed revision publication. The API verifies the signer key,
+manifest digest, object hashes, pinned inheritance and anti-rollback rules
+independently of browser code. Channel promotion/rollback is implemented in the
+API, while the panel workflow for those operations remains a later step.

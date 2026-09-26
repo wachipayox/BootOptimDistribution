@@ -6,11 +6,11 @@ publicará revisiones inmutables firmadas y objetos identificados por SHA-256.
 No inspecciona archivos de jugadores ni participa en la ruta `Start` del
 launcher.
 
-La primera entrega deja un proceso Linux mínimo, limitado a loopback, con
-healthcheck, identidad de versión y un instalador/actualizador administrado por
-el propio servidor. La API de perfiles firmados se implementará sobre el
-contrato ya aprobado en Pandora PR #35; no se sustituye dicho contrato por una
-API improvisada.
+El proceso Linux mantiene loopback por defecto y expone healthcheck e identidad
+de versión. En el modo administrativo HTTPS, también sirve el panel privado y
+la API de perfiles globales sobre el contrato definido en
+`docs/PROFILE_PROTOCOL.md`. La firma privada permanece en la máquina del
+operador; el servidor recibe sólo las claves públicas de confianza.
 
 ## Actualización administrada desde Linux
 
@@ -47,8 +47,8 @@ verificación Ed25519, manifiestos canónicos y pruebas de herencia/anti-rollbac
 
 ## Panel de administración en red local
 
-El panel muestra perfiles y revisiones persistidas, herencia fijada y métricas
-del CAS. Sigue siendo de sólo lectura. El listener predeterminado permanece en
+El panel permite preparar y publicar revisiones globales firmadas, consultar su
+historial y revisar métricas del CAS. El listener predeterminado permanece en
 loopback.
 
 El modo heredado `--admin-ui-lan` conserva acceso HTTP sin login únicamente para
@@ -56,8 +56,9 @@ lectura en una LAN de confianza. Para la frontera administrativa segura usa
 `--admin-ui-https`: Distribution sirve TLS directamente, exige login local,
 sesión segura y CSRF, y conserva el bind privado y el filtro CIDR como defensa
 adicional. Certificado, clave TLS, nombre de administrador y archivo de
-verificador de contraseña son todos explícitos; no existe una identidad admin
-predeterminada.
+verificador de contraseña son explícitos; no existe una identidad admin
+predeterminada. `--release-public-keys-file` configura los verificadores
+Ed25519 confiables; sin ellos, el servicio rechaza toda publicación firmada.
 
 Consulta `docs/ADMIN_UI_LAN.md` para la configuración HTTPS, credenciales
 locales, firewall y ejemplo de `systemd`. No uses `0.0.0.0`, no permitas el

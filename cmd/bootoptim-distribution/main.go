@@ -15,6 +15,7 @@ import (
 
 	"github.com/wachipayox/BootOptimDistribution/internal/adminauth"
 	"github.com/wachipayox/BootOptimDistribution/internal/adminui"
+	"github.com/wachipayox/BootOptimDistribution/internal/profileapi"
 	"github.com/wachipayox/BootOptimDistribution/internal/storage"
 )
 
@@ -36,6 +37,7 @@ type handlerConfig struct {
 	AdminUIEnabled bool
 	AdminUIModel   adminui.ReadModel
 	AdminAuth      *adminauth.Manager
+	ProfileAPI     http.Handler
 }
 
 func main() {
@@ -48,6 +50,7 @@ func main() {
 	tlsKeyFile := flag.String("tls-key-file", "", "server TLS private key file for --admin-ui-https")
 	adminUsername := flag.String("admin-username", "", "local administrator username for --admin-ui-https")
 	adminPasswordHashFile := flag.String("admin-password-hash-file", "", "0600 file containing the local administrator PBKDF2 password verifier")
+	releasePublicKeysFile := flag.String("release-public-keys-file", "", "optional JSON map of release key ids to unpadded base64url Ed25519 public keys")
 	dataDir := flag.String("data-dir", envOr("BOOTOPTIM_DATA_DIR", "./data"), "directory for private CAS objects and SQLite metadata")
 	flag.Parse()
 
@@ -83,6 +86,7 @@ func main() {
 
 	var model adminui.ReadModel = adminui.EmptyReadModel{}
 	var store *storage.SQLiteStore
+	var profileHandler http.Handler
 	if adminUIEnabled {
 		cas, err := storage.OpenCAS(*dataDir, storage.DefaultMaxObjectBytes)
 		if err != nil {
@@ -94,12 +98,30 @@ func main() {
 		}
 		defer store.Close()
 		model = adminui.SQLiteReadModel{Store: store}
+		if authManager != nil {
+			keys, err := loadReleaseKeys(*releasePublicKeysFile)
+			if err != nil {
+				log.Fatalf("configure signed profile distribution: %v", err)
+			}
+			profileHandler, err = profileapi.New(profileapi.Dependencies{
+				Objects: cas, Store: store, Keys: keys,
+			}, profileapi.Options{
+				ReadMiddleware: identityMiddleware,
+				AdminMiddleware: func(next http.Handler) http.Handler {
+					return adminauth.RequireAdmin(authManager.RequireCSRF(next))
+				},
+			})
+			if err != nil {
+				log.Fatalf("configure profile API: %v", err)
+			}
+		}
 	}
 
 	handler := securityHeadersForHTTPS(newHandlerWithConfig(handlerConfig{
 		AdminUIEnabled: adminUIEnabled,
 		AdminUIModel:   model,
 		AdminAuth:      authManager,
+		ProfileAPI:     profileHandler,
 	}), *adminUIHTTPS)
 	if allowedNetwork != nil {
 		handler = restrictToCIDR(handler, allowedNetwork)
@@ -109,8 +131,8 @@ func main() {
 		Handler:           handler,
 		TLSConfig:         tlsConfig,
 		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		ReadTimeout:       5 * time.Minute,
+		WriteTimeout:      5 * time.Minute,
 		IdleTimeout:       30 * time.Second,
 		MaxHeaderBytes:    1 << 20,
 	}
@@ -149,15 +171,17 @@ func newHandlerWithConfig(cfg handlerConfig) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
+		capabilities := []string{"health", "build-version"}
+		if cfg.ProfileAPI != nil {
+			capabilities = append(capabilities, "signed-global-profiles", "admin-profile-publication")
+		}
 		_ = json.NewEncoder(w).Encode(versionResponse{
 			Service:        "bootoptim-distribution",
 			Version:        buildVersion,
 			Commit:         buildCommit,
 			ProtocolSchema: 1,
-			Capabilities: []string{
-				"health", "build-version",
-			},
-			ServerTimeUTC: time.Now().UTC().Format(time.RFC3339),
+			Capabilities:   capabilities,
+			ServerTimeUTC:  time.Now().UTC().Format(time.RFC3339),
 		})
 	})
 
@@ -178,6 +202,9 @@ func newHandlerWithConfig(cfg handlerConfig) http.Handler {
 		}
 		mux.Handle("/admin/", adminHandler)
 	}
+	if cfg.ProfileAPI != nil {
+		mux.Handle("/v1/", cfg.ProfileAPI)
+	}
 
 	var handler http.Handler = mux
 	if cfg.AdminAuth != nil {
@@ -185,6 +212,10 @@ func newHandlerWithConfig(cfg handlerConfig) http.Handler {
 	}
 	return handler
 }
+
+// identityMiddleware relies on the outer private-CIDR gate installed by main.
+// Profile reads are launcher-facing and do not require the browser admin role.
+func identityMiddleware(next http.Handler) http.Handler { return next }
 
 // validateAdminUIExposure preserves the original loopback-only validation
 // entrypoint for existing callers and tests.

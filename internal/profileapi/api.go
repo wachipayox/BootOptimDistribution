@@ -10,8 +10,9 @@
 //	})
 //
 // The package never owns a release private key, listener, TLS configuration or
-// administrator session. Both middleware hooks are mandatory so wiring cannot
-// accidentally expose the private distribution or mutation routes.
+// administrator session. Both middleware hooks are mandatory; the embedding
+// service must enforce its client-read access policy and admin session/CSRF
+// boundary before exposing these routes.
 package profileapi
 
 import (
@@ -60,6 +61,7 @@ type RevisionStore interface {
 	PublishSignedRevision(context.Context, storage.RevisionPublication, []byte) error
 	SignedRevision(context.Context, string) (storage.StoredSignedRevision, error)
 	ListSignedRevisions(context.Context, int) ([]storage.StoredSignedRevision, error)
+	ListSignedRevisionsForProfile(context.Context, string, int) ([]storage.StoredSignedRevision, error)
 	ProfileHead(context.Context, string) (storage.StoredRevision, error)
 	PublishedObject(context.Context, string) (storage.Object, error)
 	Channel(context.Context, string, string) (storage.ChannelRecord, error)
@@ -95,7 +97,7 @@ func New(deps Dependencies, opts Options) (http.Handler, error) {
 		return nil, errors.New("profileapi requires object store, revision store and public-key resolver")
 	}
 	if opts.ReadMiddleware == nil {
-		return nil, errors.New("profileapi requires authenticated read middleware")
+		return nil, errors.New("profileapi requires read access middleware")
 	}
 	if opts.AdminMiddleware == nil {
 		return nil, errors.New("profileapi requires administrator session/CSRF middleware")
@@ -204,6 +206,14 @@ func (a *API) serveAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := pathParts(r.URL.Path)
+	if len(parts) == 5 && parts[0] == "v1" && parts[1] == "admin" && parts[2] == "profiles" && parts[4] == "revisions" {
+		if r.Method != http.MethodGet {
+			a.methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		a.handleProfileRevisions(w, r, parts[3])
+		return
+	}
 	if len(parts) == 5 && parts[0] == "v1" && parts[1] == "admin" && parts[2] == "objects" && parts[3] == "sha256" {
 		if r.Method != http.MethodPost {
 			a.methodNotAllowed(w, http.MethodPost)
@@ -228,6 +238,36 @@ func (a *API) serveAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.writeError(w, http.StatusNotFound, "not_found", "resource not found")
+}
+
+func (a *API) handleProfileRevisions(w http.ResponseWriter, r *http.Request, profileID string) {
+	stored, err := a.store.ListSignedRevisionsForProfile(r.Context(), profileID, a.listLimit)
+	if err != nil {
+		a.writeError(w, http.StatusInternalServerError, "storage_error", "profile revision history unavailable")
+		return
+	}
+	type revisionHistoryItem struct {
+		ID             string `json:"id"`
+		Sequence       int64  `json:"sequence"`
+		ManifestSHA256 string `json:"manifest_sha256"`
+		PublishedAt    string `json:"published_at"`
+	}
+	items := make([]revisionHistoryItem, 0, len(stored))
+	for _, item := range stored {
+		if _, _, err := a.verifyStoredRevision(r.Context(), item); err != nil {
+			a.writeError(w, http.StatusInternalServerError, "revision_corrupt", "stored revision failed integrity verification")
+			return
+		}
+		items = append(items, revisionHistoryItem{
+			ID: item.RevisionID, Sequence: item.Sequence,
+			ManifestSHA256: item.ManifestSHA256, PublishedAt: item.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+		})
+	}
+	a.writeJSON(w, http.StatusOK, struct {
+		SchemaVersion   int                   `json:"schema_version"`
+		ProtocolVersion int                   `json:"protocol_version"`
+		Revisions       []revisionHistoryItem `json:"revisions"`
+	}{SchemaVersion: SchemaVersion, ProtocolVersion: ProtocolVersion, Revisions: items})
 }
 
 func (a *API) handleObjectUpload(w http.ResponseWriter, r *http.Request, digest string) {

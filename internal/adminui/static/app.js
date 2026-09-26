@@ -410,7 +410,7 @@ function renderProfiles() {
 }
 
 async function fetchProfileRevisions(id) {
-  const payload = await request('/v1/admin/ui/profiles/' + encodeURIComponent(id) + '/revisions');
+  const payload = await request('/v1/admin/profiles/' + encodeURIComponent(id) + '/revisions');
   return listFrom(payload, ['revisions', 'items']);
 }
 
@@ -1042,7 +1042,7 @@ function renderDiff() {
       } else {
         const select = make('select', 'policy-select');
         select.setAttribute('aria-label', 'Política de ' + entry.path);
-        ['enforced', 'default_once', 'user_owned'].forEach(function (value) {
+        ['enforced', 'default_once'].forEach(function (value) {
           const option = document.createElement('option');
           option.value = value;
           option.textContent = value;
@@ -1237,20 +1237,11 @@ async function uploadObject(entry) {
     'Content-Type': entry.local.mediaType || 'application/octet-stream'
   };
 
-  try {
-    await request(path, {
-      method: 'POST',
-      headers: headers,
-      body: entry.local.file
-    });
-  } catch (error) {
-    if (!(error instanceof ApiError) || error.status !== 405) throw error;
-    await request(path, {
-      method: 'PUT',
-      headers: headers,
-      body: entry.local.file
-    });
-  }
+  await request(path, {
+    method: 'POST',
+    headers: headers,
+    body: entry.local.file
+  });
 }
 
 async function prepareAndStage() {
@@ -1479,6 +1470,13 @@ async function init() {
   bindEvents();
   route();
   renderService();
+  try {
+    const session = await request('/admin/api/session');
+    state.csrfToken = session && typeof session.csrf_token === 'string' ? session.csrf_token : '';
+  } catch (error) {
+    recordError('Sesión de administración', error);
+    return;
+  }
   await loadOverview();
   await loadProfiles();
 }
