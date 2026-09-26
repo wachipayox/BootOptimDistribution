@@ -3,9 +3,7 @@ package storage
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -14,7 +12,6 @@ import (
 )
 
 var (
-	ErrEnvelopeMissing = errors.New("signed revision envelope missing")
 	ErrChannelConflict = errors.New("channel compare-and-swap conflict")
 )
 
@@ -76,116 +73,50 @@ func (s *SQLiteStore) PublishSignedRevision(ctx context.Context, publication Rev
 	if len(envelope) == 0 {
 		return fmt.Errorf("%w: envelope is empty", ErrInvalidPublication)
 	}
-	objects, err := normalizePublication(publication)
-	if err != nil {
-		return err
-	}
-	manifestHash := sha256.Sum256(publication.Manifest.Bytes)
-	if hex.EncodeToString(manifestHash[:]) != publication.Manifest.SHA256 {
-		return fmt.Errorf("%w: manifest bytes do not match supplied digest", ErrInvalidPublication)
-	}
-	for _, object := range objects {
-		if err := s.objects.Verify(ctx, object); err != nil {
-			if errors.Is(err, ErrObjectMissing) {
-				return err
-			}
-			return fmt.Errorf("%w: %s: %v", ErrCorruptObject, object.SHA256, err)
-		}
-	}
-
-	s.publishMu.Lock()
-	defer s.publishMu.Unlock()
 	if err := s.ensureProfileAPISchema(ctx); err != nil {
 		return err
 	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin signed publication transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	identical, err := identicalExistingRevision(ctx, tx, publication, objects)
-	if err != nil {
-		return err
-	}
-	if identical {
-		var storedEnvelope []byte
-		err := tx.QueryRowContext(ctx,
-			`SELECT envelope FROM revision_envelopes WHERE revision_id = ?`,
-			publication.RevisionID).Scan(&storedEnvelope)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrImmutableConflict
-		}
-		if err != nil {
-			return err
-		}
-		if !bytes.Equal(storedEnvelope, envelope) {
-			return ErrImmutableConflict
-		}
-		return nil
-	}
-
-	var maxSequence sql.NullInt64
-	if err := tx.QueryRowContext(ctx,
-		`SELECT MAX(sequence) FROM revisions WHERE profile_id = ?`,
-		publication.ProfileID).Scan(&maxSequence); err != nil {
-		return fmt.Errorf("read profile sequence head: %w", err)
-	}
-	if maxSequence.Valid && publication.Sequence <= maxSequence.Int64 {
-		return fmt.Errorf("%w: revision sequence must advance profile head", ErrImmutableConflict)
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, object := range objects {
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO objects(sha256, size, created_at) VALUES(?, ?, ?)
-			 ON CONFLICT(sha256) DO NOTHING`,
-			object.SHA256, object.Size, now); err != nil {
-			return fmt.Errorf("record object %s: %w", object.SHA256, err)
-		}
-		var storedSize int64
-		if err := tx.QueryRowContext(ctx,
-			`SELECT size FROM objects WHERE sha256 = ?`, object.SHA256).Scan(&storedSize); err != nil {
-			return fmt.Errorf("read object metadata %s: %w", object.SHA256, err)
-		}
-		if storedSize != object.Size {
-			return fmt.Errorf("%w: object %s size changed", ErrImmutableConflict, object.SHA256)
-		}
-	}
-
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO revisions(id, profile_id, sequence, manifest_sha256, manifest, created_at)
-		 VALUES(?, ?, ?, ?, ?, ?)`,
-		publication.RevisionID, publication.ProfileID, publication.Sequence,
-		publication.Manifest.SHA256, publication.Manifest.Bytes, now); err != nil {
-		if isConstraintError(err) {
-			return fmt.Errorf("%w: %v", ErrImmutableConflict, err)
-		}
-		return fmt.Errorf("record revision: %w", err)
-	}
-	for _, object := range objects {
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO revision_objects(revision_id, object_sha256) VALUES(?, ?)`,
-			publication.RevisionID, object.SHA256); err != nil {
-			return fmt.Errorf("record revision object %s: %w", object.SHA256, err)
-		}
-	}
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO revision_envelopes(revision_id, envelope) VALUES(?, ?)`,
-		publication.RevisionID, envelope); err != nil {
-		if isConstraintError(err) {
-			return fmt.Errorf("%w: %v", ErrImmutableConflict, err)
-		}
-		return fmt.Errorf("record signed envelope: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		if isConstraintError(err) {
-			return fmt.Errorf("%w: %v", ErrImmutableConflict, err)
-		}
-		return fmt.Errorf("commit signed publication: %w", err)
-	}
-	return nil
+	return s.publishRevision(ctx, publication, publicationHooks{
+		existing: func(ctx context.Context, tx *sql.Tx, publication RevisionPublication) error {
+			var storedEnvelope []byte
+			err := tx.QueryRowContext(ctx,
+				`SELECT envelope FROM revision_envelopes WHERE revision_id = ?`,
+				publication.RevisionID).Scan(&storedEnvelope)
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrImmutableConflict
+			}
+			if err != nil {
+				return err
+			}
+			if !bytes.Equal(storedEnvelope, envelope) {
+				return ErrImmutableConflict
+			}
+			return nil
+		},
+		beforeInsert: func(ctx context.Context, tx *sql.Tx, publication RevisionPublication) error {
+			var maxSequence sql.NullInt64
+			if err := tx.QueryRowContext(ctx,
+				`SELECT MAX(sequence) FROM revisions WHERE profile_id = ?`,
+				publication.ProfileID).Scan(&maxSequence); err != nil {
+				return fmt.Errorf("read profile sequence head: %w", err)
+			}
+			if maxSequence.Valid && publication.Sequence <= maxSequence.Int64 {
+				return fmt.Errorf("%w: revision sequence must advance profile head", ErrImmutableConflict)
+			}
+			return nil
+		},
+		afterInsert: func(ctx context.Context, tx *sql.Tx, publication RevisionPublication) error {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO revision_envelopes(revision_id, envelope) VALUES(?, ?)`,
+				publication.RevisionID, envelope); err != nil {
+				if isConstraintError(err) {
+					return fmt.Errorf("%w: %v", ErrImmutableConflict, err)
+				}
+				return fmt.Errorf("record signed envelope: %w", err)
+			}
+			return nil
+		},
+	})
 }
 
 func (s *SQLiteStore) SignedRevision(ctx context.Context, revisionID string) (StoredSignedRevision, error) {
