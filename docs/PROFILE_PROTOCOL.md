@@ -1,10 +1,11 @@
-# Private profile protocol contract (draft v1)
+# Private profile protocol contract (v1)
 
 This is the shared boundary for Distribution admin/publishing and Pandora
 profile discovery/update. It is the product contract for the first service
 implementation; changes must update both this document and the Pandora
-integration plan. The profile API and panel composition are in review and have
-not yet landed on `agent/integration-current`.
+integration plan. The authenticated profile API and browser publication panel
+are present on `agent/integration-current`; `main` remains the deployable
+release branch.
 
 ## Authorities and identifiers
 
@@ -45,7 +46,7 @@ validator accepts only `enforced` and `default_once`; the explicit `user_owned`
 policy and option-level config selectors remain unimplemented and must not be
 claimed as publishable until the Distribution and Pandora schemas agree.
 
-## HTTP shape to implement
+## HTTP shape
 
 All state-changing admin routes require authenticated administrator session and
 CSRF protection over Distribution-native HTTPS. No Caddy dependency. Release
@@ -61,7 +62,7 @@ GET /v1/profiles/{profile_id}/revisions/{revision_id}
 GET /v1/objects/sha256/{sha256}
 ```
 
-Administrator routes:
+Implemented administrator routes:
 
 ```text
 GET  /v1/admin/profiles
@@ -78,7 +79,7 @@ that have not yet been referenced are not visible as a profile/revision and
 must be eligible for later orphan collection. Promotion/rollback changes only
 channel state; it never mutates the published revision.
 
-Presentation-only read-model routes may include:
+Presentation-only read-model routes:
 
 ```text
 GET /v1/admin/ui/overview
@@ -103,8 +104,9 @@ where that distinction leaks private state.
    downloads a canonical signing request. It never accesses a private key.
 4. A separate local signer must display profile/parent identity and digest,
    validate the request shape, then sign it. The admin returns the signed
-   envelope to the panel for atomic publication. The signer tool is not yet
-   included in the current implementation.
+   envelope to the panel for atomic publication. The panel supports downloading
+   the canonical request and uploading the signed envelope, but the standalone
+   signer tool is not yet included.
 5. The service verifies authorization, signature, parent pin, object hashes,
    policies, sequence and anti-rollback invariants before making the revision
    visible.

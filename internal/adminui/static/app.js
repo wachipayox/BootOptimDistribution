@@ -319,7 +319,9 @@ function renderOverviewProfiles() {
     if (Array.isArray(channels) && channels.length) {
       const channelText = channels.map(function (channel) {
         if (typeof channel === 'string') return channel;
-        return valueText(channel && (channel.name || channel.channel), '');
+        const name = valueText(channel && (channel.name || channel.channel), '');
+        const currentRevision = channel && (channel.revision_id || (channel.revision && channel.revision.revision_id));
+        return name && currentRevision ? name + ' → ' + currentRevision : name;
       }).filter(Boolean).join(' · ');
       if (channelText) card.appendChild(make('p', 'card-meta', 'Canales: ' + channelText));
     }
@@ -396,7 +398,7 @@ function renderProfiles() {
       revisionContainer.replaceChildren(make('p', 'card-meta', 'Cargando revisiones…'));
       try {
         const revisions = await fetchProfileRevisions(id);
-        renderProfileRevisions(revisionContainer, revisions);
+        renderProfileRevisions(id, revisionContainer, revisions);
       } catch (error) {
         revisionContainer.replaceChildren(make('div', 'alert alert-error', describeError(error)));
       }
@@ -414,7 +416,7 @@ async function fetchProfileRevisions(id) {
   return listFrom(payload, ['revisions', 'items']);
 }
 
-function renderProfileRevisions(container, revisions) {
+function renderProfileRevisions(profileIdValue, container, revisions) {
   if (!revisions.length) {
     container.replaceChildren(make('div', 'empty-state', 'No hay revisiones disponibles para este perfil.'));
     return;
@@ -433,6 +435,47 @@ function renderProfileRevisions(container, revisions) {
     if (digest) card.appendChild(make('p', 'card-meta', 'Manifest SHA-256: ' + digest));
     const when = revision.published_at || revision.created_at;
     if (when) card.appendChild(make('p', 'card-meta', valueText(when)));
+
+    const revisionIdentifier = revisionId(revision);
+    if (revisionIdentifier) {
+      const promoteRow = make('div', 'card-actions');
+      const promoteButton = make('button', 'button button-secondary', 'Fijar en canal stable');
+      promoteButton.type = 'button';
+      const promoteStatus = make('p', 'inline-status');
+      promoteStatus.setAttribute('role', 'status');
+      promoteButton.addEventListener('click', async function () {
+        if (!window.confirm('¿Mover el canal stable de este perfil a la revisión ' + revisionIdentifier + '? Los launchers que sigan stable recibirán esta revisión.')) {
+          return;
+        }
+        promoteButton.disabled = true;
+        setStatus(promoteStatus, 'Actualizando el canal stable…');
+        try {
+          await request('/v1/admin/profiles/' + encodeURIComponent(profileIdValue) + '/channels/stable/promote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ revision_id: revisionIdentifier })
+          });
+          const updatedProfile = state.profiles.find(function (profile) {
+            return profileId(profile) === profileIdValue;
+          });
+          if (updatedProfile) {
+            const channels = Array.isArray(updatedProfile.channels) ? updatedProfile.channels : [];
+            updatedProfile.channels = channels.filter(function (channel) {
+              return valueText(channel && (channel.name || channel.channel), '') !== 'stable';
+            });
+            updatedProfile.channels.push({ name: 'stable', revision_id: revisionIdentifier });
+            renderOverview();
+          }
+          setStatus(promoteStatus, 'Canal stable actualizado a ' + revisionIdentifier + '.', 'success');
+        } catch (error) {
+          setStatus(promoteStatus, describeError(error), 'error');
+        } finally {
+          promoteButton.disabled = false;
+        }
+      });
+      promoteRow.appendChild(promoteButton);
+      card.append(promoteRow, promoteStatus);
+    }
     fragment.appendChild(card);
   });
   container.replaceChildren(fragment);
