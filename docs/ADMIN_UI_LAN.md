@@ -1,81 +1,130 @@
-# Abrir el panel directamente en la red local
+# Abrir el panel en la red local
 
-No hace falta instalar un reverse proxy. El servicio puede servir el panel
-directamente por HTTP en una interfaz LAN privada concreta y restringir todas
-las peticiones al CIDR configurado. El panel actual es de sólo lectura y no
-solicita contraseña: cualquier dispositivo dentro de ese CIDR puede consultar
-el inventario y las métricas que muestra.
+Distribution mantiene el listener predeterminado en loopback. Para la LAN hay
+dos modos explícitos: el modo HTTP heredado, que sigue siendo exclusivamente de
+solo lectura, y el nuevo límite administrativo HTTPS con login local. Ninguno
+acepta `0.0.0.0`, ninguno debe reenviarse desde el router a Internet y ambos
+mantienen el filtro por CIDR privado.
 
-Este modo no cifra el tráfico. Úsalo sólo en una red local de confianza, bloquea
-el puerto en el firewall para cualquier otra red y no configures port forwarding
-en el router. No lo uses en Wi-Fi público o compartido. Si el panel incorpora
-operaciones de escritura, antes habrá que añadir autenticación y HTTPS.
+## Modo heredado HTTP de solo lectura
 
-## Activar modo LAN
-
-Escoge la IP privada del servidor y el CIDR de la subred de confianza. Por
-ejemplo, si el servidor tiene `192.168.1.20` y los equipos de confianza están
-en `192.168.1.x`, usa `192.168.1.20:8088` y `192.168.1.0/24`. La IP de escucha
-debe estar dentro del CIDR. Se aceptan rangos IPv4 privados y IPv6 ULA; no se
-aceptan comodines como `0.0.0.0` ni listeners públicos.
-
-Con una unidad existente, conserva su usuario, ruta del binario y demás
-restricciones. Cambia sólo los argumentos de `ExecStart` para añadir el modo
-LAN. Ejemplo:
-
-```ini
-ExecStart=/usr/local/bin/bootoptim-distribution --listen 192.168.1.20:8088 --admin-ui-lan --admin-ui-allow-cidr 192.168.1.0/24 --data-dir /var/lib/bootoptim-distribution
-```
-
-El directorio de datos debe ser escribible por el usuario de la unidad. Para
-una unidad que corre como `bootoptim-distribution`:
+El comportamiento existente se conserva para diagnósticos en una LAN de
+confianza:
 
 ```bash
-sudo install -d -o bootoptim-distribution -g bootoptim-distribution -m 0700 /var/lib/bootoptim-distribution
+/usr/local/bin/bootoptim-distribution \
+  --listen 192.168.1.20:8088 \
+  --admin-ui-lan \
+  --admin-ui-allow-cidr 192.168.1.0/24 \
+  --data-dir /var/lib/bootoptim-distribution
+```
+
+Este modo no cifra ni autentica usuarios. El panel acepta sólo `GET` y `HEAD`.
+No añadas endpoints mutables a esta frontera.
+
+## Modo administrativo HTTPS
+
+Para el panel/API administrativo autenticado usa una IP privada concreta y un
+CIDR que la contenga. Distribution termina TLS directamente; no requiere Caddy
+ni otro reverse proxy.
+
+Prepara un certificado de servidor y su clave TLS. La clave TLS es distinta de
+cualquier clave de firma de releases; no copies ninguna clave Ed25519 de release
+al servidor. Por ejemplo, para una prueba LAN se puede crear un certificado RSA
+local con SAN para la IP (instala/confía después el certificado o su CA sólo en
+los dispositivos administradores):
+
+```bash
+sudo install -d -o bootoptim-distribution -g bootoptim-distribution -m 0700 /etc/bootoptim-distribution
+sudo openssl req -x509 -newkey rsa:3072 -nodes -days 365 \
+  -keyout /etc/bootoptim-distribution/admin-tls.key \
+  -out /etc/bootoptim-distribution/admin-tls.crt \
+  -subj '/CN=bootoptim-admin' \
+  -addext 'subjectAltName=IP:192.168.1.20'
+sudo chown bootoptim-distribution:bootoptim-distribution \
+  /etc/bootoptim-distribution/admin-tls.key /etc/bootoptim-distribution/admin-tls.crt
+sudo chmod 0600 /etc/bootoptim-distribution/admin-tls.key
+sudo chmod 0644 /etc/bootoptim-distribution/admin-tls.crt
+```
+
+Genera el verificador PBKDF2 de la contraseña sin poner la contraseña en la
+línea de comandos ni en el repositorio. Este ejemplo usa sólo Python estándar y
+600000 rondas HMAC-SHA256:
+
+```bash
+sudo python3 - <<'PY' | sudo tee /etc/bootoptim-distribution/admin-password.hash >/dev/null
+import base64, getpass, hashlib, secrets
+password = getpass.getpass('Admin password: ').encode()
+salt = secrets.token_bytes(16)
+rounds = 600000
+digest = hashlib.pbkdf2_hmac('sha256', password, salt, rounds, dklen=32)
+b64 = lambda b: base64.urlsafe_b64encode(b).rstrip(b'=').decode()
+print('$bootoptim$pbkdf2-sha256$%d$%s$%s' % (rounds, b64(salt), b64(digest)))
+PY
+sudo chown bootoptim-distribution:bootoptim-distribution /etc/bootoptim-distribution/admin-password.hash
+sudo chmod 0600 /etc/bootoptim-distribution/admin-password.hash
+```
+
+No hay usuario predeterminado. Elige uno explícitamente al arrancar el servicio:
+
+```bash
+/usr/local/bin/bootoptim-distribution \
+  --listen 192.168.1.20:8443 \
+  --admin-ui-https \
+  --admin-ui-allow-cidr 192.168.1.0/24 \
+  --tls-cert-file /etc/bootoptim-distribution/admin-tls.crt \
+  --tls-key-file /etc/bootoptim-distribution/admin-tls.key \
+  --admin-username operator \
+  --admin-password-hash-file /etc/bootoptim-distribution/admin-password.hash \
+  --data-dir /var/lib/bootoptim-distribution
+```
+
+Después abre `https://192.168.1.20:8443/admin/`. Una petición sin sesión se
+redirige a `/admin/login`. La cookie de sesión es `Secure`, `HttpOnly`,
+`SameSite=Strict`, host-only y expira a las ocho horas; las sesiones viven sólo
+en memoria y un reinicio obliga a iniciar sesión de nuevo.
+
+Para futuros clientes de la API administrativa, `GET /admin/api/session`
+devuelve el principal y el token CSRF de la sesión. Las peticiones mutables
+deben enviar ese valor en `X-CSRF-Token` además de pasar el middleware de rol
+admin.
+
+## systemd y firewall
+
+La unidad incluida conserva loopback por defecto. Para habilitar HTTPS crea un
+override local de `ExecStart` con las opciones anteriores; no cambies el usuario
+del servicio ni abras permisos más amplios a los archivos de credenciales.
+
+Ejemplo de override:
+
+```ini
+[Service]
+ExecStart=
+ExecStart=/usr/local/bin/bootoptim-distribution --listen 192.168.1.20:8443 --admin-ui-https --admin-ui-allow-cidr 192.168.1.0/24 --tls-cert-file /etc/bootoptim-distribution/admin-tls.crt --tls-key-file /etc/bootoptim-distribution/admin-tls.key --admin-username operator --admin-password-hash-file /etc/bootoptim-distribution/admin-password.hash --data-dir /var/lib/bootoptim-distribution
+```
+
+Recarga y reinicia:
+
+```bash
 sudo systemctl daemon-reload
 sudo systemctl restart bootoptim-distribution
 sudo systemctl status bootoptim-distribution --no-pager
 ```
 
-Si ya tienes una unidad con otro usuario, asigna el directorio a ese usuario y
-grupo en vez de cambiar la identidad del servicio. No apuntes `--data-dir` a
-otra ubicación si ya contiene una base de datos o CAS que quieras conservar.
-
-El listener normal continúa siendo loopback. `--dev-admin-ui` es para acceso
-local; no se combina con `--admin-ui-lan`. El modo LAN exige explícitamente un
-listener privado concreto y `--admin-ui-allow-cidr`; además comprueba la IP de
-origen de cada petición y responde `403` fuera del rango. No confía en
-`X-Forwarded-For`.
-
-## Firewall y acceso
-
-Permite TCP/8088 únicamente desde la subred de confianza. Por ejemplo, con
-UFW, reemplaza la subred por la tuya:
+Permite TCP/8443 únicamente desde la subred de confianza. Con UFW, ajusta las
+direcciones a tu red:
 
 ```bash
-sudo ufw allow from 192.168.1.0/24 to 192.168.1.20 port 8088 proto tcp
+sudo ufw allow from 192.168.1.0/24 to 192.168.1.20 port 8443 proto tcp
 ```
 
-Comprueba también que no haya una regla más amplia permitiendo el puerto y que
-el router no lo reenvíe hacia Internet. Fija una reserva DHCP para que la IP
-privada del servidor no cambie. Desde un dispositivo dentro de la subred abre:
+El proceso comprueba además la IP real del socket contra
+`--admin-ui-allow-cidr` y no confía en `X-Forwarded-For`. El filtro de red no
+sustituye al login: sólo es una defensa adicional.
 
-```text
-http://192.168.1.20:8088/admin/
-```
+## Límites
 
-Desde fuera del CIDR, el servicio responde `403`; conexiones a otras interfaces
-no llegan al listener porque éste se enlaza sólo a la IP privada configurada.
-
-## Datos que muestra el panel
-
-El panel consulta SQLite y presenta revisiones publicadas, SHA-256, secuencia,
-herencia y conteos/tamaño de los objetos referenciados por revisiones publicadas.
-La lista está limitada a las 100 revisiones más recientes; las métricas son
-agregados SQL y no recorren el árbol de objetos. No lee ni inspecciona
-directorios de Minecraft.
-
-Las operaciones de carga, publicación, promoción y rollback aún no están
-expuestas por HTTP. No se habilitarán hasta tener autenticación de administrador
-compatible con el contrato de Pandora, verificación de firma, resolución de
-herencia y compare-and-swap de canal.
+El panel incrustado continúa siendo de solo lectura. Este cambio no implementa
+upload, publicación, promoción ni rollback. Tampoco almacena claves privadas de
+firma de releases, credenciales Microsoft/Minecraft ni dependencias de identidad
+externas.
