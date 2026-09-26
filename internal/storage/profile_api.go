@@ -283,7 +283,12 @@ func (s *SQLiteStore) PublishedObject(ctx context.Context, digest string) (Objec
 		`SELECT o.sha256, o.size
 		 FROM objects o
 		 WHERE o.sha256 = ?
-		   AND EXISTS (SELECT 1 FROM revision_objects ro WHERE ro.object_sha256 = o.sha256)
+		   AND EXISTS (
+		       SELECT 1
+		       FROM revision_objects ro
+		       JOIN revision_envelopes e ON e.revision_id = ro.revision_id
+		       WHERE ro.object_sha256 = o.sha256
+		   )
 		 LIMIT 1`, digest).Scan(&object.SHA256, &object.Size)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Object{}, ErrObjectMissing
