@@ -9,30 +9,20 @@ on:
       - '.github/workflows/profile-api.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   profile-api:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.x'
           cache: false
       - name: Download modules
         run: go mod download
-      - name: Format branch
-        run: |
-          gofmt -w internal/profileapi internal/storage/profile_api.go
-          if ! git diff --quiet -- internal/profileapi internal/storage/profile_api.go; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add internal/profileapi internal/storage/profile_api.go
-            git commit -m "style: gofmt profile API"
-            git push origin HEAD:${{ github.head_ref }}
-          fi
+      - name: gofmt
+        run: test -z "$(gofmt -l internal/profileapi internal/storage/profile_api.go)"
       - name: Focused tests
         run: go test ./internal/profileapi ./internal/storage
