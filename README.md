@@ -48,18 +48,18 @@ verificación Ed25519, manifiestos canónicos y pruebas de herencia/anti-rollbac
 ## Panel de administración en red local
 
 El panel muestra perfiles y revisiones persistidas, herencia fijada y métricas
-del CAS. Sigue siendo de sólo lectura mientras no estén implementadas las
-operaciones HTTP de publicación/promoción con verificación de firma. Por
-defecto el proceso sólo acepta loopback. Para uso directo en una LAN de
-confianza, enlázalo a una IP privada concreta y permite únicamente el CIDR de
-esa red:
+del CAS. Sigue siendo de sólo lectura. El listener predeterminado permanece en
+loopback.
 
-```bash
-/usr/local/bin/bootoptim-distribution --listen 192.168.1.20:8088 --admin-ui-lan --admin-ui-allow-cidr 192.168.1.0/24 --data-dir /var/lib/bootoptim-distribution
-```
+El modo heredado `--admin-ui-lan` conserva acceso HTTP sin login únicamente para
+lectura en una LAN de confianza. Para la frontera administrativa segura usa
+`--admin-ui-https`: Distribution sirve TLS directamente, exige login local,
+sesión segura y CSRF, y conserva el bind privado y el filtro CIDR como defensa
+adicional. Certificado, clave TLS, nombre de administrador y archivo de
+verificador de contraseña son todos explícitos; no existe una identidad admin
+predeterminada.
 
-Consulta `docs/ADMIN_UI_LAN.md` para el firewall y la instalación. No uses
-`0.0.0.0`, no permitas el puerto desde redes invitadas y no lo reenvíes desde
-el router a Internet. Todo dispositivo del CIDR permitido podrá ver este panel
-de sólo lectura; antes de añadir operaciones de escritura hará falta una capa
-de autenticación y transporte cifrado.
+Consulta `docs/ADMIN_UI_LAN.md` para la configuración HTTPS, credenciales
+locales, firewall y ejemplo de `systemd`. No uses `0.0.0.0`, no permitas el
+puerto desde redes invitadas y no lo reenvíes desde el router a Internet. Las
+claves Ed25519 privadas de firma de releases permanecen fuera del servicio.
