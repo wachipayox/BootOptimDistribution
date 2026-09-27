@@ -242,7 +242,7 @@ func (m *Manager) RequireCSRF(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if !sameOriginIfPresent(r) {
+		if !sameOriginOrOpaque(r) {
 			forbidden(w)
 			return
 		}
@@ -327,7 +327,7 @@ func (m *Manager) SessionHandler() http.Handler {
 }
 
 func (m *Manager) handleLoginPost(w http.ResponseWriter, r *http.Request, successPath string) {
-	if !sameOriginIfPresent(r) {
+	if !sameOriginOrOpaque(r) {
 		m.renderRejectedLogin(w, http.StatusBadRequest, "Request could not be accepted.")
 		return
 	}
@@ -476,9 +476,12 @@ func setLoginSecurityHeaders(w http.ResponseWriter) {
 	w.Header().Set("X-Frame-Options", "DENY")
 }
 
-func sameOriginIfPresent(r *http.Request) bool {
+func sameOriginOrOpaque(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
-	if origin == "" {
+	if origin == "" || origin == "null" {
+		// Opaque browser origins serialize as "null" and cannot be compared to
+		// the request host. Unsafe requests still have to pass the synchronizer
+		// token check in RequireCSRF or the login form's cookie/token check.
 		return true
 	}
 	parsed, err := url.Parse(origin)
