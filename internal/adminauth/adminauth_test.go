@@ -116,12 +116,52 @@ func TestLoginSessionAndCSRF(t *testing.T) {
 
 	withCSRF := httptest.NewRequest(http.MethodPost, "https://admin.test/v1/admin/revisions", nil)
 	withCSRF.AddCookie(sessionCookie)
-	withCSRF.Header.Set("Origin", "https://admin.test")
+	withCSRF.Header.Set("Origin", "null")
 	withCSRF.Header.Set(CSRFHeader, csrfToken)
 	withRecorder := httptest.NewRecorder()
 	protected.ServeHTTP(withRecorder, withCSRF)
 	if withRecorder.Code != http.StatusNoContent {
-		t.Fatalf("valid CSRF status = %d, want %d", withRecorder.Code, http.StatusNoContent)
+		t.Fatalf("valid CSRF with opaque Origin status = %d, want %d", withRecorder.Code, http.StatusNoContent)
+	}
+
+	foreignOrigin := httptest.NewRequest(http.MethodPost, "https://admin.test/v1/admin/revisions", nil)
+	foreignOrigin.AddCookie(sessionCookie)
+	foreignOrigin.Header.Set("Origin", "https://attacker.test")
+	foreignOrigin.Header.Set(CSRFHeader, csrfToken)
+	foreignRecorder := httptest.NewRecorder()
+	protected.ServeHTTP(foreignRecorder, foreignOrigin)
+	if foreignRecorder.Code != http.StatusForbidden {
+		t.Fatalf("foreign Origin status = %d, want %d", foreignRecorder.Code, http.StatusForbidden)
+	}
+}
+
+func TestLoginAllowsOpaqueOriginWithCSRF(t *testing.T) {
+	m := newTestManager(t)
+	loginGet := httptest.NewRecorder()
+	m.LoginHandler("/admin/").ServeHTTP(loginGet, httptest.NewRequest(http.MethodGet, "https://admin.test/admin/login", nil))
+	var loginCookie *http.Cookie
+	for _, cookie := range loginGet.Result().Cookies() {
+		if cookie.Name == loginCSRFCookieName {
+			loginCookie = cookie
+		}
+	}
+	if loginCookie == nil {
+		t.Fatal("missing login CSRF cookie")
+	}
+
+	form := url.Values{
+		"username":   {"operator"},
+		"password":   {"correct horse"},
+		"csrf_token": {loginCookie.Value},
+	}
+	request := httptest.NewRequest(http.MethodPost, "https://admin.test/admin/login", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("Origin", "null")
+	request.AddCookie(loginCookie)
+	loginPost := httptest.NewRecorder()
+	m.LoginHandler("/admin/").ServeHTTP(loginPost, request)
+	if loginPost.Code != http.StatusSeeOther {
+		t.Fatalf("POST login with opaque Origin status = %d, body=%q", loginPost.Code, loginPost.Body.String())
 	}
 }
 
