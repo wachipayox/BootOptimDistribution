@@ -127,7 +127,7 @@ function recordError(context, error, globalAlert) {
   const message = context + ': ' + describeError(error);
   state.apiErrors.push(message);
   if (globalAlert !== false) addAlert(message);
-  nodes.apiState.textContent = 'API con errores';
+  nodes.apiState.textContent = 'Error de conexión';
   nodes.apiState.className = 'status-pill status-error';
 }
 
@@ -335,7 +335,7 @@ function renderOverviewProfiles() {
 function renderActivity() {
   if (!state.recentRevisions.length) {
     nodes.activity.className = 'empty-state';
-    nodes.activity.textContent = 'Sin revisiones recientes.';
+    nodes.activity.textContent = 'No hay publicaciones recientes.';
     return;
   }
 
@@ -344,7 +344,7 @@ function renderActivity() {
     const item = make('article', 'activity-item');
     const name = valueText(revision.profile_name || revision.profile_id, 'Perfil');
     const sequence = revisionSequence(revision);
-    const title = make('strong', '', name + (sequence !== null ? ' · secuencia ' + sequence : ''));
+    const title = make('strong', '', name + (sequence !== null ? ' · versión ' + sequence : ''));
     const metaParts = [];
     if (revisionId(revision)) metaParts.push(revisionId(revision));
     if (revision.published_at || revision.created_at) metaParts.push(valueText(revision.published_at || revision.created_at));
@@ -429,7 +429,7 @@ function renderProfileRevisions(profileIdValue, container, revisions) {
     const title = revisionId(revision) || 'Revisión';
     card.append(
       make('strong', '', title),
-      make('p', 'card-meta', seq === null ? 'Secuencia no disponible' : 'Secuencia ' + seq)
+      make('p', 'card-meta', seq === null ? 'Versión no disponible' : 'Versión ' + seq)
     );
     const digest = revisionDigest(revision);
     if (digest) card.appendChild(make('p', 'card-meta', 'Manifest SHA-256: ' + digest));
@@ -439,16 +439,16 @@ function renderProfileRevisions(profileIdValue, container, revisions) {
     const revisionIdentifier = revisionId(revision);
     if (revisionIdentifier) {
       const promoteRow = make('div', 'card-actions');
-      const promoteButton = make('button', 'button button-secondary', 'Fijar en canal stable');
+      const promoteButton = make('button', 'button button-secondary', 'Fijar en canal estable');
       promoteButton.type = 'button';
       const promoteStatus = make('p', 'inline-status');
       promoteStatus.setAttribute('role', 'status');
       promoteButton.addEventListener('click', async function () {
-        if (!window.confirm('¿Mover el canal stable de este perfil a la revisión ' + revisionIdentifier + '? Los launchers que sigan stable recibirán esta revisión.')) {
+        if (!window.confirm('¿Actualizar este perfil a la versión ' + revisionIdentifier + '? Los launchers que sigan el canal estable recibirán esta versión.')) {
           return;
         }
         promoteButton.disabled = true;
-        setStatus(promoteStatus, 'Actualizando el canal stable…');
+        setStatus(promoteStatus, 'Actualizando el canal estable…');
         try {
           await request('/v1/admin/profiles/' + encodeURIComponent(profileIdValue) + '/channels/stable/promote', {
             method: 'POST',
@@ -466,7 +466,7 @@ function renderProfileRevisions(profileIdValue, container, revisions) {
             updatedProfile.channels.push({ name: 'stable', revision_id: revisionIdentifier });
             renderOverview();
           }
-          setStatus(promoteStatus, 'Canal stable actualizado a ' + revisionIdentifier + '.', 'success');
+          setStatus(promoteStatus, 'Canal estable actualizado a ' + revisionIdentifier + '.', 'success');
         } catch (error) {
           setStatus(promoteStatus, describeError(error), 'error');
         } finally {
@@ -486,7 +486,7 @@ function populateParentProfiles() {
   const fragment = document.createDocumentFragment();
   const root = document.createElement('option');
   root.value = '';
-  root.textContent = 'Sin revisión madre';
+  root.textContent = 'Sin perfil base';
   fragment.appendChild(root);
 
   state.profiles.forEach(function (profile) {
@@ -709,12 +709,12 @@ async function loadSyntheticPack() {
   let variant = 'root';
   if (state.parentRef) {
     if (!state.parentMap.has('mods/bootoptim-synthetic.jar') || !state.parentMap.has('mods/remove-me.jar')) {
-      setStatus(nodes.folderStatus, 'La revisión madre elegida no parece ser el fixture sintético raíz. Para evitar un diff engañoso, selecciona “Sin revisión madre” o una revisión sintética compatible.', 'warning');
+      setStatus(nodes.folderStatus, 'El ejemplo necesita un perfil base creado con otro ejemplo. Selecciona “Sin perfil base” para empezar desde cero.', 'warning');
       return;
     }
     variant = 'child';
   }
-  await scanRecords(syntheticRecords(variant), variant === 'child' ? 'Pack sintético hijo' : 'Pack sintético raíz');
+  await scanRecords(syntheticRecords(variant), variant === 'child' ? 'Ejemplo derivado' : 'Ejemplo inicial');
 }
 
 function objectDigest(entry) {
@@ -866,19 +866,19 @@ async function handleParentProfileChange() {
     option.value = '';
     option.textContent = 'Selecciona un perfil primero';
     nodes.parentRevision.replaceChildren(option);
-    setStatus(nodes.parentStatus, 'Publicación raíz: no se comparará contra una revisión anterior.');
-    nodes.syntheticHint.textContent = 'usa el pack sintético raíz para validar el flujo antes de seleccionar datos reales.';
+    setStatus(nodes.parentStatus, 'Perfil independiente: se publicará como una versión inicial.');
+    nodes.syntheticHint.textContent = 'Previsualiza el flujo con archivos de ejemplo antes de elegir una carpeta.';
     await recomputeDiff();
     return;
   }
 
-  setStatus(nodes.parentStatus, 'Cargando revisiones de ' + id + '…');
+    setStatus(nodes.parentStatus, 'Cargando versiones de ' + id + '…');
   try {
     const revisions = await fetchProfileRevisions(id);
     const fragment = document.createDocumentFragment();
     const placeholder = document.createElement('option');
     placeholder.value = '';
-    placeholder.textContent = 'Selecciona una revisión';
+    placeholder.textContent = 'Selecciona una versión';
     fragment.appendChild(placeholder);
     revisions.forEach(function (revision) {
       const idValue = revisionId(revision);
@@ -886,18 +886,18 @@ async function handleParentProfileChange() {
       const option = document.createElement('option');
       option.value = idValue;
       const seq = revisionSequence(revision);
-      option.textContent = idValue + (seq === null ? '' : ' · secuencia ' + seq);
+      option.textContent = idValue + (seq === null ? '' : ' · versión ' + seq);
       fragment.appendChild(option);
     });
     nodes.parentRevision.replaceChildren(fragment);
-    setStatus(nodes.parentStatus, revisions.length ? 'Selecciona la revisión madre exacta.' : 'Este perfil no expone revisiones utilizables.', revisions.length ? '' : 'warning');
+    setStatus(nodes.parentStatus, revisions.length ? 'Selecciona la versión base.' : 'Este perfil todavía no tiene versiones disponibles.', revisions.length ? '' : 'warning');
   } catch (error) {
     const option = document.createElement('option');
     option.value = '';
     option.textContent = 'No se pudieron cargar revisiones';
     nodes.parentRevision.replaceChildren(option);
     nodes.parentRevision.disabled = true;
-    setStatus(nodes.parentStatus, 'No se pudo cargar la revisión madre: ' + describeError(error), 'error');
+    setStatus(nodes.parentStatus, 'No se pudieron cargar las versiones: ' + describeError(error), 'error');
   }
   await recomputeDiff();
 }
@@ -911,12 +911,12 @@ async function handleParentRevisionChange() {
   const profile = nodes.parentProfile.value;
   const revision = nodes.parentRevision.value;
   if (!profile || !revision) {
-    setStatus(nodes.parentStatus, 'Selecciona una revisión madre exacta.', 'warning');
+    setStatus(nodes.parentStatus, 'Selecciona una versión base.', 'warning');
     await recomputeDiff();
     return;
   }
 
-  setStatus(nodes.parentStatus, 'Resolviendo manifest efectivo y herencia fijada…');
+  setStatus(nodes.parentStatus, 'Cargando los archivos de la versión base…');
   try {
     const resolved = await resolveEffective(profile, revision, 0, new Set());
     state.parentMap = resolved.map;
@@ -927,14 +927,14 @@ async function handleParentRevisionChange() {
     }
     setStatus(
       nodes.parentStatus,
-      'Madre fijada: ' + resolved.ref.profile_id + ' / ' + resolved.ref.revision_id + ' · ' + resolved.ref.manifest_sha256,
+      'Versión base: ' + resolved.ref.profile_id + ' / ' + resolved.ref.revision_id,
       'success'
     );
     nodes.syntheticHint.textContent = state.parentMap.has('mods/bootoptim-synthetic.jar')
-      ? 'la madre parece sintética; el botón cargará el fixture hijo con cambio, alta y eliminación.'
-      : 'para el fixture hijo selecciona primero una revisión creada con el pack sintético raíz.';
+      ? 'El ejemplo mostrará archivos añadidos, modificados y eliminados respecto al perfil base.'
+      : 'Para comparar ejemplos, el perfil base debe haberse creado con el botón «Cargar ejemplo».';
   } catch (error) {
-    setStatus(nodes.parentStatus, 'No se pudo resolver la revisión madre: ' + describeError(error), 'error');
+    setStatus(nodes.parentStatus, 'No se pudo cargar la versión base: ' + describeError(error), 'error');
   }
   await recomputeDiff();
 }
@@ -948,7 +948,7 @@ function invalidatePrepared() {
   nodes.downloadRequest.disabled = true;
   nodes.publishButton.disabled = true;
   nodes.confirmDiff.checked = false;
-  setStatus(nodes.envelopeStatus, 'Ningún envelope cargado.');
+  setStatus(nodes.envelopeStatus, 'Ningún archivo de firma seleccionado.');
   setStatus(nodes.publishStatus, '');
 }
 
@@ -1048,7 +1048,7 @@ function renderDiff() {
 
   if (counts.unsupported) {
     nodes.diffWarning.hidden = false;
-    nodes.diffWarning.textContent = counts.unsupported + ' entrada(s) no pueden representarse con seguridad en el manifest actual. La publicación queda bloqueada hasta corregirlas.';
+    nodes.diffWarning.textContent = counts.unsupported + ' archivo(s) no se pueden publicar con este formato. Corrige la lista antes de continuar.';
   } else {
     nodes.diffWarning.hidden = true;
     nodes.diffWarning.textContent = '';
@@ -1056,7 +1056,7 @@ function renderDiff() {
 
   if (!state.diff.length) {
     const row = document.createElement('tr');
-    const cell = make('td', 'muted-cell', state.selectedFiles.size ? 'No hay cambios respecto a la revisión madre.' : 'Selecciona una carpeta para calcular el diff.');
+    const cell = make('td', 'muted-cell', state.selectedFiles.size ? 'No hay cambios respecto a la versión base.' : 'Selecciona una carpeta para ver los cambios.');
     cell.colSpan = 5;
     row.appendChild(cell);
     nodes.diffBody.replaceChildren(row);
@@ -1084,11 +1084,11 @@ function renderDiff() {
         policyCell.textContent = entry.parent && entry.parent.policy ? entry.parent.policy : '—';
       } else {
         const select = make('select', 'policy-select');
-        select.setAttribute('aria-label', 'Política de ' + entry.path);
-        ['enforced', 'default_once'].forEach(function (value) {
+        select.setAttribute('aria-label', 'Regla de ' + entry.path);
+        [['enforced', 'Obligatoria'], ['default_once', 'Valor inicial']].forEach(function (policy) {
           const option = document.createElement('option');
-          option.value = value;
-          option.textContent = value;
+          option.value = policy[0];
+          option.textContent = policy[1];
           select.appendChild(option);
         });
         select.value = policyFor(entry);
@@ -1289,7 +1289,7 @@ async function uploadObject(entry) {
 
 async function prepareAndStage() {
   invalidatePrepared();
-  setStatus(nodes.stageStatus, 'Preparando manifest y staging…');
+    setStatus(nodes.stageStatus, 'Preparando archivos…');
   nodes.stageButton.disabled = true;
 
   try {
@@ -1309,7 +1309,7 @@ async function prepareAndStage() {
     nodes.stageProgress.value = 0;
 
     for (let index = 0; index < uploads.length; index += 1) {
-      setStatus(nodes.stageStatus, 'Subiendo objeto ' + (index + 1) + ' de ' + uploads.length + '…');
+      setStatus(nodes.stageStatus, 'Subiendo archivo ' + (index + 1) + ' de ' + uploads.length + '…');
       await uploadObject(uploads[index]);
       nodes.stageProgress.value = index + 1;
     }
@@ -1317,11 +1317,11 @@ async function prepareAndStage() {
     if (!uploads.length) nodes.stageProgress.value = 1;
     state.staged = true;
     nodes.downloadRequest.disabled = false;
-    setStatus(nodes.stageStatus, 'Staging aceptado por el API. Manifest SHA-256: ' + digest, 'success');
+    setStatus(nodes.stageStatus, 'Archivos preparados y subidos. Ya puedes descargar el archivo de firma.', 'success');
   } catch (error) {
     state.staged = false;
     nodes.downloadRequest.disabled = true;
-    setStatus(nodes.stageStatus, 'No se completó el staging: ' + describeError(error), 'error');
+    setStatus(nodes.stageStatus, 'No se pudieron preparar los archivos: ' + describeError(error), 'error');
   } finally {
     nodes.stageButton.disabled = false;
   }
@@ -1329,7 +1329,7 @@ async function prepareAndStage() {
 
 function downloadSigningRequest() {
   if (!state.staged || !state.manifest || !state.manifestSHA256) {
-    setStatus(nodes.stageStatus, 'Primero debe completarse el staging sin errores.', 'error');
+    setStatus(nodes.stageStatus, 'Primero prepara y sube los archivos.', 'error');
     return;
   }
 
@@ -1348,7 +1348,7 @@ function downloadSigningRequest() {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
-  setStatus(nodes.stageStatus, 'Solicitud canónica descargada. Fírmala con la herramienta local y carga el envelope resultante.', 'success');
+  setStatus(nodes.stageStatus, 'Archivo descargado. Complétalo con la herramienta de firma y selecciona el resultado.', 'success');
 }
 
 async function readSignedEnvelope(file) {
@@ -1383,10 +1383,10 @@ async function readSignedEnvelope(file) {
     if (typeof signature.value !== 'string' || !signature.value) throw new Error('Falta el valor de firma.');
 
     state.signedEnvelope = envelope;
-    setStatus(nodes.envelopeStatus, 'Envelope coherente con el diff preparado. La firma final será verificada por el servicio.', 'success');
+    setStatus(nodes.envelopeStatus, 'Firma reconocida. El servicio la comprobará al publicar.', 'success');
   } catch (error) {
     state.signedEnvelope = null;
-    setStatus(nodes.envelopeStatus, 'Envelope rechazado por el panel: ' + describeError(error), 'error');
+    setStatus(nodes.envelopeStatus, 'No se pudo validar el archivo de firma: ' + describeError(error), 'error');
   }
 
   updatePublishEnabled();
@@ -1399,12 +1399,11 @@ function summarizeDiff() {
   });
   return [
     'Perfil: ' + valueText(state.manifest && state.manifest.profile && state.manifest.profile.id),
-    'Revisión: ' + valueText(state.manifest && state.manifest.revision && state.manifest.revision.id),
-    'Manifest: ' + valueText(state.manifestSHA256),
+    'Versión: ' + valueText(state.manifest && state.manifest.revision && state.manifest.revision.id),
     'Altas: ' + counts.added,
     'Cambios: ' + counts.changed,
     'Eliminaciones: ' + counts.removed,
-    'Madre: ' + (state.parentRef ? state.parentRef.profile_id + ' / ' + state.parentRef.revision_id : 'raíz')
+    'Perfil base: ' + (state.parentRef ? state.parentRef.profile_id + ' / ' + state.parentRef.revision_id : 'ninguno')
   ].join('\n');
 }
 
@@ -1425,7 +1424,7 @@ function confirmPublication() {
 async function publishEnvelope() {
   if (!state.signedEnvelope) return;
   nodes.publishButton.disabled = true;
-  setStatus(nodes.publishStatus, 'Publicando revisión firmada…');
+  setStatus(nodes.publishStatus, 'Publicando versión…');
 
   try {
     await request('/v1/admin/revisions', {
@@ -1434,7 +1433,7 @@ async function publishEnvelope() {
       body: JSON.stringify(state.signedEnvelope)
     });
     const revision = state.manifest && state.manifest.revision ? state.manifest.revision.id : '';
-    setStatus(nodes.publishStatus, 'El API aceptó la publicación' + (revision ? ' de ' + revision : '') + '.', 'success');
+    setStatus(nodes.publishStatus, 'Versión publicada' + (revision ? ': ' + revision : '') + '.', 'success');
     nodes.confirmDiff.checked = false;
     state.signedEnvelope = null;
     updatePublishEnabled();
@@ -1447,11 +1446,7 @@ async function publishEnvelope() {
 }
 
 function setupPickerSupport() {
-  if (typeof window.showDirectoryPicker === 'function') {
-    nodes.pickerSupport.textContent = 'Selector moderno disponible. La alternativa permanece disponible por compatibilidad.';
-  } else {
-    nodes.pickerSupport.textContent = 'Este navegador no ofrece showDirectoryPicker(). Usa “Alternativa de selección”; los archivos elegidos se conservan en memoria en esta pestaña mientras preparas el diff.';
-  }
+  nodes.pickerSupport.hidden = true;
 }
 
 function setupCSRFHint() {
