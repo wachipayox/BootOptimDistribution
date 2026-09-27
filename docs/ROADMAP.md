@@ -1,20 +1,22 @@
 # Distribution service roadmap
 
 `agent/integration-current` is the service integration authority; `main` alone
-is deployable. The current integration (`4c164b4`, 2026-09-26) contains the
-authenticated native-HTTPS admin panel, signed profile API, LAN-restricted
-launcher reads, and browser folder-to-revision publication workflow. These
-features are not yet in `main`, so the service currently installed on the
-server does not provide them. The local signer utility and a full synthetic
-publication/client run remain required before the first release. The panel
-also lets the operator point a profile's `stable` channel at a published
-revision from its history.
+is deployable. As of 2026-09-28, integration is `8741f10` and `main` is
+`c314297`. The deployed server reports `c314297` and has the authenticated
+native-HTTPS admin panel, signed profile API, LAN-restricted launcher reads,
+and browser folder-to-revision publication workflow. Manifest-v2 per-setting
+config rules are the current work and are not yet on `main` or the server. The
+local signer utility and a complete synthetic publication/client run remain
+required for end-to-end acceptance. The panel lets the operator point a
+profile's `stable` channel at a published revision from its history.
 
-Current schema policies are only `enforced` and `default_once`; do not treat
-the planned `user_owned` and option-selector semantics as implemented. The
-launcher has profile discovery/install/update foundations on its own
-integration branch, but it still needs a simple HTTPS/protocol connection
-check and end-to-end validation against a published synthetic profile.
+File schema policies are `enforced` and `default_once`. Manifest schema v2
+adds per-setting TOML, `.properties`, and `.txt` rules in the panel and API.
+The matching client merge is being validated on a launcher work branch; the
+server version on `main` has not yet been updated. The broader `user_owned`
+file policy and arbitrary structured formats remain out of scope. A complete
+synthetic signed publication and real client update against the deployed
+version are still required before marking this feature accepted.
 
 The product is a private profile distribution service, not a public modpack
 catalog. The Linux service owns immutable global profiles/revisions and their
@@ -59,8 +61,10 @@ Do not add Caddy as a dependency and do not expose unauthenticated write APIs.
 
 ### 2. Global profile publication and test profile creation
 
-Status: publication API and initial browser workflow are integrated. The local
-signer and a complete synthetic-pack run remain required for acceptance.
+Status: publication API and initial browser workflow are integrated. Schema
+v2 config-rule editing and validation are implemented on a work branch and
+await deployment; a complete synthetic-pack run remains required for
+acceptance.
 
 The service API and browser workflow create a global profile, select a local
 folder, inspect additions/changes/removals, and stage a new immutable revision.
@@ -78,9 +82,11 @@ one mod, one config, one resource pack, and one removal.
 
 ### 3. Branch graph and effective profile resolution
 
-Status: planned. Pandora's local ownership/reconciliation backend is in a
-separate in-review PR; server/client schema agreement and end-to-end checks are
-still outstanding.
+Status: core direct-global reconciliation is integrated in Pandora; option
+rule transaction support is being validated on a work branch. Global-to-global
+and global-to-local setting inheritance is represented in schema v2, but a
+signed synthetic publication and live client application still gate
+acceptance.
 
 Allow multiple child profiles per parent, with one pinned parent revision per
 child revision. Support global-to-global and global-to-local derivation on the
@@ -90,9 +96,9 @@ private local overlays to the server.
 
 Represent add, replace, remove, and policy changes in revision history. A
 child can replace/remove an inherited mod or other path. Configuration policies
-must distinguish enforced values, seed-once defaults, and explicit option
-selectors for supported config formats. Reject ambiguous selectors at
-publication time. Avoid format-agnostic text replacement.
+distinguish enforced values, seed-once defaults, and explicit selectors for
+TOML dotted keys, Java properties keys, and `.txt` physical lines. Reject
+ambiguous selectors at publication time. Avoid format-agnostic text replacement.
 
 ### 4. Client protocol and operational hardening
 

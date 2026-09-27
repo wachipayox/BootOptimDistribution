@@ -105,6 +105,60 @@ func TestInheritanceCycleAndDepth(t *testing.T) {
 	}
 }
 
+func TestConfigSettingValidationAndInheritedOverridePermissions(t *testing.T) {
+	digest := strings.Repeat("a", 64)
+	root := fakeVerified("profile_root", "rev_0000000000000001", strings.Repeat("1", 64), nil, 8)
+	root.manifest.SchemaVersion = 2
+	root.manifest.Configs = []ConfigEntry{{
+		Path: "config/example.toml", Object: ObjectRef{SHA256: digest, Size: 10}, Policy: "default_once",
+	}}
+	root.manifest.ConfigSettings = []ConfigSetting{{
+		Path: "config/example.toml", Format: "toml", Key: "video.render_distance", Value: float64(12), Policy: "enforced",
+	}}
+	root.manifest.Permissions.Configs.OverrideEnforced = true
+
+	child := fakeVerified("profile_child", "rev_0000000000000002", strings.Repeat("2", 64), &ParentRef{
+		ProfileID: root.ProfileID(), RevisionID: root.RevisionID(), ManifestSHA256: root.ManifestSHA256(),
+	}, 8)
+	child.manifest.SchemaVersion = 2
+	child.manifest.ConfigSettings = []ConfigSetting{{
+		Path: "config/example.toml", Format: "toml", Key: "video.render_distance", Value: float64(16), Policy: "enforced",
+	}}
+	parents := map[RevisionKey]*VerifiedRevision{{ProfileID: root.ProfileID(), RevisionID: root.RevisionID()}: root}
+	if _, err := ValidateInheritanceChain(child, parents, 8); err != nil {
+		t.Fatalf("permitted inherited config override rejected: %v", err)
+	}
+
+	root.manifest.Permissions.Configs.OverrideEnforced = false
+	if _, err := ValidateInheritanceChain(child, parents, 8); err == nil || !strings.Contains(err.Error(), "does not permit") {
+		t.Fatalf("unpermitted inherited config override error = %v", err)
+	}
+
+	child.manifest.ConfigSettings[0].Path = "config/missing.toml"
+	if _, err := ValidateInheritanceChain(child, parents, 8); err == nil || !strings.Contains(err.Error(), "absent from the effective profile") {
+		t.Fatalf("missing config setting path error = %v", err)
+	}
+}
+
+func TestConfigSettingSelectorsRejectUnsupportedShapes(t *testing.T) {
+	valid := ConfigSetting{Path: "config/options.toml", Format: "toml", Key: "graphics.enabled", Value: true, Policy: "enforced"}
+	if err := validateConfigSetting(valid); err != nil {
+		t.Fatalf("valid TOML rule rejected: %v", err)
+	}
+	invalid := []ConfigSetting{
+		{Path: "config/options.toml", Format: "toml", Key: "graphics..enabled", Value: true, Policy: "enforced"},
+		{Path: "config/options.toml", Format: "toml", Key: "graphics.enabled", Value: map[string]any{"nested": true}, Policy: "enforced"},
+		{Path: "config/options.properties", Format: "properties", Key: "escaped\\ key", Value: "value", Policy: "default_once"},
+		{Path: "config/readme.txt", Format: "text_lines", Key: "line:0", Value: "value", Policy: "enforced"},
+		{Path: "config/readme.txt", Format: "text_lines", Key: "line:01", Value: "value", Policy: "enforced"},
+	}
+	for _, setting := range invalid {
+		if err := validateConfigSetting(setting); err == nil {
+			t.Errorf("invalid selector accepted: %+v", setting)
+		}
+	}
+}
+
 func TestDowngradeRequiresValidSignedRollback(t *testing.T) {
 	pub, priv := testKey()
 	known := &ChannelState{ProfileID: "profile_root", Channel: "stable", RevisionID: "rev_0000000000000010", Sequence: 10, ManifestSHA256: strings.Repeat("a", 64)}
