@@ -93,6 +93,12 @@ No hay usuario predeterminado. Elige uno explícitamente al arrancar el servicio
   --data-dir /var/lib/bootoptim-distribution
 ```
 
+El login comprueba el token CSRF enviado en el formulario contra una cookie
+host-only, `Secure` y `SameSite=Strict`. Si el navegador envía `Origin: null`
+por usar un origen opaco, el servicio continúa hasta esa comprobación; los
+orígenes explícitamente distintos siguen rechazándose. Las mutaciones autenticadas
+también requieren su token CSRF de sesión.
+
 The release public key file is a JSON object from signer key IDs to 32-byte
 Ed25519 public keys encoded as unpadded base64url. The signing private key stays
 offline on the administrator's computer. For example:
