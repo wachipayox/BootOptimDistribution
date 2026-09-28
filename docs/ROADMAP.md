@@ -119,11 +119,16 @@ ambiguous selectors at publication time. Avoid format-agnostic text replacement.
 
 Public-profile discovery, immutable revision resolution, authenticated object
 downloads, protocol version, and capability reporting are integrated. The live
-LAN HTTPS endpoint is reachable, but the profile catalog is empty. Next, publish
-a synthetic root/child chain, validate client connection and reconciliation
-against it, then add backup/restore, retention, audit-safe publication
-diagnostics, and a loopback/LAN deployment smoke path. The service still stores
-only global profile data and never receives a client filesystem listing.
+LAN HTTPS endpoint is reachable. Deployment 0.2.4 fixed a revision ID mismatch
+that blocked signing. Its game-version endpoint then returned 503 because
+NeoForged's Maven metadata contained only prereleases; this release reads all
+stable versions from the official public artifact index, retaining Maven
+metadata as a fallback. Retest that endpoint,
+then publish a synthetic root/child chain and validate client connection and
+reconciliation against it. Follow with backup/restore, retention, audit-safe
+publication diagnostics, and a loopback/LAN deployment smoke path. The service
+still stores only global profile data and never receives a client filesystem
+listing.
 
 ## Acceptance path
 
