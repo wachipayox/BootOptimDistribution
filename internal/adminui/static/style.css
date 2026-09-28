@@ -719,6 +719,21 @@ td code {
 
 .publish-stage > div:first-child { max-width: 680px; }
 
+.publish-stage .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+}
+
+.request-preview-field { display: grid; gap: .45rem; margin-top: .75rem; }
+.request-preview-field[hidden] { display: none; }
+#signing-request-preview {
+  width: 100%;
+  min-height: 12rem;
+  font: .82rem/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+  resize: vertical;
+}
+
 .publish-final {
   align-items: center;
   padding-top: 1rem;

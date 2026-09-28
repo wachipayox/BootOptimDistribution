@@ -28,7 +28,10 @@ the private launcher's trusted signer keys before publishing with it.
 
 ## Sign a publication request
 
-After the panel has staged files, download its signing request. Then run:
+After the panel has staged files, download its signing request. If the browser
+blocks that download, use **Show request** in the panel, copy the complete JSON
+into a local file, and continue with the same command. The request contains
+the unsigned manifest and object digests, never a private key.
 
 ```powershell
 go run ./cmd/bootoptim-release-signer sign `
