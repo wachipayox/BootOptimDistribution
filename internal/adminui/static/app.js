@@ -941,7 +941,8 @@ async function downloadExplorerFile(entry) {
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
-    URL.revokeObjectURL(url);
+    // Let the browser finish reading the blob before revoking its object URL.
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (error) {
     setStatus(nodes.folderStatus, 'No se pudo descargar el archivo: ' + describeError(error), 'error');
   }
@@ -1982,7 +1983,8 @@ function downloadSigningRequest() {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  // Let the browser finish reading the blob before revoking its object URL.
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   setStatus(nodes.stageStatus, 'Archivo descargado. Complétalo con la herramienta de firma y selecciona el resultado.', 'success');
 }
 
