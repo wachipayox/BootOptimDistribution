@@ -1,12 +1,13 @@
 # Distribution service roadmap
 
 `agent/integration-current` is the service integration authority; `main` alone
-is deployable. As of 2026-09-28, integration is `8741f10` and `main` is
-`c314297`. The deployed server reports `c314297` and has the authenticated
+is deployable. As of 2026-09-28, integration is `4da2bb0` and `main` is
+`257b2e7`. The server now reports version `0.2.0` and has the authenticated
 native-HTTPS admin panel, signed profile API, LAN-restricted launcher reads,
-and browser folder-to-revision publication workflow. Manifest-v2 per-setting
-config rules are the current work and are not yet on `main` or the server. The
-local signer utility and a complete synthetic publication/client run remain
+and schema-v2 signed per-setting rules. The published panel is being replaced
+with the refined `v16` profile workflow from the local preview; this branch
+also implements its authenticated official-game-version catalog endpoint. A
+separate local signer and a complete synthetic publication/client run remain
 required for end-to-end acceptance. The panel lets the operator point a
 profile's `stable` channel at a published revision from its history.
 
@@ -45,8 +46,7 @@ participates in the launch path.
 
 ### 1. Authenticated LAN administration
 
-Status: implemented on `agent/integration-current`; not yet released from
-`main`.
+Status: implemented and deployed as Distribution `0.2.0`.
 
 Replace the current read-only badge/page with a useful admin shell and clear
 navigation for Overview, Global profiles, and Service settings. The overview
@@ -61,13 +61,16 @@ Do not add Caddy as a dependency and do not expose unauthenticated write APIs.
 
 ### 2. Global profile publication and test profile creation
 
-Status: publication API and initial browser workflow are integrated. Schema
-v2 config-rule editing and validation are implemented on a work branch and
-await deployment; a complete synthetic-pack run remains required for
-acceptance.
+Status: signed publication API and schema-v2 config-rule validation are
+deployed. Refined `v16` editor and official version catalog are in this work
+branch; a complete synthetic-pack run remains required for acceptance.
 
 The service API and browser workflow create a global profile, select a local
 folder, inspect additions/changes/removals, and stage a new immutable revision.
+The refined form generates profile/revision identifiers, validates Minecraft
+and NeoForge selections against official release catalogs, and edits a compact
+branching file tree with drag-and-drop, folder creation, file editing and
+line-level config rules.
 Profile history also supports promoting a revision to `stable`, which the
 overview displays. Next, provide a separate local signer for the canonical
 revision request; the admin browser must never handle the private key. Then
@@ -83,10 +86,10 @@ one mod, one config, one resource pack, and one removal.
 ### 3. Branch graph and effective profile resolution
 
 Status: core direct-global reconciliation is integrated in Pandora; option
-rule transaction support is being validated on a work branch. Global-to-global
-and global-to-local setting inheritance is represented in schema v2, but a
-signed synthetic publication and live client application still gate
-acceptance.
+rule transaction support is in launcher PR #76 and awaiting CI and end-to-end
+validation. Global-to-global and global-to-local setting inheritance is
+represented in schema v2, but a signed synthetic publication and live client
+application still gate acceptance.
 
 Allow multiple child profiles per parent, with one pinned parent revision per
 child revision. Support global-to-global and global-to-local derivation on the
