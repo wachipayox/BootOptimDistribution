@@ -223,6 +223,9 @@ func NewHandler(model ReadModel, build BuildInfo) http.Handler {
 }
 
 func serveStaticFile(w http.ResponseWriter, r *http.Request, assets http.Handler, path string) {
+	// These small admin assets change with service releases. Revalidate them so
+	// a browser cannot keep running an older embedded UI after the HTML updates.
+	w.Header().Set("Cache-Control", "no-cache")
 	cloned := r.Clone(r.Context())
 	cloned.URL.Path = path
 	assets.ServeHTTP(w, cloned)
