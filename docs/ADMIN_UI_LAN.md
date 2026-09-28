@@ -100,8 +100,10 @@ orígenes explícitamente distintos siguen rechazándose. Las mutaciones autenti
 también requieren su token CSRF de sesión.
 
 The release public key file is a JSON object from signer key IDs to 32-byte
-Ed25519 public keys encoded as unpadded base64url. The signing private key stays
-offline on the administrator's computer. For example:
+Ed25519 public keys encoded as unpadded base64url. It may contain several keys;
+keep old entries during rotation so historical signatures remain verifiable.
+The signing private key stays offline on the administrator's computer. For
+example:
 
 ```json
 {"wachi-release-2026":"BASE64URL_PUBLIC_KEY"}
