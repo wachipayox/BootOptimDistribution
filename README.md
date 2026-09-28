@@ -77,3 +77,6 @@ Consulta `docs/ADMIN_UI_LAN.md` para la configuración HTTPS, credenciales
 locales, firewall y ejemplo de `systemd`. No uses `0.0.0.0`, no permitas el
 puerto desde redes invitadas y no lo reenvíes desde el router a Internet. Las
 claves Ed25519 privadas de firma de releases permanecen fuera del servicio.
+
+Para operar la instalación actual, cambiar la contraseña o recuperar/rotar las
+claves de firma, consulta la [guía del operador](docs/GUIA_OPERADOR_ES.md).
