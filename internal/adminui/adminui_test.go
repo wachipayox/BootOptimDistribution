@@ -54,3 +54,24 @@ func TestPageSecurityPolicyAndNoCrossOriginAccess(t *testing.T) {
 		t.Fatalf("unexpected CSP: %q", csp)
 	}
 }
+
+func TestStaticAssetsAreRevalidatedAndVersioned(t *testing.T) {
+	handler := NewHandler(EmptyReadModel{}, BuildInfo{})
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/assets/app.js?v=19", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("asset status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if got := recorder.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("asset Cache-Control = %q, want no-cache", got)
+	}
+	if !strings.Contains(recorder.Body.String(), "const candidate = 'profile_' + base") {
+		t.Fatal("served admin script is missing the protocol-valid profile ID generator")
+	}
+
+	page := httptest.NewRecorder()
+	handler.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/admin/", nil))
+	if !strings.Contains(page.Body.String(), "/admin/assets/app.js?v=19") {
+		t.Fatal("admin page does not reference the current versioned script")
+	}
+}

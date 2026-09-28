@@ -2,17 +2,19 @@
 
 `agent/integration-current` is the service integration authority; `main` alone
 is deployable. As of 2026-09-28, deployable `main` and the live service are at
-Distribution `0.2.5` (`6641689`); service integration is at `d29337a`. The
+Distribution `0.2.6` (`7250872`); service integration contains the pending
+admin asset cache fix for `0.2.7`. The
 authenticated native-HTTPS admin panel, signed profile API, LAN-restricted
 launcher reads, schema-v2 signed per-setting rule validation, refined profile
 workflow, and complete official Minecraft/NeoForge version catalog are live.
 The live version endpoint reports capability
 `signed-config-setting-rules-v1`; the top-level protocol schema remains 1, while
-individual manifests may use schema 2. The first attempt to prepare an
-end-to-end synthetic publication exposed a UI defect: generated profile IDs
-did not include the `profile_` prefix required by the signed protocol. The fix
-is being prepared for Distribution `0.2.6`; the live profile catalog is still
-empty until the corrected workflow can publish the synthetic root and child.
+individual manifests may use schema 2. The first synthetic signing attempt
+found that profile IDs lacked the protocol-required `profile_` prefix; that
+generator fix is present in live `0.2.6`. The browser had cached the prior
+`app.js?v=18`, so `0.2.7` bumps the asset URL and adds revalidation headers.
+The live profile catalog remains empty until the refreshed form publishes the
+synthetic root and child.
 
 The offline signer and its recovery/rotation tests are included in deployable
 `main`. The signer runs on the administrator PC; it is not required on the
@@ -21,7 +23,7 @@ at a published revision from its history.
 
 File schema policies are `enforced` and `default_once`. Manifest schema v2
 adds per-setting TOML, `.properties`, and `.txt` rules in the panel, API, and
-server validator; that validator is already in the live `0.2.5` build. The
+server validator; that validator is already in the live `0.2.6` build. The
 matching client transaction/merge is in Pandora PR #76. Its CI checks passed
 as of this roadmap revision, but the PR remains a draft pending a synthetic
 signed server publication and live client application. The broader
@@ -119,13 +121,12 @@ ambiguous selectors at publication time. Avoid format-agnostic text replacement.
 
 Public-profile discovery, immutable revision resolution, authenticated object
 downloads, protocol version, and capability reporting are integrated. The live
-LAN HTTPS endpoint is reachable. Deployment 0.2.4 fixed a revision ID mismatch
-that blocked signing. Its game-version endpoint then returned 503 because
-NeoForged's Maven metadata contained only prereleases; this release reads all
-stable versions from the official public artifact index, retaining Maven
-metadata as a fallback. Retest that endpoint,
-then publish a synthetic root/child chain and validate client connection and
-reconciliation against it. Follow with backup/restore, retention, audit-safe
+LAN HTTPS endpoint is reachable. Deployment 0.2.4 fixed revision ID generation;
+0.2.5 restored all stable NeoForge versions from the official public artifact
+index after Maven metadata returned only prereleases; 0.2.6 fixed profile ID
+generation. Retest the refreshed form, then publish a synthetic root/child
+chain and validate client connection and reconciliation against it. Follow
+with backup/restore, retention, audit-safe
 publication diagnostics, and a loopback/LAN deployment smoke path. The service
 still stores only global profile data and never receives a client filesystem
 listing.
