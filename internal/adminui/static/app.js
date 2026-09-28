@@ -2152,10 +2152,11 @@ function generatedProfileID(name) {
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 44);
   if (!base) return '';
   const used = new Set(state.profiles.map(profileId));
-  if (!used.has(base)) return base;
+  const candidate = 'profile_' + base;
+  if (!used.has(candidate)) return candidate;
   let suffix = 2;
-  while (used.has(base + '-' + suffix)) suffix += 1;
-  return base + '-' + suffix;
+  while (used.has(candidate + '-' + suffix)) suffix += 1;
+  return candidate + '-' + suffix;
 }
 
 function searchableCombobox(input, toggle, list, getOptions, onSelect) {
