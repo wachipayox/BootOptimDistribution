@@ -64,6 +64,9 @@ const nodes = {
   stageStatus: document.querySelector('#stage-status'),
   stageProgress: document.querySelector('#stage-progress'),
   downloadRequest: document.querySelector('#download-request'),
+  showRequest: document.querySelector('#show-request'),
+  requestPreviewLabel: document.querySelector('#request-preview-label'),
+  requestPreview: document.querySelector('#signing-request-preview'),
   signedEnvelope: document.querySelector('#signed-envelope'),
   envelopeStatus: document.querySelector('#envelope-status'),
   confirmDiff: document.querySelector('#confirm-diff'),
@@ -1388,6 +1391,9 @@ function invalidatePrepared() {
   state.signedEnvelope = null;
   state.staged = false;
   nodes.downloadRequest.disabled = true;
+  nodes.showRequest.disabled = true;
+  nodes.requestPreview.value = '';
+  nodes.requestPreviewLabel.hidden = true;
   nodes.publishButton.disabled = true;
   nodes.confirmDiff.checked = false;
   setStatus(nodes.envelopeStatus, 'Ningún archivo de firma seleccionado.');
@@ -1953,20 +1959,21 @@ async function prepareAndStage() {
     if (!uploads.length) nodes.stageProgress.value = 1;
     state.staged = true;
     nodes.downloadRequest.disabled = false;
+    nodes.showRequest.disabled = false;
     setStatus(nodes.stageStatus, 'Archivos preparados y subidos. Ya puedes descargar el archivo de firma.', 'success');
   } catch (error) {
     state.staged = false;
     nodes.downloadRequest.disabled = true;
+    nodes.showRequest.disabled = true;
     setStatus(nodes.stageStatus, 'No se pudieron preparar los archivos: ' + describeError(error), 'error');
   } finally {
     nodes.stageButton.disabled = false;
   }
 }
 
-function downloadSigningRequest() {
+function signingRequestText() {
   if (!state.staged || !state.manifest || !state.manifestSHA256) {
-    setStatus(nodes.stageStatus, 'Primero prepara y sube los archivos.', 'error');
-    return;
+    throw new Error('Primero prepara y sube los archivos.');
   }
 
   const requestPayload = {
@@ -1975,7 +1982,18 @@ function downloadSigningRequest() {
     manifest: state.manifest
   };
   const canonicalRequest = canonicalize(requestPayload);
-  const blob = new Blob([canonicalRequest + '\n'], { type: 'application/json' });
+  return canonicalRequest + '\n';
+}
+
+function downloadSigningRequest() {
+  let requestText;
+  try {
+    requestText = signingRequestText();
+  } catch (error) {
+    setStatus(nodes.stageStatus, describeError(error), 'error');
+    return;
+  }
+  const blob = new Blob([requestText], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -1986,6 +2004,18 @@ function downloadSigningRequest() {
   // Let the browser finish reading the blob before revoking its object URL.
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   setStatus(nodes.stageStatus, 'Archivo descargado. Complétalo con la herramienta de firma y selecciona el resultado.', 'success');
+}
+
+function showSigningRequest() {
+  try {
+    nodes.requestPreview.value = signingRequestText();
+    nodes.requestPreviewLabel.hidden = false;
+    nodes.requestPreview.focus();
+    nodes.requestPreview.select();
+    setStatus(nodes.stageStatus, 'Solicitud lista. Puedes copiar el JSON y guardarlo como archivo para firmarlo.', 'success');
+  } catch (error) {
+    setStatus(nodes.stageStatus, describeError(error), 'error');
+  }
 }
 
 async function readSignedEnvelope(file) {
@@ -2331,6 +2361,7 @@ function bindEvents() {
   });
   nodes.stageButton.addEventListener('click', prepareAndStage);
   nodes.downloadRequest.addEventListener('click', downloadSigningRequest);
+  nodes.showRequest.addEventListener('click', showSigningRequest);
   nodes.signedEnvelope.addEventListener('change', function () {
     readSignedEnvelope(nodes.signedEnvelope.files && nodes.signedEnvelope.files[0]);
     nodes.signedEnvelope.value = '';
