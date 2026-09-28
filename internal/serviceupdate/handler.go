@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"regexp"
@@ -64,6 +65,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		result, err := h.check(r.Context())
 		if err != nil {
+			log.Printf("admin service update check failed: %v", err)
 			writeError(w, http.StatusBadGateway, "update_check_failed", "No se pudo consultar la versión desplegable de main en GitHub.")
 			return
 		}
@@ -71,6 +73,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		result, err := h.check(r.Context())
 		if err != nil {
+			log.Printf("admin service update before install failed: %v", err)
 			writeError(w, http.StatusBadGateway, "update_check_failed", "No se pudo consultar la versión desplegable de main en GitHub.")
 			return
 		}
@@ -109,7 +112,7 @@ func (h *Handler) check(ctx context.Context) (status, error) {
 	request.Header.Set("User-Agent", "BootOptim-Distribution-Update-Check")
 	commitResponse, err := h.client.Do(request)
 	if err != nil {
-		return status{}, err
+		return status{}, fmt.Errorf("request GitHub commit: %w", err)
 	}
 	defer commitResponse.Body.Close()
 	if commitResponse.StatusCode != http.StatusOK {
@@ -119,11 +122,11 @@ func (h *Handler) check(ctx context.Context) (status, error) {
 		SHA string `json:"sha"`
 	}
 	if err := json.NewDecoder(io.LimitReader(commitResponse.Body, 16*1024)).Decode(&commit); err != nil {
-		return status{}, err
+		return status{}, fmt.Errorf("decode GitHub commit response: %w", err)
 	}
 	commit.SHA = strings.ToLower(commit.SHA)
 	if !commitPattern.MatchString(commit.SHA) {
-		return status{}, errors.New("GitHub returned an invalid commit SHA")
+		return status{}, fmt.Errorf("GitHub returned an invalid commit SHA %q", commit.SHA)
 	}
 
 	versionRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL+commit.SHA+"/VERSION", nil)
@@ -133,7 +136,7 @@ func (h *Handler) check(ctx context.Context) (status, error) {
 	versionRequest.Header.Set("User-Agent", "BootOptim-Distribution-Update-Check")
 	versionResponse, err := h.client.Do(versionRequest)
 	if err != nil {
-		return status{}, err
+		return status{}, fmt.Errorf("request GitHub VERSION: %w", err)
 	}
 	defer versionResponse.Body.Close()
 	if versionResponse.StatusCode != http.StatusOK {
@@ -141,11 +144,11 @@ func (h *Handler) check(ctx context.Context) (status, error) {
 	}
 	versionBytes, err := io.ReadAll(io.LimitReader(versionResponse.Body, 256))
 	if err != nil {
-		return status{}, err
+		return status{}, fmt.Errorf("read GitHub VERSION response: %w", err)
 	}
 	version := strings.TrimSpace(string(versionBytes))
 	if !versionPattern.MatchString(version) {
-		return status{}, errors.New("GitHub returned an invalid service version")
+		return status{}, fmt.Errorf("GitHub returned an invalid service version %q", version)
 	}
 
 	return status{
