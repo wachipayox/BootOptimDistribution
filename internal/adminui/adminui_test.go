@@ -58,7 +58,7 @@ func TestPageSecurityPolicyAndNoCrossOriginAccess(t *testing.T) {
 func TestStaticAssetsAreRevalidatedAndVersioned(t *testing.T) {
 	handler := NewHandler(EmptyReadModel{}, BuildInfo{})
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/assets/app.js?v=19", nil))
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/assets/app.js?v=20", nil))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("asset status = %d, want %d", recorder.Code, http.StatusOK)
 	}
@@ -68,10 +68,19 @@ func TestStaticAssetsAreRevalidatedAndVersioned(t *testing.T) {
 	if !strings.Contains(recorder.Body.String(), "const candidate = 'profile_' + base") {
 		t.Fatal("served admin script is missing the protocol-valid profile ID generator")
 	}
+	for _, fragment := range []string{
+		"'mod_' + name.replace",
+		"return 'obj_' + slug + '-'",
+		"defaultObjectId(entry.path)",
+	} {
+		if !strings.Contains(recorder.Body.String(), fragment) {
+			t.Errorf("served admin script is missing %q", fragment)
+		}
+	}
 
 	page := httptest.NewRecorder()
 	handler.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/admin/", nil))
-	if !strings.Contains(page.Body.String(), "/admin/assets/app.js?v=19") {
+	if !strings.Contains(page.Body.String(), "/admin/assets/app.js?v=20") {
 		t.Fatal("admin page does not reference the current versioned script")
 	}
 }

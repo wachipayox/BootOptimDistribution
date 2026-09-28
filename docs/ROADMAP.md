@@ -1,9 +1,8 @@
 # Distribution service roadmap
 
 `agent/integration-current` is the service integration authority; `main` alone
-is deployable. As of 2026-09-28, deployable `main` and the live service are at
-Distribution `0.2.6` (`7250872`); service integration contains the pending
-admin asset cache fix for `0.2.7`. The
+is deployable. As of 2026-09-28, the live service is Distribution `0.2.7`
+(`53cea53`); the current admin UI work targets `0.2.8`. The
 authenticated native-HTTPS admin panel, signed profile API, LAN-restricted
 launcher reads, schema-v2 signed per-setting rule validation, refined profile
 workflow, and complete official Minecraft/NeoForge version catalog are live.
@@ -11,9 +10,11 @@ The live version endpoint reports capability
 `signed-config-setting-rules-v1`; the top-level protocol schema remains 1, while
 individual manifests may use schema 2. The first synthetic signing attempt
 found that profile IDs lacked the protocol-required `profile_` prefix; that
-generator fix is present in live `0.2.6`. The browser had cached the prior
-`app.js?v=18`, so `0.2.7` bumps the asset URL and adds revalidation headers.
-The live profile catalog remains empty until the refreshed form publishes the
+generator fix is present in live `0.2.6`. Version `0.2.7` bumps the admin
+asset URL to v19 and adds revalidation headers, resolving stale browser assets.
+The next `0.2.8` correction gives generated mod and object entries their
+required `mod_` and `obj_` protocol prefixes and bumps the asset URL to v20.
+The live profile catalog remains empty until the corrected form publishes the
 synthetic root and child.
 
 The offline signer and its recovery/rotation tests are included in deployable
@@ -26,7 +27,9 @@ adds per-setting TOML, `.properties`, and `.txt` rules in the panel, API, and
 server validator; that validator is already in the live `0.2.6` build. The
 matching client transaction/merge is in Pandora PR #76. Its CI checks passed
 as of this roadmap revision, but the PR remains a draft pending a synthetic
-signed server publication and live client application. The broader
+signed server publication and live client application. Current end-to-end
+validation is blocked until the admin-generated manifest uses protocol-valid
+IDs for every mod and object entry. The broader
 `user_owned` file policy and arbitrary structured formats remain out of scope.
 
 The product is a private profile distribution service, not a public modpack
