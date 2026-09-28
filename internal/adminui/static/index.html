@@ -157,7 +157,7 @@
             <div class="action-row">
               <button id="add-files" class="button button-primary" type="button">＋ Archivo</button>
               <button id="create-folder" class="button button-secondary" type="button">＋ Carpeta</button>
-              <button id="pick-directory" class="button button-secondary" type="button" title="Importar una carpeta completa y sustituir la selección actual">Carpeta completa…</button>
+              <button id="pick-directory" class="button button-secondary" type="button" title="Importar el contenido de la carpeta elegida directamente en la raíz del perfil y sustituir la selección actual">Importar carpeta…</button>
               <input id="file-picker" class="visually-hidden" type="file" multiple>
               <input id="folder-fallback" class="visually-hidden" type="file" multiple webkitdirectory>
             </div>
@@ -168,7 +168,7 @@
               <button id="load-synthetic" class="button button-quiet" type="button">Cargar ejemplo</button>
             </div>
             <p id="folder-status" class="inline-status" role="status">Perfil vacío. Añade archivos o arrástralos aquí.</p>
-            <p id="picker-support" class="microcopy"></p>
+            <p id="picker-support" class="microcopy">El contenido de la carpeta elegida se coloca directamente en la raíz del perfil; no se añade el nombre de la carpeta como subcarpeta.</p>
 
             <div id="explorer-drop" class="explorer-drop" tabindex="0" role="region" aria-label="Explorador de archivos del perfil">
               <div class="explorer-toolbar">
@@ -180,7 +180,7 @@
               </div>
               <p id="explorer-empty" class="explorer-empty">Arrastra archivos aquí o pulsa «Añadir archivos».</p>
               <div id="explorer-tree" class="explorer-tree" role="list"></div>
-            <p class="explorer-help">Suelta archivos o carpetas para añadirlos o reemplazarlos. «Importar carpeta completa» sustituye la selección actual. En perfiles derivados, quitar mods y configs crea una exclusión solo para esta rama.</p>
+            <p class="explorer-help">Suelta archivos o carpetas para añadirlos o reemplazarlos. Al soltar una carpeta, se importa su contenido sin añadir su nombre a las rutas. «Importar carpeta» sustituye la selección actual. En perfiles derivados, quitar mods y configs crea una exclusión solo para esta rama.</p>
             </div>
 
             <div class="step-subheading">
@@ -287,7 +287,7 @@
         <section class="panel" aria-labelledby="browser-title">
           <h3 id="browser-title">Compatibilidad del navegador</h3>
           <dl class="detail-list">
-            <div><dt>Selector de directorio</dt><dd id="service-picker">—</dd></div>
+            <div><dt>Importación de carpetas</dt><dd id="service-picker">—</dd></div>
             <div><dt>Contexto seguro</dt><dd id="service-secure">—</dd></div>
             <div><dt>Verificación de archivos</dt><dd id="service-crypto">—</dd></div>
           </dl>
