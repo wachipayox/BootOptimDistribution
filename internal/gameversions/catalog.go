@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,6 +23,8 @@ const (
 	maxCatalogEntries   = 5000
 	fetchTimeout        = 20 * time.Second
 )
+
+var neoForgeVersionDirectory = regexp.MustCompile(`href="\./([0-9]+(?:\.[0-9]+)+)/"`)
 
 // Catalog is the official release list consumed by the administrator's
 // searchable version pickers. NeoForge versions are ordered newest first.
@@ -175,31 +178,59 @@ func (p *Provider) fetchMinecraft(ctx context.Context) ([]string, error) {
 }
 
 func (p *Provider) fetchNeoForge(ctx context.Context) ([]string, error) {
-	var metadata struct {
-		Versioning struct {
-			Versions []string `xml:"versions>version"`
-		} `xml:"versioning"`
+	// NeoForged Maven's metadata file can contain only recent prereleases. Its
+	// public artifact index lists the complete set of stable version dirs.
+	indexURL := p.neoForgeURL
+	if strings.HasSuffix(indexURL, "maven-metadata.xml") {
+		indexURL = strings.TrimSuffix(indexURL, "maven-metadata.xml")
+	} else {
+		indexURL = strings.TrimRight(indexURL, "/") + "/"
 	}
-	if err := p.getXML(ctx, p.neoForgeURL, &metadata); err != nil {
-		return nil, fmt.Errorf("read NeoForge Maven metadata: %w", err)
-	}
-	versions := make([]string, 0, len(metadata.Versioning.Versions))
-	seen := make(map[string]struct{}, len(metadata.Versioning.Versions))
-	for _, version := range metadata.Versioning.Versions {
-		if !validDottedVersion(version) {
-			continue
-		}
-		if _, ok := seen[version]; ok {
-			continue
-		}
-		seen[version] = struct{}{}
-		versions = append(versions, version)
-		if len(versions) > maxCatalogEntries {
-			return nil, errors.New("NeoForge release catalog exceeds entry limit")
+	var versions []string
+	seen := make(map[string]struct{})
+	body, indexErr := p.get(ctx, indexURL)
+	if indexErr == nil {
+		for _, match := range neoForgeVersionDirectory.FindAllSubmatch(body, -1) {
+			version := string(match[1])
+			if !validDottedVersion(version) {
+				continue
+			}
+			if _, exists := seen[version]; exists {
+				continue
+			}
+			seen[version] = struct{}{}
+			versions = append(versions, version)
+			if len(versions) > maxCatalogEntries {
+				return nil, errors.New("NeoForge version index exceeds entry limit")
+			}
 		}
 	}
 	if len(versions) == 0 {
-		return nil, errors.New("NeoForge Maven metadata contains no release versions")
+		var metadata struct {
+			Versioning struct {
+				Versions []string `xml:"versions>version"`
+			} `xml:"versioning"`
+		}
+		metadataErr := p.getXML(ctx, p.neoForgeURL, &metadata)
+		for _, version := range metadata.Versioning.Versions {
+			if !validDottedVersion(version) {
+				continue
+			}
+			if _, exists := seen[version]; exists {
+				continue
+			}
+			seen[version] = struct{}{}
+			versions = append(versions, version)
+			if len(versions) > maxCatalogEntries {
+				return nil, errors.New("NeoForge Maven metadata exceeds entry limit")
+			}
+		}
+		if len(versions) == 0 && metadataErr != nil && indexErr != nil {
+			return nil, fmt.Errorf("read NeoForge version index (%v) and Maven metadata: %w", indexErr, metadataErr)
+		}
+		if len(versions) == 0 {
+			return nil, errors.New("NeoForge Maven index and metadata contain no stable versions")
+		}
 	}
 	sort.SliceStable(versions, func(i, j int) bool { return compareVersions(versions[i], versions[j]) > 0 })
 	return versions, nil

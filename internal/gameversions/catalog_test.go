@@ -47,8 +47,8 @@ func TestProviderFetchesOfficialReleasesAndCaches(t *testing.T) {
 	if second.Minecraft[0] != "1.21.10" {
 		t.Fatalf("cached catalog was mutable: %#v", second.Minecraft)
 	}
-	if got := requests.Load(); got != 2 {
-		t.Fatalf("upstream request count = %d, want 2 for one refresh", got)
+	if got := requests.Load(); got != 3 {
+		t.Fatalf("upstream request count = %d, want 3 for one refresh", got)
 	}
 }
 
@@ -91,5 +91,30 @@ func TestProviderRejectsUnusableUpstreamMetadata(t *testing.T) {
 	provider := NewProvider(upstream.Client(), upstream.URL, upstream.URL, time.Hour)
 	if _, err := provider.Get(context.Background()); err == nil {
 		t.Fatal("Get() succeeded with catalogs containing no usable releases")
+	}
+}
+
+func TestProviderUsesNeoForgeVersionDirectoryIndexWhenMetadataIsIncomplete(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/minecraft":
+			_, _ = w.Write([]byte(`{"versions":[{"id":"1.21.1","type":"release"}]}`))
+		case "/neoforge/maven-metadata.xml":
+			_, _ = w.Write([]byte(`<metadata><versioning><versions><version>26.3.0.30-beta</version><version>26.3.0.29-beta</version></versions></versioning></metadata>`))
+		case "/neoforge/":
+			_, _ = w.Write([]byte(`<html><a href="./21.1.248/">21.1.248/</a><a href="./21.1.9/">21.1.9/</a><a href="./21.1.250-beta/">21.1.250-beta/</a></html>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+
+	provider := NewProvider(upstream.Client(), upstream.URL+"/minecraft", upstream.URL+"/neoforge/maven-metadata.xml", time.Hour)
+	catalog, err := provider.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get(): %v", err)
+	}
+	if want := []string{"21.1.248", "21.1.9"}; !reflect.DeepEqual(catalog.NeoForge, want) {
+		t.Fatalf("NeoForge = %#v, want %#v", catalog.NeoForge, want)
 	}
 }
