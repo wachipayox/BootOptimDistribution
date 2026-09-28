@@ -65,6 +65,14 @@ session in HTTPS mode. `GET /admin/api/session` returns the authenticated
 principal and that session's CSRF token for same-origin browser code. Logout is
 `POST /admin/logout` and also requires the session CSRF token.
 
+The profile form's Minecraft and NeoForge selectors read
+`GET /admin/api/game-versions`, which requires the same administrator session.
+Distribution filters Minecraft to official releases from Mojang's version
+manifest and reads NeoForge release versions from NeoForged Maven metadata.
+The service caches a complete catalog in memory for six hours and continues to
+serve its last complete copy during a temporary upstream outage. Catalog
+responses are bounded and never accept client-selected upstream URLs.
+
 The legacy `--admin-ui-lan` mode deliberately does not gain login or TLS in this
 change. Its handler remains GET/HEAD-only so the old trusted-LAN read path does
 not become an unauthenticated mutation boundary.
