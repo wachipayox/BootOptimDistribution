@@ -2,26 +2,26 @@
 
 `agent/integration-current` is the service integration authority; `main` alone
 is deployable. As of 2026-09-28, deployable `main` and the live service are at
-`ce2cf51` / Distribution `0.2.1`; `agent/integration-current` is at `d3fc360`.
-The authenticated native-HTTPS admin panel, signed profile API, LAN-restricted
-launcher reads, schema-v2 signed per-setting rule validation, refined `v16`
-profile workflow, and official Minecraft/NeoForge version catalog are present
-in the live build. The live version endpoint reports capability
+Distribution `0.2.5` (`6641689`); service integration is at `d29337a`. The
+authenticated native-HTTPS admin panel, signed profile API, LAN-restricted
+launcher reads, schema-v2 signed per-setting rule validation, refined profile
+workflow, and complete official Minecraft/NeoForge version catalog are live.
+The live version endpoint reports capability
 `signed-config-setting-rules-v1`; the top-level protocol schema remains 1, while
-individual manifests may use schema 2. The live profile catalog is currently
-empty, so an end-to-end signed publication and client application have not yet
-been demonstrated.
+individual manifests may use schema 2. The first attempt to prepare an
+end-to-end synthetic publication exposed a UI defect: generated profile IDs
+did not include the `profile_` prefix required by the signed protocol. The fix
+is being prepared for Distribution `0.2.6`; the live profile catalog is still
+empty until the corrected workflow can publish the synthetic root and child.
 
-The offline signer and its recovery/rotation tests are merged into
-`agent/integration-current` (PRs #27 and #28), but not yet into deployable
+The offline signer and its recovery/rotation tests are included in deployable
 `main`. The signer runs on the administrator PC; it is not required on the
-Linux service. Use a trusted checkout containing the signer while `main` has
-not yet been promoted. The panel lets the operator point a profile's `stable`
-channel at a published revision from its history.
+Linux service. The panel lets the operator point a profile's `stable` channel
+at a published revision from its history.
 
 File schema policies are `enforced` and `default_once`. Manifest schema v2
 adds per-setting TOML, `.properties`, and `.txt` rules in the panel, API, and
-server validator; that validator is already in the live `0.2.1` build. The
+server validator; that validator is already in the live `0.2.5` build. The
 matching client transaction/merge is in Pandora PR #76. Its CI checks passed
 as of this roadmap revision, but the PR remains a draft pending a synthetic
 signed server publication and live client application. The broader
@@ -57,7 +57,7 @@ participates in the launch path.
 
 ### 1. Authenticated LAN administration
 
-Status: implemented and deployed as Distribution `0.2.1`.
+Status: implemented and deployed as Distribution `0.2.5`.
 
 Replace the current read-only badge/page with a useful admin shell and clear
 navigation for Overview, Global profiles, and Service settings. The overview
