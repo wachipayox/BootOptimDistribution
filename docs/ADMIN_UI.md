@@ -46,7 +46,9 @@ public key. The password verifier file uses the
 format documented in `ADMIN_UI_LAN.md`; the cleartext password is never stored
 by Distribution. The TLS key is only the server transport key. Release-signing
 Ed25519 private keys remain outside the service host, repository, database and
-browser.
+browser. Use the local `bootoptim-release-signer` utility to create keys and
+sign downloaded requests on an administrator PC. The service can trust multiple
+key IDs simultaneously so a replacement key does not invalidate old revisions.
 
 ## Login and session boundary
 

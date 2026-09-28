@@ -50,8 +50,11 @@ curl http://127.0.0.1:8088/v1/meta/version
 
 La lista de capacidades de `/v1/meta/version` indica si los endpoints de
 perfiles están habilitados. La publicación valida firmas Ed25519, manifiestos
-canónicos, objetos y reglas de secuencia/herencia; la herramienta local que
-firma las solicitudes todavía está pendiente.
+canónicos, objetos y reglas de secuencia/herencia. La herramienta local
+`bootoptim-release-signer` genera claves en un PC administrador y firma allí
+las solicitudes descargadas; su clave privada nunca va al servidor. Consulta
+`docs/RELEASE_SIGNER.md` para uso y recuperación, y
+`docs/PROFILE_PROTOCOL.md` para el contrato de rotación.
 
 ## Panel de administración en red local
 
