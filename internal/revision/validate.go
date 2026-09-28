@@ -4,13 +4,18 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"time"
 )
 
 func validateManifestValues(m Manifest) error {
-	if m.SchemaVersion != 1 {
-		return errors.New("schema_version must equal 1")
+	if m.SchemaVersion != 1 && m.SchemaVersion != 2 {
+		return errors.New("schema_version must equal 1 or 2")
+	}
+	if m.SchemaVersion == 1 && len(m.ConfigSettings) != 0 {
+		return errors.New("config_settings require schema_version 2")
 	}
 	if !validRevisionID(m.Revision.ID) || m.Revision.Sequence < 1 {
 		return errors.New("revision id or sequence is invalid")
@@ -82,6 +87,19 @@ func validateManifestValues(m Manifest) error {
 			return fmt.Errorf("remove_configs[%d] is invalid", i)
 		}
 	}
+	if len(m.ConfigSettings) > 4096 {
+		return errors.New("config_settings exceeds 4096 entries")
+	}
+	seenSettings := make(map[string]struct{}, len(m.ConfigSettings))
+	for i, setting := range m.ConfigSettings {
+		if err := validateConfigSetting(setting); err != nil {
+			return fmt.Errorf("config_settings[%d]: %w", i, err)
+		}
+		if _, exists := seenSettings[setting.Identity()]; exists {
+			return fmt.Errorf("config_settings[%d] duplicates path/key %q", i, setting.Path+"/"+setting.Key)
+		}
+		seenSettings[setting.Identity()] = struct{}{}
+	}
 	objectIDs := make(map[string]struct{}, len(m.Objects))
 	for i, entry := range m.Objects {
 		if !validEntryID(entry.ID, "obj_") || !safePath(entry.Path) || !validObjectRef(entry.Object) {
@@ -102,6 +120,97 @@ func validateManifestValues(m Manifest) error {
 		}
 	}
 	return nil
+}
+
+func validateConfigSetting(setting ConfigSetting) error {
+	if !safePath(setting.Path) || len(setting.Key) == 0 || len(setting.Key) > 256 {
+		return errors.New("path or key is invalid")
+	}
+	if setting.Policy != "enforced" && setting.Policy != "default_once" {
+		return errors.New("policy must be enforced or default_once")
+	}
+	path := strings.ToLower(setting.Path)
+	switch setting.Format {
+	case "toml":
+		if !strings.HasSuffix(path, ".toml") || !validDottedBareKey(setting.Key) || !validTOMLJSONValue(setting.Value) {
+			return errors.New("TOML selector or value is unsupported")
+		}
+	case "properties":
+		if !strings.HasSuffix(path, ".properties") || !validPropertyKey(setting.Key) {
+			return errors.New("properties selector is unsupported")
+		}
+		if value, ok := setting.Value.(string); !ok || len(value) > 65536 {
+			return errors.New("properties value must be a string of at most 65536 bytes")
+		}
+	case "text_lines":
+		if !strings.HasSuffix(path, ".txt") || !strings.HasPrefix(setting.Key, "line:") {
+			return errors.New("text_lines selector is unsupported")
+		}
+		line, err := strconv.ParseUint(strings.TrimPrefix(setting.Key, "line:"), 10, 32)
+		if err != nil || line == 0 || line > 1_000_000 || strconv.FormatUint(line, 10) != strings.TrimPrefix(setting.Key, "line:") {
+			return errors.New("text_lines selector must use line:<one-based number>")
+		}
+		if value, ok := setting.Value.(string); !ok || len(value) > 65536 {
+			return errors.New("text_lines value must be a string of at most 65536 bytes")
+		}
+	default:
+		return errors.New("format must be toml, properties, or text_lines")
+	}
+	return nil
+}
+
+func validDottedBareKey(key string) bool {
+	if len(key) == 0 || len(key) > 256 {
+		return false
+	}
+	for _, part := range strings.Split(key, ".") {
+		if part == "" {
+			return false
+		}
+		for i := 0; i < len(part); i++ {
+			c := part[i]
+			if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func validPropertyKey(key string) bool {
+	if key == "" || len(key) > 256 {
+		return false
+	}
+	for i := 0; i < len(key); i++ {
+		c := key[i]
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.') {
+			return false
+		}
+	}
+	return true
+}
+
+func validTOMLJSONValue(value any) bool {
+	switch typed := value.(type) {
+	case bool, string:
+		return true
+	case float64:
+		return !math.IsNaN(typed) && !math.IsInf(typed, 0)
+	case []any:
+		if len(typed) > 1024 {
+			return false
+		}
+		for _, item := range typed {
+			switch item.(type) {
+			case bool, string, float64:
+			default:
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
 }
 
 func validateOptionalDigest(value *string) error {

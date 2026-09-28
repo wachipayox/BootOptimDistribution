@@ -61,5 +61,51 @@ func ValidateInheritanceChain(target *VerifiedRevision, parents map[RevisionKey]
 		chain = append(chain, parent)
 		current = parent
 	}
+	if err := validateConfigSettingChain(chain); err != nil {
+		return nil, err
+	}
 	return chain, nil
+}
+
+func validateConfigSettingChain(chain []*VerifiedRevision) error {
+	effectiveConfigs := make(map[string]struct{})
+	effectiveSettings := make(map[string]ConfigSetting)
+	var parentPermissions *ConfigPermissions
+
+	for index := len(chain) - 1; index >= 0; index-- {
+		manifest := chain[index].manifest
+		for _, removal := range manifest.RemoveConfigs {
+			delete(effectiveConfigs, removal.Path)
+			for identity, setting := range effectiveSettings {
+				if setting.Path == removal.Path {
+					delete(effectiveSettings, identity)
+				}
+			}
+		}
+		for _, config := range manifest.Configs {
+			effectiveConfigs[config.Path] = struct{}{}
+		}
+		for _, setting := range manifest.ConfigSettings {
+			if _, exists := effectiveConfigs[setting.Path]; !exists {
+				return fmt.Errorf("config setting %s/%s refers to a config absent from the effective profile", setting.Path, setting.Key)
+			}
+			identity := setting.Identity()
+			if previous, exists := effectiveSettings[identity]; exists {
+				if parentPermissions == nil {
+					return errors.New("config setting lineage has no parent permissions")
+				}
+				allowed := parentPermissions.OverrideDefaultOnce
+				if previous.Policy == "enforced" {
+					allowed = parentPermissions.OverrideEnforced
+				}
+				if !allowed {
+					return fmt.Errorf("parent profile does not permit overriding config setting %s/%s", setting.Path, setting.Key)
+				}
+			}
+			effectiveSettings[identity] = setting
+		}
+		permissions := manifest.Permissions.Configs
+		parentPermissions = &permissions
+	}
+	return nil
 }

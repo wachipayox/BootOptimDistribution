@@ -968,6 +968,23 @@ input::placeholder, textarea::placeholder { color: #77727f; }
 .table-wrap { border-radius: .65rem; }
 th { background: #1b1a20; }
 td, th { border-color: #2b2931; }
+.config-editor { margin-top: 1.4rem; padding-top: 1.2rem; border-top: 1px solid var(--line); }
+.config-editor-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: .9rem; }
+.config-editor-heading h4 { margin: 0; font-size: 1rem; }
+.config-editor-heading p { margin: .35rem 0 0; color: var(--muted); font-size: .88rem; }
+.config-file-picker { display: grid; gap: .35rem; min-width: min(24rem, 100%); color: var(--muted); font-size: .78rem; }
+.config-editor-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(21rem, 1fr); gap: .8rem; }
+.config-source-pane, .config-rule-pane { min-width: 0; border: 1px solid var(--line); border-radius: .65rem; background: #141419; overflow: hidden; }
+.pane-label { display: block; padding: .65rem .8rem; border-bottom: 1px solid var(--line); color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.config-source-preview { min-height: 13rem; max-height: 25rem; overflow: auto; margin: 0; padding: .85rem; color: #d5d1dc; font: .78rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre; }
+.config-rule-list { display: grid; gap: .45rem; max-height: 25rem; overflow: auto; padding: .7rem; }
+.config-rule-row { display: grid; grid-template-columns: minmax(8rem, .8fr) minmax(8rem, 1fr) minmax(8rem, .8fr); align-items: center; gap: .5rem; padding: .55rem; border: 1px solid #292730; border-radius: .5rem; }
+.config-rule-key { overflow: hidden; color: #e5d4f4; font: .76rem ui-monospace, SFMono-Regular, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.config-rule-row input, .config-rule-row select { min-width: 0; min-height: 2.2rem; padding: .45rem .55rem; font-size: .8rem; }
+.config-rule-source { grid-column: 1 / -1; color: var(--muted); font-size: .74rem; }
+.config-rule-lock { grid-column: 1 / -1; color: #f2c879; font-size: .76rem; }
+@media (max-width: 950px) { .config-editor-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 650px) { .config-editor-heading { align-items: stretch; flex-direction: column; } .config-rule-row { grid-template-columns: minmax(0, 1fr); } .config-rule-source, .config-rule-lock { grid-column: auto; } }
 dialog { border-radius: .85rem; }
 footer {
   width: auto;

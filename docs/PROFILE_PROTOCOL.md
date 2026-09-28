@@ -1,4 +1,4 @@
-# Private profile protocol contract (v1)
+# Private profile protocol contract (v1/v2)
 
 This is the shared boundary for Distribution admin/publishing and Pandora
 profile discovery/update. It is the product contract for the first service
@@ -41,10 +41,19 @@ Policy semantics to preserve in the client-facing manifest:
   local. Reject unsupported/ambiguous selectors at publication, never perform
   broad format-agnostic text replacement.
 
-These are target semantics, not all current schema capabilities. The current
-validator accepts only `enforced` and `default_once`; the explicit `user_owned`
-policy and option-level config selectors remain unimplemented and must not be
-claimed as publishable until the Distribution and Pandora schemas agree.
+The current validator accepts file policies `enforced` and `default_once`.
+Manifest schema v2 additionally supports `config_settings`: TOML dotted keys,
+Java properties keys, and physical `.txt` line selectors with `enforced` or
+`default_once` values. Child revisions replace a matching `(path, key)` selector
+after checking the immediate parent's config permissions. Unsupported or
+ambiguous selectors are rejected. Unselected lines and values remain local.
+The broader `user_owned` file policy is still not part of the accepted schema.
+
+The launcher applies these setting rules while reconciling the selected
+revision inside its existing per-profile transaction. Enforced changes keep a
+recoverable copy of the previous local file; `default_once` keys are seeded
+only once and preserve later user edits. The server validates the signed shape
+and inheritance permissions; the client validates and merges the text format.
 
 ## HTTP shape
 
