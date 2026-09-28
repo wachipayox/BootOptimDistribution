@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Wachiland · Distribución</title>
-  <link rel="stylesheet" href="/admin/assets/style.css?v=2">
+  <link rel="stylesheet" href="/admin/assets/style.css?v=3">
 </head>
 <body>
   <a class="skip-link" href="#main">Ir al contenido</a>
@@ -20,7 +20,6 @@
       <nav class="main-nav" aria-label="Administración">
         <a href="#resumen" data-nav="resumen"><span class="nav-icon" aria-hidden="true">⌂</span><span>Inicio</span></a>
         <a href="#perfiles" data-nav="perfiles"><span class="nav-icon" aria-hidden="true">▤</span><span>Perfiles globales</span></a>
-        <a href="#crear" data-nav="crear" class="nav-primary"><span class="nav-icon" aria-hidden="true">＋</span><span>Nuevo perfil</span></a>
         <a href="#servicio" data-nav="servicio"><span class="nav-icon" aria-hidden="true">⚙</span><span>Servicio</span></a>
       </nav>
       <div class="sidebar-footer"><span class="online-dot" aria-hidden="true"></span><span>Panel privado</span></div>
@@ -42,25 +41,6 @@
           <h2 id="overview-title">Perfiles del servidor</h2>
           <p class="lede">Gestiona las versiones disponibles para Wachiland Launcher.</p>
         </div>
-        <a class="button button-primary" href="#crear">＋ Nuevo perfil</a>
-      </div>
-
-      <div class="metric-grid" aria-label="Resumen de publicación">
-        <article class="metric-card">
-          <span class="metric-label">Perfiles</span>
-          <strong id="metric-profiles">—</strong>
-          <span id="metric-profiles-note">Cargando…</span>
-        </article>
-        <article class="metric-card">
-          <span class="metric-label">Versiones publicadas</span>
-          <strong id="metric-revisions">—</strong>
-          <span>En todos los perfiles</span>
-        </article>
-        <article class="metric-card">
-          <span class="metric-label">Publicaciones recientes</span>
-          <strong id="metric-activity">—</strong>
-          <span>Últimas versiones del servidor</span>
-        </article>
       </div>
 
       <div class="dashboard-grid">
@@ -202,8 +182,8 @@
 
             <div class="metric-grid compact">
               <article class="metric-card"><span class="metric-label">Altas</span><strong id="diff-added">0</strong></article>
-              <article class="metric-card"><span class="metric-label">Cambios</span><strong id="diff-changed">0</strong></article>
-              <article class="metric-card"><span class="metric-label">Eliminaciones</span><strong id="diff-removed">0</strong></article>
+              <article class="metric-card" id="diff-changed-card"><span class="metric-label">Cambios</span><strong id="diff-changed">0</strong></article>
+              <article class="metric-card" id="diff-removed-card"><span class="metric-label">Eliminaciones</span><strong id="diff-removed">0</strong></article>
               <article class="metric-card"><span class="metric-label">Datos por subir</span><strong id="diff-bytes">0 B</strong></article>
             </div>
 
@@ -224,6 +204,33 @@
                 </tbody>
               </table>
             </div>
+            <section class="config-editor" aria-labelledby="config-editor-title">
+              <div class="config-editor-heading">
+                <div>
+                  <h4 id="config-editor-title">Reglas por opción</h4>
+                  <p>Elige una opción de TOML, properties o texto. El resto del archivo conserva los valores del jugador.</p>
+                </div>
+                <label class="config-file-picker">
+                  <span>Archivo</span>
+                  <select id="config-file-select" disabled>
+                    <option value="">Selecciona una carpeta para ver configuraciones</option>
+                  </select>
+                </label>
+              </div>
+              <div class="config-editor-grid">
+                <div class="config-source-pane">
+                  <span class="pane-label">Vista del archivo</span>
+                  <pre id="config-source-preview" class="config-source-preview">Selecciona un archivo compatible.</pre>
+                </div>
+                <div class="config-rule-pane">
+                  <span class="pane-label">Opciones publicadas</span>
+                  <div id="config-rule-list" class="config-rule-list">
+                    <p class="muted-cell">Aún no hay opciones para editar.</p>
+                  </div>
+                </div>
+              </div>
+              <p id="config-editor-status" class="inline-status" role="status"></p>
+            </section>
           </section>
 
           <section class="panel step" aria-labelledby="publish-title">
@@ -345,6 +352,6 @@
     </form>
   </dialog>
 
-  <script src="/admin/assets/app.js?v=2" defer></script>
+  <script src="/admin/assets/app.js?v=3" defer></script>
 </body>
 </html>

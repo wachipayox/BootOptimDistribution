@@ -9,17 +9,18 @@ const (
 )
 
 type Manifest struct {
-	SchemaVersion int            `json:"schema_version"`
-	Revision      Revision       `json:"revision"`
-	Profile       Profile        `json:"profile"`
-	Game          Game           `json:"game"`
-	Base          *ParentRef     `json:"base"`
-	Permissions   Permissions    `json:"permissions"`
-	Mods          []ModEntry     `json:"mods"`
-	RemoveMods    []RemoveMod    `json:"remove_mods"`
-	Configs       []ConfigEntry  `json:"configs"`
-	RemoveConfigs []RemoveConfig `json:"remove_configs"`
-	Objects       []ObjectEntry  `json:"objects"`
+	SchemaVersion  int             `json:"schema_version"`
+	Revision       Revision        `json:"revision"`
+	Profile        Profile         `json:"profile"`
+	Game           Game            `json:"game"`
+	Base           *ParentRef      `json:"base"`
+	Permissions    Permissions     `json:"permissions"`
+	Mods           []ModEntry      `json:"mods"`
+	RemoveMods     []RemoveMod     `json:"remove_mods"`
+	Configs        []ConfigEntry   `json:"configs"`
+	RemoveConfigs  []RemoveConfig  `json:"remove_configs"`
+	ConfigSettings []ConfigSetting `json:"config_settings,omitempty"`
+	Objects        []ObjectEntry   `json:"objects"`
 }
 
 type Revision struct {
@@ -92,6 +93,18 @@ type RemoveConfig struct {
 	Path                   string `json:"path"`
 	ExpectBaseObjectSHA256 string `json:"expect_base_object_sha256"`
 }
+
+// ConfigSetting applies a typed, stable-key rule to one supported text config.
+// The rule is part of the signed immutable manifest; unspecified values remain local.
+type ConfigSetting struct {
+	Path   string `json:"path"`
+	Format string `json:"format"`
+	Key    string `json:"key"`
+	Value  any    `json:"value"`
+	Policy string `json:"policy"`
+}
+
+func (s ConfigSetting) Identity() string { return s.Path + "\x00" + s.Key }
 
 type ObjectEntry struct {
 	ID                     string    `json:"id"`
@@ -187,6 +200,10 @@ func cloneManifest(m Manifest) Manifest {
 	out.RemoveMods = append([]RemoveMod(nil), m.RemoveMods...)
 	out.Configs = append([]ConfigEntry(nil), m.Configs...)
 	out.RemoveConfigs = append([]RemoveConfig(nil), m.RemoveConfigs...)
+	out.ConfigSettings = append([]ConfigSetting(nil), m.ConfigSettings...)
+	for i := range out.ConfigSettings {
+		out.ConfigSettings[i].Value = cloneJSONValue(out.ConfigSettings[i].Value)
+	}
 	out.Objects = append([]ObjectEntry(nil), m.Objects...)
 	for i := range out.Mods {
 		out.Mods[i].ExpectBaseObjectSHA256 = cloneStringPtr(out.Mods[i].ExpectBaseObjectSHA256)
@@ -198,6 +215,25 @@ func cloneManifest(m Manifest) Manifest {
 		out.Objects[i].ExpectBaseObjectSHA256 = cloneStringPtr(out.Objects[i].ExpectBaseObjectSHA256)
 	}
 	return out
+}
+
+func cloneJSONValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		copy := make(map[string]any, len(typed))
+		for key, item := range typed {
+			copy[key] = cloneJSONValue(item)
+		}
+		return copy
+	case []any:
+		copy := make([]any, len(typed))
+		for index, item := range typed {
+			copy[index] = cloneJSONValue(item)
+		}
+		return copy
+	default:
+		return value
+	}
 }
 
 func cloneStringPtr(v *string) *string {

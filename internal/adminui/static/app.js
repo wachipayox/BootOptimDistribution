@@ -8,7 +8,11 @@ const state = {
   parentMap: new Map(),
   parentRef: null,
   parentManifest: null,
+  parentConfigSettings: new Map(),
+  parentConfigPermissions: { override_enforced: false, override_default_once: false },
   selectedFiles: new Map(),
+  configRuleEdits: new Map(),
+  configTextCache: new Map(),
   pathProblems: [],
   diff: [],
   policies: new Map(),
@@ -40,6 +44,10 @@ const nodes = {
   syntheticHint: document.querySelector('#synthetic-hint'),
   diffBody: document.querySelector('#diff-body'),
   diffWarning: document.querySelector('#diff-warning'),
+  configFileSelect: document.querySelector('#config-file-select'),
+  configSourcePreview: document.querySelector('#config-source-preview'),
+  configRuleList: document.querySelector('#config-rule-list'),
+  configEditorStatus: document.querySelector('#config-editor-status'),
   stageButton: document.querySelector('#stage-button'),
   stageStatus: document.querySelector('#stage-status'),
   stageProgress: document.querySelector('#stage-progress'),
@@ -280,18 +288,6 @@ async function loadProfiles() {
 }
 
 function renderOverview() {
-  const storage = state.overview && state.overview.storage && typeof state.overview.storage === 'object'
-    ? state.overview.storage
-    : {};
-  const revisionCount = storage.revision_count !== undefined
-    ? storage.revision_count
-    : state.recentRevisions.length;
-
-  qs('#metric-profiles').textContent = String(state.profiles.length);
-  qs('#metric-revisions').textContent = String(Number.isFinite(Number(revisionCount)) ? Number(revisionCount) : state.recentRevisions.length);
-  qs('#metric-activity').textContent = String(state.recentRevisions.length);
-  qs('#metric-profiles-note').textContent = state.profiles.length === 1 ? '1 perfil conocido' : state.profiles.length + ' perfiles conocidos';
-
   renderOverviewProfiles();
   renderActivity();
 }
@@ -648,6 +644,8 @@ async function scanRecords(records, label) {
 
   state.selectedFiles = nextFiles;
   state.pathProblems = problems;
+  state.configRuleEdits.clear();
+  state.configTextCache.clear();
   invalidatePrepared();
   await recomputeDiff();
   const total = Array.from(nextFiles.values()).reduce(function (sum, entry) { return sum + entry.size; }, 0);
@@ -822,6 +820,7 @@ async function resolveEffective(profile, revision, depth, seen) {
   }
 
   let map = new Map();
+  let settings = new Map();
   if (manifest.base) {
     const base = manifest.base;
     const baseProfile = valueText(base.profile_id, '');
@@ -834,9 +833,19 @@ async function resolveEffective(profile, revision, depth, seen) {
       throw new Error('La referencia madre fijada no coincide con el manifest resuelto.');
     }
     map = new Map(inherited.map);
+    settings = new Map(inherited.settings);
   }
 
   applyManifest(map, manifest);
+  const removedConfigPaths = new Set((manifest.remove_configs || []).map(function (entry) { return entry.path; }));
+  if (removedConfigPaths.size) {
+    settings.forEach(function (setting, identity) {
+      if (removedConfigPaths.has(setting.path)) settings.delete(identity);
+    });
+  }
+  (manifest.config_settings || []).forEach(function (setting) {
+    settings.set(setting.path + '\u0000' + setting.key, setting);
+  });
   seen.delete(key);
 
   const manifestProfile = manifest.profile && valueText(manifest.profile.id, profile);
@@ -849,6 +858,7 @@ async function resolveEffective(profile, revision, depth, seen) {
       revision_id: manifestRevision,
       manifest_sha256: computedDigest
     },
+    settings: settings,
     sequence: manifest.revision ? Number(manifest.revision.sequence) : null
   };
 }
@@ -858,6 +868,10 @@ async function handleParentProfileChange() {
   state.parentMap = new Map();
   state.parentRef = null;
   state.parentManifest = null;
+  state.parentConfigSettings = new Map();
+  state.parentConfigPermissions = { override_enforced: false, override_default_once: false };
+  state.configRuleEdits.clear();
+  state.configTextCache.clear();
 
   const id = nodes.parentProfile.value;
   nodes.parentRevision.disabled = !id;
@@ -907,6 +921,10 @@ async function handleParentRevisionChange() {
   state.parentMap = new Map();
   state.parentRef = null;
   state.parentManifest = null;
+  state.parentConfigSettings = new Map();
+  state.parentConfigPermissions = { override_enforced: false, override_default_once: false };
+  state.configRuleEdits.clear();
+  state.configTextCache.clear();
 
   const profile = nodes.parentProfile.value;
   const revision = nodes.parentRevision.value;
@@ -922,6 +940,10 @@ async function handleParentRevisionChange() {
     state.parentMap = resolved.map;
     state.parentRef = resolved.ref;
     state.parentManifest = resolved.manifest;
+    state.parentConfigSettings = resolved.settings;
+    state.parentConfigPermissions = resolved.manifest.permissions && resolved.manifest.permissions.configs
+      ? resolved.manifest.permissions.configs
+      : { override_enforced: false, override_default_once: false };
     if (Number.isFinite(resolved.sequence)) {
       qs('#revision-sequence').value = String(Math.max(1, resolved.sequence + 1));
     }
@@ -1044,7 +1066,10 @@ function renderDiff() {
   qs('#diff-added').textContent = String(counts.added);
   qs('#diff-changed').textContent = String(counts.changed);
   qs('#diff-removed').textContent = String(counts.removed);
+  qs('#diff-changed-card').hidden = !state.parentRef;
+  qs('#diff-removed-card').hidden = !state.parentRef;
   qs('#diff-bytes').textContent = formatBytes(stagingBytes);
+  renderConfigFileChoices();
 
   if (counts.unsupported) {
     nodes.diffWarning.hidden = false;
@@ -1119,6 +1144,281 @@ function renderDiff() {
   nodes.diffBody.replaceChildren(fragment);
 }
 
+function configFormatForPath(path) {
+  const lower = String(path || '').toLowerCase();
+  if (lower.endsWith('.toml')) return 'toml';
+  if (lower.endsWith('.properties')) return 'properties';
+  if (lower.endsWith('.txt')) return 'text_lines';
+  return '';
+}
+
+function configFileEntries() {
+  const files = new Map();
+  state.parentMap.forEach(function (entry, path) {
+    if (entry.kind === 'config' && configFormatForPath(path)) files.set(path, { entry: entry, selected: false });
+  });
+  state.selectedFiles.forEach(function (entry, path) {
+    if (entry.kind === 'config' && configFormatForPath(path)) files.set(path, { entry: entry, selected: true });
+  });
+  return Array.from(files.entries()).sort(function (left, right) { return left[0].localeCompare(right[0]); });
+}
+
+function renderConfigFileChoices() {
+  const files = configFileEntries();
+  const previous = nodes.configFileSelect.value;
+  const fragment = document.createDocumentFragment();
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = files.length ? 'Selecciona una configuración' : 'No hay archivos TOML, properties o TXT';
+  fragment.appendChild(placeholder);
+  files.forEach(function (pair) {
+    const option = document.createElement('option');
+    option.value = pair[0];
+    option.textContent = pair[0] + (pair[1].selected ? ' · selección' : ' · base');
+    fragment.appendChild(option);
+  });
+  nodes.configFileSelect.replaceChildren(fragment);
+  nodes.configFileSelect.disabled = files.length === 0;
+  if (files.some(function (pair) { return pair[0] === previous; })) nodes.configFileSelect.value = previous;
+  else if (files.length) nodes.configFileSelect.value = files[0][0];
+  renderSelectedConfigEditor();
+}
+
+async function configFileText(path) {
+  if (state.configTextCache.has(path)) return state.configTextCache.get(path);
+  const selected = state.selectedFiles.get(path);
+  if (selected) {
+    const text = await selected.file.text();
+    state.configTextCache.set(path, text);
+    return text;
+  }
+  const inherited = state.parentMap.get(path);
+  const digest = objectDigest(inherited);
+  if (!digest) throw new Error('El archivo base no tiene un objeto verificable.');
+  const response = await fetch('/v1/objects/sha256/' + encodeURIComponent(digest), {
+    credentials: 'same-origin',
+    cache: 'no-store'
+  });
+  if (!response.ok) throw new Error('HTTP ' + response.status + ' al cargar el objeto de configuración.');
+  const text = await response.text();
+  state.configTextCache.set(path, text);
+  return text;
+}
+
+function stripTomlComment(value) {
+  let quoted = false;
+  let escaped = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (escaped) { escaped = false; continue; }
+    if (quoted && character === '\\') { escaped = true; continue; }
+    if (character === '"') quoted = !quoted;
+    else if (character === '#' && !quoted) return value.slice(0, index).trim();
+  }
+  return value.trim();
+}
+
+function parseTomlSettingValue(raw) {
+  const value = stripTomlComment(raw);
+  if (!value) return { supported: false };
+  if (value.startsWith('"') || value.startsWith('[')) {
+    try { return { supported: true, value: JSON.parse(value) }; } catch (error) { return { supported: false }; }
+  }
+  if (value.startsWith("'" ) && value.endsWith("'") && value.length >= 2) {
+    return { supported: true, value: value.slice(1, -1) };
+  }
+  if (value === 'true' || value === 'false') return { supported: true, value: value === 'true' };
+  if (/^[+-]?(?:\d+(?:_\d+)*(?:\.\d+(?:_\d+)*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)) {
+    const number = Number(value.replace(/_/g, ''));
+    return Number.isFinite(number) ? { supported: true, value: number } : { supported: false };
+  }
+  return { supported: false };
+}
+
+function parseConfigOptions(path, source) {
+  const format = configFormatForPath(path);
+  const records = [];
+  if (format === 'toml') {
+    let section = '';
+    source.split(/\r?\n/).forEach(function (line) {
+      const trimmed = line.trim();
+      const table = /^\[([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)\]$/.exec(trimmed);
+      if (table) { section = table[1]; return; }
+      const assignment = /^([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)\s*=\s*(.*)$/.exec(trimmed);
+      if (!assignment) return;
+      const parsed = parseTomlSettingValue(assignment[2]);
+      records.push({ key: section ? section + '.' + assignment[1] : assignment[1], value: parsed.value, supported: parsed.supported });
+    });
+  } else if (format === 'properties') {
+    source.split(/\r?\n/).forEach(function (line) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('!')) return;
+      const separator = trimmed.search(/[=:\s]/);
+      const rawKey = separator < 0 ? trimmed : trimmed.slice(0, separator);
+      if (!/^[A-Za-z0-9_.-]{1,256}$/.test(rawKey)) return;
+      let valueStart = separator < 0 ? trimmed.length : separator;
+      while (/\s/.test(trimmed[valueStart] || '')) valueStart += 1;
+      if (trimmed[valueStart] === '=' || trimmed[valueStart] === ':') valueStart += 1;
+      while (/\s/.test(trimmed[valueStart] || '')) valueStart += 1;
+      records.push({ key: rawKey, value: trimmed.slice(valueStart), supported: true });
+    });
+  } else if (format === 'text_lines') {
+    let lines = source.split(/\r?\n/);
+    if (source.endsWith('\n')) lines = lines.slice(0, -1);
+    lines.slice(0, 1000).forEach(function (line, index) {
+      records.push({ key: 'line:' + (index + 1), value: line, supported: true });
+    });
+  }
+
+  const counts = new Map();
+  records.forEach(function (record) { counts.set(record.key, (counts.get(record.key) || 0) + 1); });
+  records.forEach(function (record) { record.ambiguous = counts.get(record.key) > 1; });
+  const seen = new Set(records.map(function (record) { return record.key; }));
+  state.parentConfigSettings.forEach(function (setting) {
+    if (setting.path === path && !seen.has(setting.key)) {
+      records.push({ key: setting.key, value: setting.value, supported: false, inheritedOnly: true, ambiguous: false });
+    }
+  });
+  return { format: format, records: records };
+}
+
+function settingIdentity(path, key) { return path + '\u0000' + key; }
+
+function makeTypedSettingInput(value) {
+  let input;
+  if (typeof value === 'boolean') {
+    input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = value;
+  } else if (Array.isArray(value)) {
+    input = document.createElement('textarea');
+    input.rows = 2;
+    input.value = JSON.stringify(value);
+  } else {
+    input = document.createElement('input');
+    input.type = 'text';
+    input.value = value === undefined || value === null ? '' : String(value);
+  }
+  input.className = 'config-rule-value';
+  return input;
+}
+
+function readTypedSettingInput(input, prototype) {
+  if (typeof prototype === 'boolean') return input.checked;
+  if (typeof prototype === 'number') {
+    const number = Number(input.value);
+    if (!Number.isFinite(number)) throw new Error('Introduce un número válido.');
+    return number;
+  }
+  if (Array.isArray(prototype)) {
+    const value = JSON.parse(input.value);
+    if (!Array.isArray(value) || !value.every(function (item) { return ['string', 'number', 'boolean'].includes(typeof item); })) {
+      throw new Error('La lista TOML debe contener valores simples.');
+    }
+    return value;
+  }
+  return input.value;
+}
+
+function renderConfigRuleRecord(path, format, record) {
+  const identity = settingIdentity(path, record.key);
+  const parentRule = state.parentConfigSettings.get(identity);
+  const ownRule = state.configRuleEdits.get(identity);
+  const row = make('article', 'config-rule-row');
+  const key = make('code', 'config-rule-key', record.key);
+  const prototype = ownRule ? ownRule.value : (parentRule ? parentRule.value : record.value);
+  const valueInput = makeTypedSettingInput(prototype);
+  valueInput.setAttribute('aria-label', 'Valor de ' + record.key);
+  const policy = document.createElement('select');
+  policy.setAttribute('aria-label', 'Política de ' + record.key);
+  const choices = parentRule
+    ? [['inherit', 'Usar heredada']]
+    : [['none', 'Sin regla']];
+  const canOverrideParent = !parentRule || (parentRule.policy === 'enforced'
+    ? state.parentConfigPermissions.override_enforced
+    : state.parentConfigPermissions.override_default_once);
+  if (!parentRule || canOverrideParent) {
+    choices.push(['enforced', 'Obligatoria']);
+    choices.push(['default_once', 'Valor inicial']);
+  }
+  choices.forEach(function (choice) {
+    const option = document.createElement('option');
+    option.value = choice[0];
+    option.textContent = choice[1];
+    policy.appendChild(option);
+  });
+  policy.value = ownRule ? ownRule.policy : (parentRule ? 'inherit' : 'none');
+  valueInput.disabled = !record.supported || record.ambiguous || policy.value === 'inherit' || policy.value === 'none';
+  policy.disabled = !record.supported || record.ambiguous;
+  valueInput.addEventListener('change', function () {
+    if (policy.value === 'none' || policy.value === 'inherit') return;
+    try {
+      state.configRuleEdits.set(identity, {
+        path: path, format: format, key: record.key,
+        value: readTypedSettingInput(valueInput, prototype), policy: policy.value
+      });
+      setStatus(nodes.configEditorStatus, 'Regla preparada para ' + record.key + '.', 'success');
+      invalidatePrepared();
+    } catch (error) {
+      setStatus(nodes.configEditorStatus, describeError(error), 'error');
+    }
+  });
+  policy.addEventListener('change', function () {
+    if (policy.value === 'none' || policy.value === 'inherit') state.configRuleEdits.delete(identity);
+    else {
+      try {
+        state.configRuleEdits.set(identity, {
+          path: path, format: format, key: record.key,
+          value: readTypedSettingInput(valueInput, prototype), policy: policy.value
+        });
+      } catch (error) {
+        setStatus(nodes.configEditorStatus, describeError(error), 'error');
+        policy.value = ownRule ? ownRule.policy : (parentRule ? 'inherit' : 'none');
+        return;
+      }
+    }
+    invalidatePrepared();
+    renderSelectedConfigEditor();
+  });
+  row.append(key, valueInput, policy);
+  const sourceLabel = make('span', 'config-rule-source', 'En el archivo: ' + String(record.value === undefined ? '—' : record.value));
+  row.appendChild(sourceLabel);
+  if (record.ambiguous) row.appendChild(make('span', 'config-rule-lock', 'Clave duplicada; corrige el archivo para que la regla no sea ambigua.'));
+  else if (!record.supported) row.appendChild(make('span', 'config-rule-lock', 'Valor heredado o sintaxis no compatible con edición estructurada.'));
+  else if (parentRule && !canOverrideParent) row.appendChild(make('span', 'config-rule-lock', 'El perfil base no permite cambiar esta opción.'));
+  return row;
+}
+
+async function renderSelectedConfigEditor() {
+  const path = nodes.configFileSelect.value;
+  nodes.configRuleList.replaceChildren();
+  if (!path) {
+    nodes.configSourcePreview.textContent = 'Selecciona un archivo compatible.';
+    setStatus(nodes.configEditorStatus, '');
+    nodes.configRuleList.appendChild(make('p', 'muted-cell', 'Aún no hay opciones para editar.'));
+    return;
+  }
+  setStatus(nodes.configEditorStatus, 'Leyendo ' + path + '…');
+  try {
+    const source = await configFileText(path);
+    if (new TextEncoder().encode(source).length > 1024 * 1024) throw new Error('El editor admite configuraciones de hasta 1 MiB.');
+    nodes.configSourcePreview.textContent = source;
+    const parsed = parseConfigOptions(path, source);
+    if (!parsed.records.length) {
+      nodes.configRuleList.appendChild(make('p', 'muted-cell', 'No se encontraron opciones compatibles en este archivo.'));
+    } else {
+      const fragment = document.createDocumentFragment();
+      parsed.records.forEach(function (record) { fragment.appendChild(renderConfigRuleRecord(path, parsed.format, record)); });
+      nodes.configRuleList.replaceChildren(fragment);
+    }
+    setStatus(nodes.configEditorStatus, 'Las reglas solo afectan las opciones seleccionadas; las demás líneas se conservan.', 'success');
+  } catch (error) {
+    nodes.configSourcePreview.textContent = 'No se pudo mostrar el archivo.';
+    nodes.configRuleList.appendChild(make('p', 'config-rule-lock', describeError(error)));
+    setStatus(nodes.configEditorStatus, describeError(error), 'error');
+  }
+}
+
 function objectRef(local) {
   const ref = {
     sha256: local.sha256,
@@ -1159,7 +1459,7 @@ function buildManifest() {
   }
 
   const manifest = {
-    schema_version: 1,
+    schema_version: state.configRuleEdits.size ? 2 : 1,
     revision: {
       id: revision,
       sequence: sequence,
@@ -1197,6 +1497,11 @@ function buildManifest() {
     remove_configs: [],
     objects: []
   };
+  if (state.configRuleEdits.size) {
+    manifest.config_settings = Array.from(state.configRuleEdits.values()).sort(function (left, right) {
+      return left.path.localeCompare(right.path) || left.key.localeCompare(right.key);
+    });
+  }
 
   const notes = qs('#release-notes').value.trim();
   if (notes) manifest.revision.release_notes = notes;
@@ -1482,6 +1787,7 @@ function bindEvents() {
   window.addEventListener('hashchange', route);
   nodes.parentProfile.addEventListener('change', handleParentProfileChange);
   nodes.parentRevision.addEventListener('change', handleParentRevisionChange);
+  nodes.configFileSelect.addEventListener('change', renderSelectedConfigEditor);
   nodes.pickDirectory.addEventListener('click', chooseDirectory);
   nodes.folderFallback.addEventListener('change', function () {
     loadFallbackFiles(nodes.folderFallback.files);

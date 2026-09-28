@@ -173,7 +173,7 @@ func newHandlerWithConfig(cfg handlerConfig) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		capabilities := []string{"health", "build-version"}
 		if cfg.ProfileAPI != nil {
-			capabilities = append(capabilities, "signed-global-profiles", "admin-profile-publication")
+			capabilities = append(capabilities, "signed-global-profiles", "admin-profile-publication", "signed-config-setting-rules-v1")
 		}
 		_ = json.NewEncoder(w).Encode(versionResponse{
 			Service:        "bootoptim-distribution",

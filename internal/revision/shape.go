@@ -11,7 +11,7 @@ import (
 func validateManifestShape(raw []byte) error {
 	root, err := objectShape(raw,
 		[]string{"schema_version", "revision", "profile", "game", "base", "permissions", "mods", "remove_mods", "configs", "remove_configs", "objects"},
-		nil)
+		[]string{"config_settings"})
 	if err != nil {
 		return err
 	}
@@ -100,6 +100,20 @@ func validateManifestShape(raw []byte) error {
 	if err := requireInteger(root["schema_version"], "schema_version"); err != nil {
 		return err
 	}
+	var schemaVersion int
+	if err := json.Unmarshal(root["schema_version"], &schemaVersion); err != nil {
+		return err
+	}
+	if schemaVersion == 2 {
+		if _, ok := root["config_settings"]; !ok {
+			return errors.New("schema_version 2 requires config_settings")
+		}
+	}
+	if raw, ok := root["config_settings"]; ok {
+		if err := requireArray(raw, "config_settings"); err != nil {
+			return err
+		}
+	}
 	for _, key := range []string{"mods", "remove_mods", "configs", "remove_configs", "objects"} {
 		if err := requireArray(root[key], key); err != nil {
 			return err
@@ -116,6 +130,22 @@ func validateManifestShape(raw []byte) error {
 	}
 	if err := arrayObjectShapes(root["remove_configs"], []string{"path", "expect_base_object_sha256"}, nil, ""); err != nil {
 		return fmt.Errorf("remove_configs: %w", err)
+	}
+	if raw, ok := root["config_settings"]; ok {
+		if err := arrayObjectShapes(raw, []string{"path", "format", "key", "value", "policy"}, nil, ""); err != nil {
+			return fmt.Errorf("config_settings: %w", err)
+		}
+		var entries []map[string]json.RawMessage
+		if err := decodeRaw(raw, &entries); err != nil {
+			return err
+		}
+		for index, entry := range entries {
+			for _, key := range []string{"path", "format", "key", "policy"} {
+				if err := requireString(entry[key], fmt.Sprintf("config_settings[%d].%s", index, key)); err != nil {
+					return err
+				}
+			}
+		}
 	}
 	if err := arrayObjectShapes(root["objects"], []string{"id", "path", "object"}, []string{"expect_base_object_sha256"}, objectRefField); err != nil {
 		return fmt.Errorf("objects: %w", err)
