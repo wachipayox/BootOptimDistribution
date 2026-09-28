@@ -781,6 +781,7 @@ function renderExplorer() {
   const hasBase = Boolean(state.parentRef);
   rootLabel.textContent = hasBase ? 'Rama de ' + state.parentRef.profile_id + ' / ' + state.parentRef.revision_id : 'Nuevo perfil · vacío';
   const rows = mergedExplorerRows();
+  const folderBlockers = directoryRemovalBlockers(rows);
   const query = (qs('#explorer-search').value || '').trim().toLocaleLowerCase();
   const filtered = rows.filter(function (row) { return row.path.toLocaleLowerCase().includes(query); });
   count.textContent = rows.length + (rows.length === 1 ? ' archivo' : ' archivos');
@@ -870,6 +871,16 @@ function renderExplorer() {
       nodes.filePicker.click();
     }));
     folderActions.appendChild(smallAction(directory, 'Crear subcarpeta', '▱+', function () { openCreateFolder(directory.path); }));
+    const blockedPath = folderBlockers.get(directory.path) || '';
+    const removeFolder = smallAction(
+      directory,
+      blockedPath ? 'Esta rama no puede retirar el archivo heredado ' + blockedPath : 'Borrar esta carpeta y todo su contenido',
+      '×',
+      function () { removeDirectory(directory.path); },
+      'danger'
+    );
+    removeFolder.disabled = Boolean(blockedPath);
+    folderActions.appendChild(removeFolder);
     folderRow.appendChild(folderActions);
     branch.appendChild(folderRow);
     if (!collapsed) {
@@ -958,6 +969,56 @@ function removePath(path) {
   state.folderSelected = true;
   invalidatePrepared();
   recomputeDiff();
+}
+
+function directoryRemovalBlockers(rows) {
+  const blockers = new Map();
+  if (!state.parentRef) return blockers;
+  rows.forEach(function (entry) {
+    if (entry.status === 'removed') return;
+    const parent = state.parentMap.get(entry.path);
+    if (!parent || parent.kind === 'mod' || parent.kind === 'config') return;
+    let separator = entry.path.lastIndexOf('/');
+    while (separator > 0) {
+      const directoryPath = entry.path.slice(0, separator);
+      if (!blockers.has(directoryPath)) blockers.set(directoryPath, entry.path);
+      separator = entry.path.lastIndexOf('/', separator - 1);
+    }
+  });
+  return blockers;
+}
+
+function directoryRemovalBlockPath(path) {
+  return directoryRemovalBlockers(mergedExplorerRows()).get(path) || '';
+}
+
+async function removeDirectory(path) {
+  const blockedPath = directoryRemovalBlockPath(path);
+  if (blockedPath) {
+    setStatus(nodes.folderStatus, 'Esta rama no puede retirar el archivo heredado ' + blockedPath + '.', 'error');
+    return;
+  }
+
+  const prefix = path + '/';
+  for (const filePath of Array.from(state.selectedFiles.keys())) {
+    if (!filePath.startsWith(prefix)) continue;
+    state.selectedFiles.delete(filePath);
+  }
+  for (const filePath of state.parentMap.keys()) {
+    if (!filePath.startsWith(prefix)) continue;
+    if (state.parentRef) {
+      state.removedPaths.add(filePath);
+    } else {
+      state.removedPaths.delete(filePath);
+    }
+  }
+  for (const directoryPath of Array.from(state.createdDirs)) {
+    if (directoryPath === path || directoryPath.startsWith(prefix)) state.createdDirs.delete(directoryPath);
+  }
+  state.folderSelected = true;
+  invalidatePrepared();
+  await recomputeDiff();
+  setStatus(nodes.folderStatus, 'Carpeta «' + path + '» y todo su contenido se han quitado de esta rama.', 'success');
 }
 
 function restorePath(path) {
