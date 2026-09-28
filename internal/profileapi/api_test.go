@@ -30,7 +30,7 @@ func (k testKeys) PublicKey(_ context.Context, id string) (ed25519.PublicKey, er
 
 func identity(next http.Handler) http.Handler { return next }
 
-func TestSyntheticPublicationReadPromotionAndRollback(t *testing.T) {
+func TestSyntheticPublicationReadPromotionRollbackAndKeyRotation(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
 	cas, err := storage.OpenCAS(root, 1<<20)
@@ -44,10 +44,11 @@ func TestSyntheticPublicationReadPromotionAndRollback(t *testing.T) {
 	defer store.Close()
 
 	pub, priv := testKeyPair()
+	recoveryPub, recoveryPriv := testKeyPairFromSeed("profileapi recovery signer for rotation test")
 	handler, err := New(Dependencies{
 		Objects: cas,
 		Store:   store,
-		Keys:    testKeys{"test-key": pub},
+		Keys:    testKeys{"test-key": pub, "recovery-key": recoveryPub},
 	}, Options{
 		ReadMiddleware:  identity,
 		AdminMiddleware: identity,
@@ -128,7 +129,7 @@ func TestSyntheticPublicationReadPromotionAndRollback(t *testing.T) {
 	}
 
 	secondManifest := testManifest("rev_0000000000000002", 2, objectHex, int64(len(objectBytes)))
-	secondEnvelope := signEnvelope(t, secondManifest, priv)
+	secondEnvelope := signEnvelopeWithKeyID(t, secondManifest, "recovery-key", recoveryPriv)
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/admin/revisions", strings.NewReader(string(secondEnvelope)))
 	handler.ServeHTTP(rec, req)
@@ -242,7 +243,11 @@ func TestNewRequiresAuthHooks(t *testing.T) {
 }
 
 func testKeyPair() (ed25519.PublicKey, ed25519.PrivateKey) {
-	seed := sha256.Sum256([]byte("profileapi relay 211 deterministic test key only"))
+	return testKeyPairFromSeed("profileapi relay 211 deterministic test key only")
+}
+
+func testKeyPairFromSeed(value string) (ed25519.PublicKey, ed25519.PrivateKey) {
+	seed := sha256.Sum256([]byte(value))
 	private := ed25519.NewKeyFromSeed(seed[:])
 	return private.Public().(ed25519.PublicKey), private
 }
@@ -315,6 +320,10 @@ func manifestDigest(t *testing.T, manifest []byte) string {
 }
 
 func signEnvelope(t *testing.T, manifest []byte, private ed25519.PrivateKey) []byte {
+	return signEnvelopeWithKeyID(t, manifest, "test-key", private)
+}
+
+func signEnvelopeWithKeyID(t *testing.T, manifest []byte, keyID string, private ed25519.PrivateKey) []byte {
 	t.Helper()
 	canonical, err := jcs.Transform(manifest)
 	if err != nil {
@@ -326,7 +335,7 @@ func signEnvelope(t *testing.T, manifest []byte, private ed25519.PrivateKey) []b
 		ManifestSHA256:   hex.EncodeToString(digest[:]),
 		Manifest:         manifest,
 		Signature: revision.Signature{
-			KeyID: "test-key", Algorithm: revision.SignatureAlgorithm,
+			KeyID: keyID, Algorithm: revision.SignatureAlgorithm,
 			Value: base64.RawURLEncoding.EncodeToString(ed25519.Sign(private, canonical)),
 		},
 	}
