@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Wachiland · Distribución</title>
-  <link rel="stylesheet" href="/admin/assets/style.css?v=16">
+  <link rel="stylesheet" href="/admin/assets/style.css?v=17">
 </head>
 <body>
   <a class="skip-link" href="#main">Ir al contenido</a>
@@ -222,10 +222,17 @@
             <div class="publish-stage">
               <div>
                 <strong>B. Firmar la versión</strong>
-                <p>Descarga el archivo de firma y complétalo con la herramienta del administrador.</p>
+                <p>Descarga la solicitud o muéstrala para copiarla y complétala con la herramienta del administrador.</p>
               </div>
-              <button id="download-request" class="button button-secondary" type="button" disabled>Descargar archivo de firma</button>
+              <div class="button-row">
+                <button id="download-request" class="button button-secondary" type="button" disabled>Descargar solicitud</button>
+                <button id="show-request" class="button button-secondary" type="button" disabled>Mostrar solicitud</button>
+              </div>
             </div>
+            <label id="request-preview-label" class="request-preview-field" for="signing-request-preview" hidden>
+              <span>Solicitud de firma (JSON)</span>
+              <textarea id="signing-request-preview" rows="8" readonly spellcheck="false"></textarea>
+            </label>
 
             <div class="publish-stage">
               <div>
@@ -352,6 +359,6 @@
     </form>
   </dialog>
 
-  <script src="/admin/assets/app.js?v=16" defer></script>
+  <script src="/admin/assets/app.js?v=17" defer></script>
 </body>
 </html>

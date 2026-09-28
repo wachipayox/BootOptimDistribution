@@ -57,7 +57,7 @@ El repositorio instalado actualiza el binario local `bin/` que usa la unidad y t
 
 1. Abre `https://welite.ddns.net:8444/admin/` desde la LAN e inicia sesión con el usuario administrador configurado (`wachi`) y la contraseña elegida al crear el verificador. No hay una contraseña predeterminada.
 2. En Perfiles globales, crea o selecciona el perfil y prepara el contenido/revisión. Para una hija, comprueba la versión base y los permisos heredados antes de publicar.
-3. Revisa la vista previa de archivos y reglas. El panel sube los objetos y descarga una solicitud de firma.
+3. Revisa la vista previa de archivos y reglas. El panel sube los objetos y ofrece descargar la solicitud de firma. Si la descarga del navegador no funciona, usa «Mostrar solicitud», copia el JSON completo y guárdalo como `profile.signing-request.json`.
 4. En el PC administrador, firma localmente la solicitud con `bootoptim-release-signer`; confirma el ID exacto del perfil que muestra el programa.
 5. Sube el sobre firmado al mismo flujo del panel y publica la revisión. Comprueba el historial del perfil.
 
