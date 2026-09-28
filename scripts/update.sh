@@ -20,7 +20,11 @@ fi
 
 cd "$repo_dir"
 git fetch --quiet origin main
-installed="$(cat .installed-commit 2>/dev/null || git rev-parse HEAD)"
+if [[ -r /var/lib/bootoptim-distribution-updater/installed-commit ]]; then
+  installed="$(tr -d '[:space:]' < /var/lib/bootoptim-distribution-updater/installed-commit)"
+else
+  installed="$(cat .installed-commit 2>/dev/null || git rev-parse HEAD)"
+fi
 available="$(git rev-parse origin/main)"
 installed_version="$(tr -d '[:space:]' < VERSION)"
 available_version="$(git show origin/main:VERSION | tr -d '[:space:]')"

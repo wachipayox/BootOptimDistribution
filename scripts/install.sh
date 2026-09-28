@@ -52,3 +52,14 @@ fi
 mv -f "$runtime_staging" "$runtime_target"
 printf '%s\n' "$commit" > "$repo_dir/.installed-commit"
 echo "Installed bootoptim-distribution $version ($commit) to $target and $runtime_target."
+
+# Once a systemd service exists, install the narrowly scoped self-update
+# runner. On a first install this is skipped because the service unit is not
+# present yet. A failed optional setup must not invalidate the new binary.
+if command -v systemctl >/dev/null && systemctl cat bootoptim-distribution.service >/dev/null 2>&1; then
+  if "$repo_dir/scripts/install-admin-updater.sh"; then
+    echo "Configured the authenticated panel updater for bootoptim-distribution.service."
+  else
+    echo "Warning: could not configure the panel updater; run scripts/install-admin-updater.sh manually." >&2
+  fi
+fi
