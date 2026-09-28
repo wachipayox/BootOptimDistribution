@@ -111,14 +111,37 @@ where that distinction leaks private state.
    removals, size, policies, and unsupported paths.
 3. The panel uploads changed bytes to authenticated staging endpoints and
    downloads a canonical signing request. It never accesses a private key.
-4. A separate local signer must display profile/parent identity and digest,
-   validate the request shape, then sign it. The admin returns the signed
-   envelope to the panel for atomic publication. The panel supports downloading
-   the canonical request and uploading the signed envelope, but the standalone
-   signer tool is not yet included.
+4. The `bootoptim-release-signer` utility validates the downloaded request,
+   displays profile identity and digest, and signs locally only after the
+   administrator confirms the profile ID. The admin returns the signed envelope
+   to the panel for atomic publication. The private key stays on the admin PC;
+   neither the browser nor the service loads it.
 5. The service verifies authorization, signature, parent pin, object hashes,
    policies, sequence and anti-rollback invariants before making the revision
    visible.
 
 The initial acceptance fixture is a synthetic root and child profile. No
 player save/config directory should be used for the first test.
+
+## Release-key recovery and rotation
+
+Distribution's `--release-public-keys-file` is a JSON map from key IDs to
+unpadded base64url Ed25519 public keys. It may contain multiple keys. Pandora
+verifies each revision using the public key named by its signature; retain old
+public keys so existing signed history remains verifiable.
+
+If an admin PC is lost, generate a replacement signer on the replacement PC
+with `bootoptim-release-signer keygen`, add its public entry to the server key
+map, and add the same public key to Pandora's trusted-key list through the
+private launcher update. Restart Distribution after changing its key-map file.
+Then sign the next sequence of an existing profile, or a new root profile, with
+the replacement key ID. Profile IDs, revision history and parent pins remain
+unchanged. Do not remove old public keys while any installed launcher may need
+to verify their revisions.
+
+Back up each private signer file encrypted and offline. The server must never
+generate, retain or export a release-signing private key: that would let a
+compromised web service forge releases. If the workstation and all private-key
+backups are lost, the replacement PC can generate a new signer, but its public
+key must be explicitly trusted by both service and launcher before publishing.
+The TLS certificate and admin password do not recover a release signing key.

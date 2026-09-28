@@ -38,6 +38,17 @@ func CanonicalizeJSON(raw []byte) ([]byte, error) {
 	return canonical, nil
 }
 
+// CanonicalizeValidatedManifest returns RFC 8785 bytes only after checking the
+// manifest against the current signed-profile schema and value constraints.
+// Offline signing tools should use this instead of signing arbitrary JSON.
+func CanonicalizeValidatedManifest(raw []byte) ([]byte, error) {
+	_, canonical, err := parseAndValidateManifest(raw)
+	if err != nil {
+		return nil, err
+	}
+	return canonical, nil
+}
+
 func ParseAndVerifyRevisionEnvelope(raw []byte, publicKey ed25519.PublicKey) (*VerifiedRevision, error) {
 	if len(publicKey) != ed25519.PublicKeySize {
 		return nil, ErrInvalidPublicKey

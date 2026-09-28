@@ -521,7 +521,7 @@ function renderService() {
   qs('#service-revisions').textContent = valueText(storage.revision_count, '0');
   qs('#service-objects').textContent = valueText(storage.object_count, '0');
   qs('#service-bytes').textContent = formatBytes(storage.object_bytes);
-  qs('#service-picker').textContent = typeof window.showDirectoryPicker === 'function' ? 'Disponible' : 'No disponible; se usa la alternativa';
+  qs('#service-picker').textContent = 'webkitdirectory' in nodes.folderFallback ? 'Disponible' : 'No disponible';
   qs('#service-secure').textContent = window.isSecureContext ? 'Sí' : 'No';
   qs('#service-crypto').textContent = window.crypto && window.crypto.subtle ? 'Disponible' : 'No disponible';
 }
@@ -588,19 +588,6 @@ async function sha256Text(text) {
 
 async function hashFile(file) {
   return sha256Bytes(await file.arrayBuffer());
-}
-
-async function collectDirectory(handle, prefix, out) {
-  for await (const entryPair of handle.entries()) {
-    const name = entryPair[0];
-    const child = entryPair[1];
-    const path = prefix ? prefix + '/' + name : name;
-    if (child.kind === 'file') {
-      out.push({ path: path, file: await child.getFile() });
-    } else if (child.kind === 'directory') {
-      await collectDirectory(child, path, out);
-    }
-  }
 }
 
 function fallbackPath(file) {
@@ -680,32 +667,25 @@ async function scanRecords(records, label, mode) {
 }
 
 async function chooseDirectory() {
-  if (typeof window.showDirectoryPicker !== 'function') {
-    nodes.folderFallback.click();
+  if (!('webkitdirectory' in nodes.folderFallback)) {
+    setStatus(nodes.folderStatus, 'Este navegador no permite seleccionar carpetas. Usa «Elegir archivos» o arrastra el contenido aquí.', 'error');
     return;
   }
 
-  const previousMessage = nodes.folderStatus.textContent;
-  try {
-    const handle = await window.showDirectoryPicker({ mode: 'read' });
-    const records = [];
-    await collectDirectory(handle, '', records);
-    await scanRecords(records, 'Carpeta ' + valueText(handle.name, 'seleccionada'));
-  } catch (error) {
-    if (error && error.name === 'AbortError') {
-      setStatus(nodes.folderStatus, previousMessage || 'Selección cancelada; no se han perdido los archivos anteriores.');
-      return;
-    }
-    setStatus(nodes.folderStatus, 'No se pudo abrir la carpeta. Se conservan los archivos anteriores. ' + describeError(error), 'error');
-  }
+  nodes.folderFallback.value = '';
+  setStatus(nodes.folderStatus, 'Elige la carpeta raíz del modpack. Se importarán sus contenidos directamente en la raíz del perfil…');
+  nodes.folderFallback.click();
 }
 
 function loadFallbackFiles(fileList) {
   const records = Array.from(fileList || []).map(function (file) {
     return { path: fallbackPath(file), file: file };
   });
-  if (!records.length) return;
-  scanRecords(records, 'Selección alternativa');
+  if (!records.length) {
+    setStatus(nodes.folderStatus, 'No se seleccionó ninguna carpeta; se conserva la selección anterior.');
+    return;
+  }
+  scanRecords(records, 'Carpeta importada');
 }
 
 function addFiles(fileList, replacePath, folderPath) {
@@ -725,10 +705,10 @@ function addFiles(fileList, replacePath, folderPath) {
   scanRecords(records, replacePath ? 'Archivo reemplazado' : 'Archivos añadidos', 'overlay');
 }
 
-function droppedEntryRecords(entry, prefix) {
+function droppedEntryRecords(entry, prefix, omitName) {
   return new Promise(function (resolve, reject) {
     if (!entry) return resolve([]);
-    const path = prefix ? prefix + '/' + entry.name : entry.name;
+    const path = omitName ? prefix : (prefix ? prefix + '/' + entry.name : entry.name);
     if (entry.isFile) {
       entry.file(function (file) { resolve([{ path: path, file: file }]); }, reject);
       return;
@@ -740,7 +720,7 @@ function droppedEntryRecords(entry, prefix) {
       reader.readEntries(async function (batch) {
         if (!batch.length) return resolve(all);
         try {
-          for (const child of batch) all.push.apply(all, await droppedEntryRecords(child, path));
+          for (const child of batch) all.push.apply(all, await droppedEntryRecords(child, path, false));
           readBatch();
         } catch (error) { reject(error); }
       }, reject);
@@ -759,10 +739,7 @@ async function handleExplorerDrop(event) {
     const records = [];
     try {
       for (const entry of entries) {
-        const found = await droppedEntryRecords(entry, '');
-        found.forEach(function (record) {
-          records.push({ path: folderPrefix ? folderPrefix + '/' + record.path : record.path, file: record.file });
-        });
+        records.push.apply(records, await droppedEntryRecords(entry, folderPrefix, Boolean(entry.isDirectory)));
       }
       if (records.length) scanRecords(records, 'Archivos soltados', 'overlay');
     } catch (error) {
@@ -804,6 +781,7 @@ function renderExplorer() {
   const hasBase = Boolean(state.parentRef);
   rootLabel.textContent = hasBase ? 'Rama de ' + state.parentRef.profile_id + ' / ' + state.parentRef.revision_id : 'Nuevo perfil · vacío';
   const rows = mergedExplorerRows();
+  const folderBlockers = directoryRemovalBlockers(rows);
   const query = (qs('#explorer-search').value || '').trim().toLocaleLowerCase();
   const filtered = rows.filter(function (row) { return row.path.toLocaleLowerCase().includes(query); });
   count.textContent = rows.length + (rows.length === 1 ? ' archivo' : ' archivos');
@@ -893,6 +871,16 @@ function renderExplorer() {
       nodes.filePicker.click();
     }));
     folderActions.appendChild(smallAction(directory, 'Crear subcarpeta', '▱+', function () { openCreateFolder(directory.path); }));
+    const blockedPath = folderBlockers.get(directory.path) || '';
+    const removeFolder = smallAction(
+      directory,
+      blockedPath ? 'Esta rama no puede retirar el archivo heredado ' + blockedPath : 'Borrar esta carpeta y todo su contenido',
+      '×',
+      function () { removeDirectory(directory.path); },
+      'danger'
+    );
+    removeFolder.disabled = Boolean(blockedPath);
+    folderActions.appendChild(removeFolder);
     folderRow.appendChild(folderActions);
     branch.appendChild(folderRow);
     if (!collapsed) {
@@ -953,7 +941,8 @@ async function downloadExplorerFile(entry) {
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
-    URL.revokeObjectURL(url);
+    // Let the browser finish reading the blob before revoking its object URL.
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (error) {
     setStatus(nodes.folderStatus, 'No se pudo descargar el archivo: ' + describeError(error), 'error');
   }
@@ -981,6 +970,56 @@ function removePath(path) {
   state.folderSelected = true;
   invalidatePrepared();
   recomputeDiff();
+}
+
+function directoryRemovalBlockers(rows) {
+  const blockers = new Map();
+  if (!state.parentRef) return blockers;
+  rows.forEach(function (entry) {
+    if (entry.status === 'removed') return;
+    const parent = state.parentMap.get(entry.path);
+    if (!parent || parent.kind === 'mod' || parent.kind === 'config') return;
+    let separator = entry.path.lastIndexOf('/');
+    while (separator > 0) {
+      const directoryPath = entry.path.slice(0, separator);
+      if (!blockers.has(directoryPath)) blockers.set(directoryPath, entry.path);
+      separator = entry.path.lastIndexOf('/', separator - 1);
+    }
+  });
+  return blockers;
+}
+
+function directoryRemovalBlockPath(path) {
+  return directoryRemovalBlockers(mergedExplorerRows()).get(path) || '';
+}
+
+async function removeDirectory(path) {
+  const blockedPath = directoryRemovalBlockPath(path);
+  if (blockedPath) {
+    setStatus(nodes.folderStatus, 'Esta rama no puede retirar el archivo heredado ' + blockedPath + '.', 'error');
+    return;
+  }
+
+  const prefix = path + '/';
+  for (const filePath of Array.from(state.selectedFiles.keys())) {
+    if (!filePath.startsWith(prefix)) continue;
+    state.selectedFiles.delete(filePath);
+  }
+  for (const filePath of state.parentMap.keys()) {
+    if (!filePath.startsWith(prefix)) continue;
+    if (state.parentRef) {
+      state.removedPaths.add(filePath);
+    } else {
+      state.removedPaths.delete(filePath);
+    }
+  }
+  for (const directoryPath of Array.from(state.createdDirs)) {
+    if (directoryPath === path || directoryPath.startsWith(prefix)) state.createdDirs.delete(directoryPath);
+  }
+  state.folderSelected = true;
+  invalidatePrepared();
+  await recomputeDiff();
+  setStatus(nodes.folderStatus, 'Carpeta «' + path + '» y todo su contenido se han quitado de esta rama.', 'success');
 }
 
 function restorePath(path) {
@@ -1944,7 +1983,8 @@ function downloadSigningRequest() {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  // Let the browser finish reading the blob before revoking its object URL.
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   setStatus(nodes.stageStatus, 'Archivo descargado. Complétalo con la herramienta de firma y selecciona el resultado.', 'success');
 }
 
@@ -2246,6 +2286,9 @@ function bindEvents() {
   nodes.folderFallback.addEventListener('change', function () {
     loadFallbackFiles(nodes.folderFallback.files);
     nodes.folderFallback.value = '';
+  });
+  nodes.folderFallback.addEventListener('cancel', function () {
+    setStatus(nodes.folderStatus, 'Importación cancelada; se conserva la selección anterior.');
   });
   nodes.loadSynthetic.addEventListener('click', loadSyntheticPack);
   qs('#explorer-search').addEventListener('input', renderExplorer);

@@ -1,23 +1,31 @@
 # Distribution service roadmap
 
 `agent/integration-current` is the service integration authority; `main` alone
-is deployable. As of 2026-09-28, integration is `4da2bb0` and `main` is
-`257b2e7`. The server now reports version `0.2.0` and has the authenticated
-native-HTTPS admin panel, signed profile API, LAN-restricted launcher reads,
-and schema-v2 signed per-setting rules. The published panel is being replaced
-with the refined `v16` profile workflow from the local preview; this branch
-also implements its authenticated official-game-version catalog endpoint. A
-separate local signer and a complete synthetic publication/client run remain
-required for end-to-end acceptance. The panel lets the operator point a
-profile's `stable` channel at a published revision from its history.
+is deployable. As of 2026-09-28, deployable `main` and the live service are at
+`ce2cf51` / Distribution `0.2.1`; `agent/integration-current` is at `d3fc360`.
+The authenticated native-HTTPS admin panel, signed profile API, LAN-restricted
+launcher reads, schema-v2 signed per-setting rule validation, refined `v16`
+profile workflow, and official Minecraft/NeoForge version catalog are present
+in the live build. The live version endpoint reports capability
+`signed-config-setting-rules-v1`; the top-level protocol schema remains 1, while
+individual manifests may use schema 2. The live profile catalog is currently
+empty, so an end-to-end signed publication and client application have not yet
+been demonstrated.
+
+The offline signer and its recovery/rotation tests are merged into
+`agent/integration-current` (PRs #27 and #28), but not yet into deployable
+`main`. The signer runs on the administrator PC; it is not required on the
+Linux service. Use a trusted checkout containing the signer while `main` has
+not yet been promoted. The panel lets the operator point a profile's `stable`
+channel at a published revision from its history.
 
 File schema policies are `enforced` and `default_once`. Manifest schema v2
-adds per-setting TOML, `.properties`, and `.txt` rules in the panel and API.
-The matching client merge is being validated on a launcher work branch; the
-server version on `main` has not yet been updated. The broader `user_owned`
-file policy and arbitrary structured formats remain out of scope. A complete
-synthetic signed publication and real client update against the deployed
-version are still required before marking this feature accepted.
+adds per-setting TOML, `.properties`, and `.txt` rules in the panel, API, and
+server validator; that validator is already in the live `0.2.1` build. The
+matching client transaction/merge is in Pandora PR #76. Its CI checks passed
+as of this roadmap revision, but the PR remains a draft pending a synthetic
+signed server publication and live client application. The broader
+`user_owned` file policy and arbitrary structured formats remain out of scope.
 
 The product is a private profile distribution service, not a public modpack
 catalog. The Linux service owns immutable global profiles/revisions and their
@@ -34,6 +42,9 @@ participates in the launch path.
   profile without uploading those private changes.
 - Store only signing public keys on the server. A separate local signer holds
   the private release key; neither the browser nor the service receives it.
+- Preserve all trusted public keys during signer rotation so old revisions
+  remain verifiable. A replacement PC creates its own new signer; Distribution
+  must never generate or retain release private keys.
 - The first end-to-end publication uses a small synthetic pack, not real player
   data. The browser selects a source folder and previews the proposed changes.
 - A revision records its parent pin and its own changes/removals. Profile
@@ -46,7 +57,7 @@ participates in the launch path.
 
 ### 1. Authenticated LAN administration
 
-Status: implemented and deployed as Distribution `0.2.0`.
+Status: implemented and deployed as Distribution `0.2.1`.
 
 Replace the current read-only badge/page with a useful admin shell and clear
 navigation for Overview, Global profiles, and Service settings. The overview
@@ -61,9 +72,10 @@ Do not add Caddy as a dependency and do not expose unauthenticated write APIs.
 
 ### 2. Global profile publication and test profile creation
 
-Status: signed publication API and schema-v2 config-rule validation are
-deployed. Refined `v16` editor and official version catalog are in this work
-branch; a complete synthetic-pack run remains required for acceptance.
+Status: signed publication API, schema-v2 config-rule validation, refined
+`v16` editor and official version catalog are deployed. The offline signer is
+merged to `agent/integration-current` but not yet `main`; no synthetic profile
+has been published to the live server yet.
 
 The service API and browser workflow create a global profile, select a local
 folder, inspect additions/changes/removals, and stage a new immutable revision.
@@ -72,10 +84,10 @@ and NeoForge selections against official release catalogs, and edits a compact
 branching file tree with drag-and-drop, folder creation, file editing and
 line-level config rules.
 Profile history also supports promoting a revision to `stable`, which the
-overview displays. Next, provide a separate local signer for the canonical
-revision request; the admin browser must never handle the private key. Then
-validate publication with a synthetic pack and verify the service rejects
-invalid signatures/hashes without exposing a partial revision.
+overview displays. The separate local signer must validate and sign canonical
+requests; the admin browser must never handle the private key. Validate
+publication with a synthetic pack and verify the service rejects invalid
+signatures/hashes without exposing a partial revision.
 
 Use the existing SQLite/CAS and signed-revision design. Preserve immutable
 history, pinned parent references, anti-rollback checks, path validation,
@@ -85,11 +97,11 @@ one mod, one config, one resource pack, and one removal.
 
 ### 3. Branch graph and effective profile resolution
 
-Status: core direct-global reconciliation is integrated in Pandora; option
-rule transaction support is in launcher PR #76 and awaiting CI and end-to-end
-validation. Global-to-global and global-to-local setting inheritance is
-represented in schema v2, but a signed synthetic publication and live client
-application still gate acceptance.
+Status: core direct-global reconciliation is integrated in Pandora. Option
+rule transaction support is in Pandora PR #76; its CI checks passed, and its
+remaining gate is a signed synthetic publication plus live client application.
+Global-to-global and global-to-local setting inheritance is represented in
+schema v2. Multi-key release verification is integrated in Pandora PR #77.
 
 Allow multiple child profiles per parent, with one pinned parent revision per
 child revision. Support global-to-global and global-to-local derivation on the
@@ -106,11 +118,12 @@ ambiguous selectors at publication time. Avoid format-agnostic text replacement.
 ### 4. Client protocol and operational hardening
 
 Public-profile discovery, immutable revision resolution, authenticated object
-downloads, protocol version, and capability reporting are integrated. Next,
-validate client connection/discovery against the LAN HTTPS deployment, then add
-backup/restore, retention, audit-safe publication diagnostics, and a
-loopback/LAN deployment smoke path. The service still stores only global
-profile data and never receives a client filesystem listing.
+downloads, protocol version, and capability reporting are integrated. The live
+LAN HTTPS endpoint is reachable, but the profile catalog is empty. Next, publish
+a synthetic root/child chain, validate client connection and reconciliation
+against it, then add backup/restore, retention, audit-safe publication
+diagnostics, and a loopback/LAN deployment smoke path. The service still stores
+only global profile data and never receives a client filesystem listing.
 
 ## Acceptance path
 
@@ -128,3 +141,11 @@ profile data and never receives a client filesystem listing.
 
 Menu and service diagnostics must make clear that the test profile is synthetic
 and distinguish publication, download, reconciliation, and repair operations.
+
+## Key recovery acceptance
+
+Generate a second signer on a replacement admin PC, add its public key to the
+server allowlist and Pandora's trusted signer set while retaining the original
+key, then publish the next revision of the same profile. Verify that the new
+revision is accepted, old revisions still verify, and an unknown signer is
+rejected. The server never receives either private key.
