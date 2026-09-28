@@ -45,6 +45,8 @@ curl http://127.0.0.1:8088/v1/meta/version
   global para el launcher en modo HTTPS autenticado.
 - `/v1/admin/...` — publicación e historial protegidos por sesión admin y
   CSRF en modo HTTPS.
+- `GET /admin/api/game-versions` — catálogo actualizado de versiones de
+  Minecraft de tipo release y NeoForge, protegido por sesión admin.
 
 La lista de capacidades de `/v1/meta/version` indica si los endpoints de
 perfiles están habilitados. La publicación valida firmas Ed25519, manifiestos
@@ -53,9 +55,11 @@ firma las solicitudes todavía está pendiente.
 
 ## Panel de administración en red local
 
-El panel permite preparar y publicar revisiones globales firmadas, consultar su
-historial y revisar métricas del CAS. El listener predeterminado permanece en
-loopback.
+El panel permite preparar revisiones globales firmadas, consultar su historial
+y revisar métricas del CAS. El formulario de perfiles usa IDs automáticos,
+selectores de versiones buscables y un explorador de archivos con arrastrar y
+soltar, creación de carpetas, edición de contenido y reglas de configuración
+por opción. El listener predeterminado permanece en loopback.
 
 El modo heredado `--admin-ui-lan` conserva acceso HTTP sin login únicamente para
 lectura en una LAN de confianza. Para la frontera administrativa segura usa

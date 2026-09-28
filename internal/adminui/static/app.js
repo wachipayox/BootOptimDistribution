@@ -1,5 +1,7 @@
 'use strict';
 
+const MAX_INHERITANCE_LEVELS = 8;
+
 const state = {
   overview: null,
   build: {},
@@ -7,15 +9,23 @@ const state = {
   recentRevisions: [],
   parentMap: new Map(),
   parentRef: null,
+  parentDepth: 0,
   parentManifest: null,
-  parentConfigSettings: new Map(),
-  parentConfigPermissions: { override_enforced: false, override_default_once: false },
+  folderSelected: false,
+  snapshotMode: false,
   selectedFiles: new Map(),
-  configRuleEdits: new Map(),
-  configTextCache: new Map(),
+  removedPaths: new Set(),
+  createdDirs: new Set(),
+  collapsedDirs: new Set(),
+  pendingReplacePath: '',
+  pendingFolderPath: '',
+  pendingNewFolderParent: '',
+  editorPath: '',
   pathProblems: [],
   diff: [],
   policies: new Map(),
+  parentConfigSettings: new Map(),
+  localConfigSettings: new Map(),
   modIds: new Map(),
   manifest: null,
   canonicalManifest: '',
@@ -24,7 +34,9 @@ const state = {
   staged: false,
   csrfToken: '',
   overviewSource: '',
-  apiErrors: []
+  apiErrors: [],
+  minecraftVersions: [],
+  neoForgeVersions: []
 };
 
 const nodes = {
@@ -37,6 +49,9 @@ const nodes = {
   parentRevision: document.querySelector('#parent-revision'),
   parentStatus: document.querySelector('#parent-status'),
   pickDirectory: document.querySelector('#pick-directory'),
+  addFiles: document.querySelector('#add-files'),
+  createFolder: document.querySelector('#create-folder'),
+  filePicker: document.querySelector('#file-picker'),
   folderFallback: document.querySelector('#folder-fallback'),
   loadSynthetic: document.querySelector('#load-synthetic'),
   folderStatus: document.querySelector('#folder-status'),
@@ -44,10 +59,7 @@ const nodes = {
   syntheticHint: document.querySelector('#synthetic-hint'),
   diffBody: document.querySelector('#diff-body'),
   diffWarning: document.querySelector('#diff-warning'),
-  configFileSelect: document.querySelector('#config-file-select'),
-  configSourcePreview: document.querySelector('#config-source-preview'),
-  configRuleList: document.querySelector('#config-rule-list'),
-  configEditorStatus: document.querySelector('#config-editor-status'),
+  diffContext: document.querySelector('#diff-context'),
   stageButton: document.querySelector('#stage-button'),
   stageStatus: document.querySelector('#stage-status'),
   stageProgress: document.querySelector('#stage-progress'),
@@ -598,10 +610,11 @@ function fallbackPath(file) {
   return parts.length > 1 ? parts.slice(1).join('/') : file.name;
 }
 
-async function scanRecords(records, label) {
+async function scanRecords(records, label, mode) {
+  const scanMode = mode || 'snapshot';
   const previousFiles = state.selectedFiles;
   const previousProblems = state.pathProblems;
-  const nextFiles = new Map();
+  const nextFiles = scanMode === 'overlay' ? new Map(previousFiles) : new Map();
   const problems = [];
   const seen = new Set();
 
@@ -622,16 +635,18 @@ async function scanRecords(records, label) {
       seen.add(path);
       const file = record.file;
       const digest = await hashFile(file);
-      nextFiles.set(path, {
-        path: path,
+      const targetPath = state.pendingReplacePath || path;
+      nextFiles.set(targetPath, {
+        path: targetPath,
         file: file,
         sha256: digest,
         size: Number(file.size) || 0,
         mediaType: typeof file.type === 'string' ? file.type : '',
-        kind: classifyPath(path)
+        kind: classifyPath(targetPath)
       });
-      if (classifyPath(path) === 'mod' && !state.modIds.has(path)) {
-        state.modIds.set(path, defaultModId(path));
+      state.removedPaths.delete(targetPath);
+      if (classifyPath(targetPath) === 'mod' && !state.modIds.has(targetPath)) {
+        state.modIds.set(targetPath, defaultModId(targetPath));
       }
       setStatus(nodes.folderStatus, 'Procesando ' + (index + 1) + ' de ' + records.length + ' archivos…');
     }
@@ -644,14 +659,22 @@ async function scanRecords(records, label) {
 
   state.selectedFiles = nextFiles;
   state.pathProblems = problems;
-  state.configRuleEdits.clear();
-  state.configTextCache.clear();
+  state.folderSelected = true;
+  state.snapshotMode = false;
+  if (scanMode === 'snapshot') {
+    state.removedPaths.clear();
+    state.createdDirs.clear();
+    state.parentMap.forEach(function (_, path) {
+      if (!nextFiles.has(path)) state.removedPaths.add(path);
+    });
+  }
+  state.pendingReplacePath = '';
   invalidatePrepared();
   await recomputeDiff();
   const total = Array.from(nextFiles.values()).reduce(function (sum, entry) { return sum + entry.size; }, 0);
   setStatus(
     nodes.folderStatus,
-    label + ': ' + nextFiles.size + ' archivos · ' + formatBytes(total) + (problems.length ? ' · ' + problems.length + ' rutas no compatibles' : ''),
+    label + ': ' + (scanMode === 'overlay' ? records.length + ' archivo(s) añadido(s) o reemplazado(s)' : nextFiles.size + ' archivos') + ' · ' + formatBytes(total) + (problems.length ? ' · ' + problems.length + ' rutas no compatibles' : ''),
     problems.length ? 'warning' : 'success'
   );
 }
@@ -685,11 +708,342 @@ function loadFallbackFiles(fileList) {
   scanRecords(records, 'Selección alternativa');
 }
 
+function addFiles(fileList, replacePath, folderPath) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  if (replacePath && files.length !== 1) {
+    setStatus(nodes.folderStatus, 'Para reemplazar un archivo, selecciona solo un archivo.', 'warning');
+    return;
+  }
+  state.pendingReplacePath = replacePath || '';
+  const prefix = replacePath ? '' : (folderPath === undefined ? state.pendingFolderPath : folderPath);
+  const records = files.map(function (file) {
+    const relative = fallbackPath(file);
+    return { path: replacePath || (prefix ? prefix + '/' + relative : relative), file: file };
+  });
+  state.pendingFolderPath = '';
+  scanRecords(records, replacePath ? 'Archivo reemplazado' : 'Archivos añadidos', 'overlay');
+}
+
+function droppedEntryRecords(entry, prefix) {
+  return new Promise(function (resolve, reject) {
+    if (!entry) return resolve([]);
+    const path = prefix ? prefix + '/' + entry.name : entry.name;
+    if (entry.isFile) {
+      entry.file(function (file) { resolve([{ path: path, file: file }]); }, reject);
+      return;
+    }
+    if (!entry.isDirectory) return resolve([]);
+    const reader = entry.createReader();
+    const all = [];
+    function readBatch() {
+      reader.readEntries(async function (batch) {
+        if (!batch.length) return resolve(all);
+        try {
+          for (const child of batch) all.push.apply(all, await droppedEntryRecords(child, path));
+          readBatch();
+        } catch (error) { reject(error); }
+      }, reject);
+    }
+    readBatch();
+  });
+}
+
+async function handleExplorerDrop(event) {
+  const transfer = event.dataTransfer;
+  const folderRow = event.target && event.target.closest('[data-folder-path]');
+  const folderPrefix = folderRow ? folderRow.dataset.folderPath : '';
+  const items = Array.from(transfer && transfer.items || []);
+  const entries = items.map(function (item) { return item.webkitGetAsEntry && item.webkitGetAsEntry(); }).filter(Boolean);
+  if (entries.length) {
+    const records = [];
+    try {
+      for (const entry of entries) {
+        const found = await droppedEntryRecords(entry, '');
+        found.forEach(function (record) {
+          records.push({ path: folderPrefix ? folderPrefix + '/' + record.path : record.path, file: record.file });
+        });
+      }
+      if (records.length) scanRecords(records, 'Archivos soltados', 'overlay');
+    } catch (error) {
+      setStatus(nodes.folderStatus, 'No se pudieron leer los archivos soltados: ' + describeError(error), 'error');
+    }
+    return;
+  }
+  addFiles(transfer && transfer.files, '', folderPrefix);
+}
+
+function mergedExplorerRows() {
+  const rows = new Map();
+  state.parentMap.forEach(function (entry, path) {
+    rows.set(path, { path: path, parent: entry, local: null, status: 'inherited' });
+  });
+  state.selectedFiles.forEach(function (entry, path) {
+    const parent = state.parentMap.get(path) || null;
+    const status = !parent ? 'added' : (objectDigest(parent) === entry.sha256 ? 'inherited' : 'changed');
+    rows.set(path, { path: path, parent: parent, local: entry, status: status });
+  });
+  state.removedPaths.forEach(function (path) {
+    const parent = state.parentMap.get(path);
+    if (parent) rows.set(path, { path: path, parent: parent, local: null, status: 'removed' });
+  });
+  if (state.snapshotMode) {
+    state.parentMap.forEach(function (entry, path) {
+      if (!state.selectedFiles.has(path) && !state.removedPaths.has(path)) rows.set(path, { path: path, parent: entry, local: null, status: 'removed' });
+    });
+  }
+  return Array.from(rows.values()).sort(function (a, b) { return a.path.localeCompare(b.path); });
+}
+
+function renderExplorer() {
+  const rootLabel = qs('#explorer-root-label');
+  const count = qs('#explorer-count');
+  const empty = qs('#explorer-empty');
+  const tree = qs('#explorer-tree');
+  if (!rootLabel || !tree) return;
+  const hasBase = Boolean(state.parentRef);
+  rootLabel.textContent = hasBase ? 'Rama de ' + state.parentRef.profile_id + ' / ' + state.parentRef.revision_id : 'Nuevo perfil · vacío';
+  const rows = mergedExplorerRows();
+  const query = (qs('#explorer-search').value || '').trim().toLocaleLowerCase();
+  const filtered = rows.filter(function (row) { return row.path.toLocaleLowerCase().includes(query); });
+  count.textContent = rows.length + (rows.length === 1 ? ' archivo' : ' archivos');
+  empty.hidden = filtered.length > 0;
+  empty.textContent = query ? 'No hay archivos que coincidan con el filtro.' : (hasBase ? 'El perfil base está vacío.' : 'Arrastra archivos aquí o pulsa «Añadir archivos».');
+  tree.replaceChildren();
+  const root = { name: '', path: '', dirs: new Map(), files: [] };
+  function ensureDirectory(path) {
+    let current = root;
+    let currentPath = '';
+    path.split('/').filter(Boolean).forEach(function (part) {
+      currentPath = currentPath ? currentPath + '/' + part : part;
+      if (!current.dirs.has(part)) current.dirs.set(part, { name: part, path: currentPath, dirs: new Map(), files: [] });
+      current = current.dirs.get(part);
+    });
+    return current;
+  }
+  state.createdDirs.forEach(function (path) {
+    if (!query || path.toLocaleLowerCase().includes(query) || filtered.some(function (entry) { return entry.path.startsWith(path + '/'); })) ensureDirectory(path);
+  });
+  filtered.forEach(function (entry) {
+    const parts = entry.path.split('/');
+    const fileName = parts.pop();
+    const parent = parts.length ? ensureDirectory(parts.join('/')) : root;
+    parent.files.push({ ...entry, fileName: fileName });
+  });
+
+  function smallAction(parent, title, symbol, handler, tone) {
+    const button = make('button', 'tree-action' + (tone ? ' tree-action-' + tone : ''), symbol);
+    button.type = 'button';
+    button.title = title;
+    button.setAttribute('aria-label', title + (parent.path ? ' en ' + parent.path : ''));
+    button.addEventListener('click', handler);
+    return button;
+  }
+
+  function renderFile(entry, host) {
+    const row = make('div', 'explorer-row explorer-' + entry.status);
+    row.setAttribute('role', 'listitem');
+    const identity = make('div', 'explorer-file');
+    identity.appendChild(make('span', 'explorer-file-icon', entry.path.startsWith('mods/') ? '◆' : '▤'));
+    const path = make('code', 'explorer-path', entry.fileName);
+    path.title = entry.path;
+    identity.append(path, make('span', 'explorer-file-meta', kindLabel((entry.local || entry.parent || {}).kind) + ' · ' + formatBytes(entry.local ? entry.local.size : Number((entry.parent && entry.parent.object && entry.parent.object.size) || 0))));
+    const stateLabel = entry.status === 'inherited' ? 'Heredado' : entry.status === 'added' ? 'Añadido' : entry.status === 'changed' ? 'Modificado' : 'Excluido';
+    const actions = make('div', 'explorer-actions');
+    actions.appendChild(make('span', 'change-badge change-' + (entry.status === 'inherited' ? 'unchanged' : entry.status), stateLabel));
+    if (entry.status === 'removed') {
+      actions.appendChild(smallAction(entry, 'Restaurar archivo', '↶', function () { restorePath(entry.path); }));
+    } else {
+      actions.appendChild(smallAction(entry, 'Descargar archivo', '↓', function () { downloadExplorerFile(entry); }));
+      actions.appendChild(smallAction(entry, 'Reemplazar archivo', '↻', function () { state.pendingReplacePath = entry.path; state.pendingFolderPath = ''; nodes.filePicker.click(); }));
+      if (entry.local && entry.local.file && isEditableText(entry.path, entry.local.mediaType)) {
+        actions.appendChild(smallAction(entry, isConfigRuleFile(entry.path, entry.local.kind) ? 'Editar archivo y reglas' : 'Editar archivo de texto', '✎', function () { editLocalFile(entry.path); }));
+      } else if (entry.parent && isEditableText(entry.path, (entry.parent.object || {}).media_type)) {
+        actions.appendChild(smallAction(entry, isConfigRuleFile(entry.path, entry.parent.kind) ? 'Editar archivo y reglas' : 'Editar archivo de texto', '✎', function () { editInheritedFile(entry.path, entry.parent); }));
+      }
+      const canRemove = !hasBase || (entry.parent && (entry.parent.kind === 'mod' || entry.parent.kind === 'config')) || entry.local;
+      const remove = smallAction(entry, canRemove ? 'Quitar de esta rama' : 'No se puede quitar este tipo de archivo', '×', function () { removePath(entry.path); }, 'danger');
+      remove.disabled = !canRemove;
+      actions.appendChild(remove);
+    }
+    row.append(identity, actions);
+    host.appendChild(row);
+  }
+
+  function renderDirectory(directory, host) {
+    const branch = make('div', 'tree-branch');
+    branch.dataset.folderPath = directory.path;
+    const folderRow = make('div', 'tree-folder-row');
+    folderRow.dataset.folderPath = directory.path;
+    const collapsed = !query && state.collapsedDirs.has(directory.path);
+    const toggle = make('button', 'tree-folder-toggle', collapsed ? '▸' : '▾');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+    toggle.setAttribute('aria-label', (collapsed ? 'Expandir ' : 'Contraer ') + directory.path);
+    toggle.addEventListener('click', function () {
+      if (state.collapsedDirs.has(directory.path)) state.collapsedDirs.delete(directory.path);
+      else state.collapsedDirs.add(directory.path);
+      renderExplorer();
+    });
+    folderRow.append(toggle, make('span', 'tree-folder-icon', '▰'), make('strong', 'tree-folder-name', directory.name));
+    const folderActions = make('div', 'tree-folder-actions');
+    folderActions.appendChild(smallAction(directory, 'Añadir archivos a esta carpeta', '+', function () {
+      state.pendingReplacePath = '';
+      state.pendingFolderPath = directory.path;
+      nodes.filePicker.click();
+    }));
+    folderActions.appendChild(smallAction(directory, 'Crear subcarpeta', '▱+', function () { openCreateFolder(directory.path); }));
+    folderRow.appendChild(folderActions);
+    branch.appendChild(folderRow);
+    if (!collapsed) {
+      const children = make('div', 'tree-children');
+      Array.from(directory.dirs.values()).sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (child) { renderDirectory(child, children); });
+      directory.files.sort(function (a, b) { return a.fileName.localeCompare(b.fileName); }).forEach(function (entry) { renderFile(entry, children); });
+      branch.appendChild(children);
+    }
+    host.appendChild(branch);
+  }
+
+  Array.from(root.dirs.values()).sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (directory) { renderDirectory(directory, tree); });
+  root.files.sort(function (a, b) { return a.fileName.localeCompare(b.fileName); }).forEach(function (entry) { renderFile(entry, tree); });
+}
+
+function openCreateFolder(parentPath) {
+  state.pendingNewFolderParent = parentPath || '';
+  qs('#create-folder-parent').textContent = parentPath ? 'Dentro de ' + parentPath : 'En la raíz del perfil.';
+  qs('#create-folder-name').value = '';
+  qs('#create-folder-dialog').showModal();
+  qs('#create-folder-name').focus();
+}
+
+function createFolderFromDialog() {
+  const name = qs('#create-folder-name').value.trim();
+  if (!name || name.includes('/') || name.includes('\\') || name === '.' || name === '..') {
+    setStatus(nodes.folderStatus, 'Escribe un nombre de carpeta válido, sin separadores.', 'error');
+    return;
+  }
+  const path = state.pendingNewFolderParent ? state.pendingNewFolderParent + '/' + name : name;
+  if (!validatePath(path + '/entry')) {
+    setStatus(nodes.folderStatus, 'La ruta de la carpeta no es válida.', 'error');
+    return;
+  }
+  state.createdDirs.add(path);
+  state.collapsedDirs.delete(path);
+  qs('#create-folder-dialog').close('save');
+  renderExplorer();
+  setStatus(nodes.folderStatus, 'Carpeta creada. Añade archivos para incluirla en la publicación.', 'success');
+}
+
+async function downloadExplorerFile(entry) {
+  try {
+    let blob;
+    if (entry.local && entry.local.file) {
+      blob = entry.local.file;
+    } else {
+      const digest = objectDigest(entry.parent);
+      if (!digest) throw new Error('No hay una huella publicada para descargar este archivo.');
+      const response = await fetch('/v1/objects/sha256/' + encodeURIComponent(digest), { credentials: 'same-origin' });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      blob = await response.blob();
+    }
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = entry.path.split('/').pop();
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    setStatus(nodes.folderStatus, 'No se pudo descargar el archivo: ' + describeError(error), 'error');
+  }
+}
+
+function isEditableText(path, mediaType) {
+  return /\.(txt|json|toml|cfg|ini|properties|yml|yaml|xml|md|mcmeta|conf|lang)$/i.test(path) || /^(text\/|application\/(json|xml|toml))/i.test(mediaType || '');
+}
+
+function configRuleFormat(path, kind) {
+  if (kind !== 'config') return '';
+  if (/\.toml$/i.test(path)) return 'toml';
+  if (/\.properties$/i.test(path)) return 'properties';
+  if (/\.txt$/i.test(path)) return 'text_lines';
+  return '';
+}
+function isConfigRuleFile(path, kind) { return Boolean(configRuleFormat(path, kind)); }
+
+function removePath(path) {
+  const parent = state.parentMap.get(path);
+  if (state.parentRef && parent && parent.kind !== 'mod' && parent.kind !== 'config') return;
+  state.selectedFiles.delete(path);
+  if (state.parentRef && parent) state.removedPaths.add(path);
+  else state.removedPaths.delete(path);
+  state.folderSelected = true;
+  invalidatePrepared();
+  recomputeDiff();
+}
+
+function restorePath(path) {
+  state.removedPaths.delete(path);
+  invalidatePrepared();
+  recomputeDiff();
+}
+
+function editLocalFile(path) {
+  const entry = state.selectedFiles.get(path);
+  if (!entry || !entry.file) return;
+  entry.file.text().then(function (content) { showFileEditor(path, content); }).catch(function (error) {
+    setStatus(nodes.folderStatus, 'No se pudo abrir el archivo: ' + describeError(error), 'error');
+  });
+}
+
+async function editInheritedFile(path, entry) {
+  const digest = objectDigest(entry);
+  if (!digest) return;
+  try {
+    const response = await fetch('/v1/objects/sha256/' + encodeURIComponent(digest), { credentials: 'same-origin' });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const bytes = await response.arrayBuffer();
+    if (bytes.byteLength > 1024 * 1024) throw new Error('El editor integrado admite archivos de hasta 1 MiB. Descárgalo y reemplázalo desde tu equipo.');
+    const content = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    showFileEditor(path, content);
+  } catch (error) {
+    setStatus(nodes.folderStatus, 'No se pudo editar el archivo heredado: ' + describeError(error), 'error');
+  }
+}
+
+function showFileEditor(path, content) {
+  state.editorPath = path;
+  const format = configRuleFormat(path, (state.parentMap.get(path) || {}).kind || (state.selectedFiles.get(path) || {}).kind);
+  qs('#file-editor-title').textContent = format ? 'Editar archivo de configuración' : 'Editar archivo';
+  qs('#file-editor-path').textContent = path;
+  qs('#file-editor-content').value = content;
+  qs('#toml-rule-editor').hidden = !format;
+  qs('#file-editor').classList.toggle('config-editing', Boolean(format));
+  if (format) renderConfigRuleEditor();
+  qs('#file-editor').showModal();
+}
+
+function saveEditedFile() {
+  const path = state.editorPath;
+  if (!path) return;
+  if (state.localConfigSettings.size) syncConfigRulesFromEditor();
+  const parent = state.parentMap.get(path);
+  const mediaType = (parent && parent.object && parent.object.media_type) || 'text/plain';
+  const file = new File([qs('#file-editor-content').value], path.split('/').pop(), { type: mediaType });
+  state.pendingReplacePath = path;
+  addFiles([file], path);
+  qs('#file-editor').close('save');
+  state.editorPath = '';
+}
+
 function syntheticRecords(variant) {
   if (variant === 'child') {
     return [
       { path: 'mods/bootoptim-synthetic.jar', file: new File(['synthetic-mod-v2'], 'bootoptim-synthetic.jar', { type: 'application/java-archive' }) },
       { path: 'config/bootoptim-synthetic.toml', file: new File(['enabled=true\nlevel=2\n'], 'bootoptim-synthetic.toml', { type: 'text/plain' }) },
+      { path: 'config/bootoptim-synthetic.properties', file: new File(['feature.enabled=false\nmenu.label=Child profile\n'], 'bootoptim-synthetic.properties', { type: 'text/plain' }) },
+      { path: 'config/bootoptim-synthetic.txt', file: new File(['Synthetic child profile\nKeep this line\n'], 'bootoptim-synthetic.txt', { type: 'text/plain' }) },
       { path: 'resourcepacks/bootoptim-synthetic/pack.mcmeta', file: new File(['{"pack":{"description":"synthetic v2","pack_format":1}}'], 'pack.mcmeta', { type: 'application/json' }) },
       { path: 'resourcepacks/bootoptim-synthetic/credits.txt', file: new File(['synthetic child fixture\n'], 'credits.txt', { type: 'text/plain' }) }
     ];
@@ -699,6 +1053,8 @@ function syntheticRecords(variant) {
     { path: 'mods/bootoptim-synthetic.jar', file: new File(['synthetic-mod-v1'], 'bootoptim-synthetic.jar', { type: 'application/java-archive' }) },
     { path: 'mods/remove-me.jar', file: new File(['synthetic-removal-target-v1'], 'remove-me.jar', { type: 'application/java-archive' }) },
     { path: 'config/bootoptim-synthetic.toml', file: new File(['enabled=true\nlevel=1\n'], 'bootoptim-synthetic.toml', { type: 'text/plain' }) },
+    { path: 'config/bootoptim-synthetic.properties', file: new File(['feature.enabled=true\nmenu.label=Root profile\n'], 'bootoptim-synthetic.properties', { type: 'text/plain' }) },
+    { path: 'config/bootoptim-synthetic.txt', file: new File(['Synthetic root profile\nKeep this line\n'], 'bootoptim-synthetic.txt', { type: 'text/plain' }) },
     { path: 'resourcepacks/bootoptim-synthetic/pack.mcmeta', file: new File(['{"pack":{"description":"synthetic root","pack_format":1}}'], 'pack.mcmeta', { type: 'application/json' }) }
   ];
 }
@@ -719,7 +1075,7 @@ function objectDigest(entry) {
   return entry && entry.object && typeof entry.object.sha256 === 'string' ? entry.object.sha256 : '';
 }
 
-function applyManifest(map, manifest) {
+function applyManifest(map, manifest, configSettings) {
   const removeMods = Array.isArray(manifest.remove_mods) ? manifest.remove_mods : [];
   removeMods.forEach(function (removal) {
     for (const pair of map.entries()) {
@@ -734,7 +1090,12 @@ function applyManifest(map, manifest) {
 
   const removeConfigs = Array.isArray(manifest.remove_configs) ? manifest.remove_configs : [];
   removeConfigs.forEach(function (removal) {
-    if (typeof removal.path === 'string') map.delete(removal.path);
+    if (typeof removal.path === 'string') {
+      map.delete(removal.path);
+      for (const id of configSettings.keys()) {
+        if (id.startsWith(removal.path + '\0')) configSettings.delete(id);
+      }
+    }
   });
 
   const mods = Array.isArray(manifest.mods) ? manifest.mods : [];
@@ -775,6 +1136,18 @@ function applyManifest(map, manifest) {
       });
     }
   });
+
+  (Array.isArray(manifest.config_settings) ? manifest.config_settings : []).forEach(function (rule) {
+    if (!rule || typeof rule.path !== 'string' || typeof rule.key !== 'string') return;
+    const id = rule.path + '\0' + rule.key;
+    configSettings.set(id, {
+      path: rule.path,
+      format: rule.format,
+      key: rule.key,
+      value: rule.value,
+      policy: rule.policy === 'enforced' ? 'enforced' : 'default_once'
+    });
+  });
 }
 
 function unwrapEnvelope(payload) {
@@ -802,7 +1175,7 @@ async function fetchRevision(profile, revision) {
 }
 
 async function resolveEffective(profile, revision, depth, seen) {
-  if (depth > 8) throw new Error('La herencia supera la profundidad máxima admitida por el contrato.');
+  if (depth > MAX_INHERITANCE_LEVELS) throw new Error('La cadena supera el límite fijo de 8 niveles heredados.');
   const key = profile + '\n' + revision;
   if (seen.has(key)) throw new Error('Se detectó un ciclo en la cadena de revisiones madre.');
   seen.add(key);
@@ -820,7 +1193,8 @@ async function resolveEffective(profile, revision, depth, seen) {
   }
 
   let map = new Map();
-  let settings = new Map();
+  let configSettings = new Map();
+  let inheritanceDepth = 0;
   if (manifest.base) {
     const base = manifest.base;
     const baseProfile = valueText(base.profile_id, '');
@@ -833,32 +1207,25 @@ async function resolveEffective(profile, revision, depth, seen) {
       throw new Error('La referencia madre fijada no coincide con el manifest resuelto.');
     }
     map = new Map(inherited.map);
-    settings = new Map(inherited.settings);
+    configSettings = new Map(inherited.configSettings);
+    inheritanceDepth = inherited.inheritanceDepth + 1;
   }
 
-  applyManifest(map, manifest);
-  const removedConfigPaths = new Set((manifest.remove_configs || []).map(function (entry) { return entry.path; }));
-  if (removedConfigPaths.size) {
-    settings.forEach(function (setting, identity) {
-      if (removedConfigPaths.has(setting.path)) settings.delete(identity);
-    });
-  }
-  (manifest.config_settings || []).forEach(function (setting) {
-    settings.set(setting.path + '\u0000' + setting.key, setting);
-  });
+  applyManifest(map, manifest, configSettings);
   seen.delete(key);
 
   const manifestProfile = manifest.profile && valueText(manifest.profile.id, profile);
   const manifestRevision = manifest.revision && valueText(manifest.revision.id, revision);
   return {
     map: map,
+    configSettings: configSettings,
     manifest: manifest,
+    inheritanceDepth: inheritanceDepth,
     ref: {
       profile_id: manifestProfile,
       revision_id: manifestRevision,
       manifest_sha256: computedDigest
     },
-    settings: settings,
     sequence: manifest.revision ? Number(manifest.revision.sequence) : null
   };
 }
@@ -866,12 +1233,12 @@ async function resolveEffective(profile, revision, depth, seen) {
 async function handleParentProfileChange() {
   invalidatePrepared();
   state.parentMap = new Map();
-  state.parentRef = null;
-  state.parentManifest = null;
   state.parentConfigSettings = new Map();
-  state.parentConfigPermissions = { override_enforced: false, override_default_once: false };
-  state.configRuleEdits.clear();
-  state.configTextCache.clear();
+  state.localConfigSettings.clear();
+  state.parentRef = null;
+  state.parentDepth = 0;
+  state.parentManifest = null;
+  state.removedPaths.clear();
 
   const id = nodes.parentProfile.value;
   nodes.parentRevision.disabled = !id;
@@ -880,8 +1247,11 @@ async function handleParentProfileChange() {
     option.value = '';
     option.textContent = 'Selecciona un perfil primero';
     nodes.parentRevision.replaceChildren(option);
-    setStatus(nodes.parentStatus, 'Perfil independiente: se publicará como una versión inicial.');
+    setStatus(nodes.parentStatus, 'Sin perfil base: este perfil empieza en su versión 1 y se mantiene independiente.');
     nodes.syntheticHint.textContent = 'Previsualiza el flujo con archivos de ejemplo antes de elegir una carpeta.';
+    setStatus(nodes.folderStatus, state.selectedFiles.size
+      ? 'Perfil independiente: ' + state.selectedFiles.size + ' archivo(s) propios.'
+      : 'Perfil vacío. Añade archivos o arrástralos aquí.');
     await recomputeDiff();
     return;
   }
@@ -894,17 +1264,26 @@ async function handleParentProfileChange() {
     placeholder.value = '';
     placeholder.textContent = 'Selecciona una versión';
     fragment.appendChild(placeholder);
-    revisions.forEach(function (revision) {
+    revisions.sort(function (a, b) { return (revisionSequence(b) || 0) - (revisionSequence(a) || 0); });
+    revisions.forEach(function (revision, index) {
       const idValue = revisionId(revision);
       if (!idValue) return;
       const option = document.createElement('option');
       option.value = idValue;
       const seq = revisionSequence(revision);
-      option.textContent = idValue + (seq === null ? '' : ' · versión ' + seq);
+      option.textContent = (index === 0 ? 'Más reciente · ' : '') + idValue + (seq === null ? '' : ' · versión ' + seq);
       fragment.appendChild(option);
     });
     nodes.parentRevision.replaceChildren(fragment);
-    setStatus(nodes.parentStatus, revisions.length ? 'Selecciona la versión base.' : 'Este perfil todavía no tiene versiones disponibles.', revisions.length ? '' : 'warning');
+    if (revisions.length) {
+      const latestID = revisionId(revisions[0]);
+      if (latestID) {
+        nodes.parentRevision.value = latestID;
+        await handleParentRevisionChange();
+        return;
+      }
+    }
+    setStatus(nodes.parentStatus, 'Este perfil todavía no tiene versiones disponibles.', 'warning');
   } catch (error) {
     const option = document.createElement('option');
     option.value = '';
@@ -919,12 +1298,12 @@ async function handleParentProfileChange() {
 async function handleParentRevisionChange() {
   invalidatePrepared();
   state.parentMap = new Map();
-  state.parentRef = null;
-  state.parentManifest = null;
   state.parentConfigSettings = new Map();
-  state.parentConfigPermissions = { override_enforced: false, override_default_once: false };
-  state.configRuleEdits.clear();
-  state.configTextCache.clear();
+  state.localConfigSettings.clear();
+  state.parentRef = null;
+  state.parentDepth = 0;
+  state.parentManifest = null;
+  state.removedPaths.clear();
 
   const profile = nodes.parentProfile.value;
   const revision = nodes.parentRevision.value;
@@ -938,20 +1317,22 @@ async function handleParentRevisionChange() {
   try {
     const resolved = await resolveEffective(profile, revision, 0, new Set());
     state.parentMap = resolved.map;
+    state.parentConfigSettings = resolved.configSettings;
     state.parentRef = resolved.ref;
+    state.parentDepth = resolved.inheritanceDepth;
     state.parentManifest = resolved.manifest;
-    state.parentConfigSettings = resolved.settings;
-    state.parentConfigPermissions = resolved.manifest.permissions && resolved.manifest.permissions.configs
-      ? resolved.manifest.permissions.configs
-      : { override_enforced: false, override_default_once: false };
-    if (Number.isFinite(resolved.sequence)) {
-      qs('#revision-sequence').value = String(Math.max(1, resolved.sequence + 1));
+    setStatus(nodes.folderStatus, resolved.map.size + (resolved.map.size === 1
+      ? ' archivo heredado listo para esta rama.'
+      : ' archivos heredados listos para esta rama.'));
+    const selectedOption = nodes.parentRevision.options[nodes.parentRevision.selectedIndex];
+    const isNewest = selectedOption && selectedOption.textContent.startsWith('Más reciente · ');
+    if (resolved.inheritanceDepth >= MAX_INHERITANCE_LEVELS) {
+      setStatus(nodes.parentStatus, 'No se puede crear otro perfil derivado: esta base ya tiene 8 niveles heredados. El máximo permitido es 8.', 'error');
+    } else {
+      setStatus(nodes.parentStatus, isNewest
+        ? 'Base: ' + resolved.ref.profile_id + ' / ' + resolved.ref.revision_id + '. La revisión queda fijada; el seguimiento automático de futuras versiones aún no está disponible.'
+        : 'Base histórica: ' + resolved.ref.profile_id + ' / ' + resolved.ref.revision_id + '. Esta publicación queda fijada a esa revisión y no heredará cambios posteriores.', 'warning');
     }
-    setStatus(
-      nodes.parentStatus,
-      'Versión base: ' + resolved.ref.profile_id + ' / ' + resolved.ref.revision_id,
-      'success'
-    );
     nodes.syntheticHint.textContent = state.parentMap.has('mods/bootoptim-synthetic.jar')
       ? 'El ejemplo mostrará archivos añadidos, modificados y eliminados respecto al perfil base.'
       : 'Para comparar ejemplos, el perfil base debe haberse creado con el botón «Cargar ejemplo».';
@@ -975,6 +1356,12 @@ function invalidatePrepared() {
 }
 
 async function recomputeDiff() {
+  if (!state.folderSelected) {
+    state.diff = [];
+    renderDiff();
+    return;
+  }
+
   const diff = [];
   state.pathProblems.forEach(function (problem) {
     diff.push({
@@ -1014,7 +1401,7 @@ async function recomputeDiff() {
   });
 
   state.parentMap.forEach(function (parent, path) {
-    if (state.selectedFiles.has(path)) return;
+    if (state.selectedFiles.has(path) || (!state.snapshotMode && !state.removedPaths.has(path))) return;
     if (parent.kind === 'mod' || parent.kind === 'config') {
       diff.push({
         status: 'removed',
@@ -1055,6 +1442,174 @@ function policyFor(entry) {
   return 'default_once';
 }
 
+function configRuleID(path, key) { return path + '\0' + key; }
+
+function stripTomlComment(line) {
+  let quote = '';
+  let escaped = false;
+  for (let index = 0; index < line.length; index++) {
+    const character = line[index];
+    if (quote === '"') {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') quote = '';
+    } else if (quote === "'") {
+      if (character === "'") quote = '';
+    } else if (character === '"' || character === "'") quote = character;
+    else if (character === '#') return line.slice(0, index);
+  }
+  return line;
+}
+
+function parseTomlEditableEntries(path, text) {
+  const entries = [];
+  let section = '';
+  text.split(/\r?\n/).forEach(function (line, index) {
+    const trimmed = line.trim();
+    const table = trimmed.match(/^\[([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)\]$/);
+    if (table) { section = table[1]; return; }
+    const assignment = stripTomlComment(line).match(/^\s*([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)\s*=\s*(.*?)\s*$/);
+    if (!assignment) return;
+    const raw = assignment[2].trim();
+    let value;
+    try {
+      if (/^(true|false)$/.test(raw)) value = raw === 'true';
+      else if (/^[+-]?(?:\d[\d_]*)(?:\.[\d_]+)?(?:[eE][+-]?\d+)?$/.test(raw)) value = Number(raw.replace(/_/g, ''));
+      else if (/^"(?:[^"\\]|\\.)*"$/.test(raw)) value = JSON.parse(raw);
+      else if (/^\[.*\]$/.test(raw)) {
+        const jsonish = raw.replace(/,\s*\]$/, ']').replace(/\s*,\s*/g, ',');
+        value = JSON.parse(jsonish);
+      } else if (/^'[^']*'$/.test(raw)) value = raw.slice(1, -1);
+      else return;
+    } catch (_) { return; }
+    if (value === null || (typeof value === 'number' && !Number.isFinite(value)) || (!Array.isArray(value) && !['string', 'number', 'boolean'].includes(typeof value)) ||
+      (Array.isArray(value) && !value.every(function (item) { return item !== null && ['string', 'number', 'boolean'].includes(typeof item); }))) return;
+    const key = section ? section + '.' + assignment[1] : assignment[1];
+    if (key.length <= 256) entries.push({ path: path, key: key, value: value, line: index + 1 });
+  });
+  return entries;
+}
+
+function unescapePropertiesValue(value) {
+  return value.replace(/\\(u[0-9a-fA-F]{4}|.)/g, function (_, escaped) {
+    if (escaped[0] === 'u' && escaped.length === 5) return String.fromCharCode(parseInt(escaped.slice(1), 16));
+    return ({ t: '\t', n: '\n', r: '\r', f: '\f' })[escaped] || escaped;
+  });
+}
+
+function parsePropertiesEntries(path, text) {
+  const values = new Map();
+  text.split(/\r?\n/).forEach(function (line, index) {
+    const indent = line.length - line.trimStart().length;
+    const content = line.slice(indent);
+    if (!content || content[0] === '#' || content[0] === '!') return;
+    let split = -1;
+    let escaped = false;
+    for (let i = 0; i < content.length; i++) {
+      const c = content[i];
+      if (escaped) { escaped = false; continue; }
+      if (c === '\\') { escaped = true; continue; }
+      if (c === '=' || c === ':' || /\s/.test(c)) { split = i; break; }
+    }
+    const key = (split < 0 ? content : content.slice(0, split)).trim();
+    if (!/^[A-Za-z0-9_.-]{1,256}$/.test(key)) return;
+    let valueStart = split < 0 ? content.length : split;
+    while (valueStart < content.length && /\s/.test(content[valueStart])) valueStart++;
+    if (content[valueStart] === '=' || content[valueStart] === ':') valueStart++;
+    while (valueStart < content.length && /\s/.test(content[valueStart])) valueStart++;
+    values.set(key, { path: path, key: key, format: 'properties', value: unescapePropertiesValue(content.slice(valueStart)), line: index + 1, label: key });
+  });
+  return Array.from(values.values());
+}
+
+function parseTextLineEntries(path, text) {
+  if (!text) return [];
+  const lines = text.split(/\r?\n/);
+  if (text.endsWith('\n')) lines.pop();
+  return lines.flatMap(function (line, index) {
+    return [{ path: path, key: 'line:' + (index + 1), format: 'text_lines', value: line, line: index + 1, label: 'Línea ' + (index + 1) + (line.trim() ? '' : ' · vacía') }];
+  });
+}
+
+function parseConfigRuleEntries(path, text, kind) {
+  const format = configRuleFormat(path, kind);
+  if (format === 'toml') return parseTomlEditableEntries(path, text).map(function (entry) { return { ...entry, format: 'toml', label: entry.key }; });
+  if (format === 'properties') return parsePropertiesEntries(path, text);
+  if (format === 'text_lines') return parseTextLineEntries(path, text);
+  return [];
+}
+
+function canOverrideConfigRule(id) {
+  if (!state.parentConfigSettings.has(id)) return true;
+  const permissions = state.parentManifest && state.parentManifest.permissions && state.parentManifest.permissions.configs;
+  const inherited = state.parentConfigSettings.get(id);
+  return Boolean(permissions && (inherited.policy === 'enforced' ? permissions.override_enforced : permissions.override_default_once));
+}
+
+function renderConfigRuleEditor() {
+  const path = state.editorPath;
+  const rows = qs('#toml-rule-rows');
+  const kind = (state.parentMap.get(path) || {}).kind || (state.selectedFiles.get(path) || {}).kind;
+  const format = configRuleFormat(path, kind);
+  const entries = parseConfigRuleEntries(path, qs('#file-editor-content').value, kind).filter(function (entry) {
+    if (entry.format !== 'text_lines' || entry.value.trim()) return true;
+    const id = configRuleID(path, entry.key);
+    return state.parentConfigSettings.has(id) || state.localConfigSettings.has(id);
+  });
+  const fragment = document.createDocumentFragment();
+  entries.forEach(function (entry) {
+    const id = configRuleID(path, entry.key);
+    const inherited = state.parentConfigSettings.get(id);
+    const local = state.localConfigSettings.get(id);
+    const canOverride = canOverrideConfigRule(id);
+    const row = make('div', 'config-rule-row');
+    const identity = make('div', 'config-rule-identity');
+    identity.append(make('code', '', entry.label || entry.key), make('span', 'config-rule-current', JSON.stringify(entry.value)));
+    const control = document.createElement('select');
+    control.setAttribute('aria-label', 'Regla de ' + entry.key);
+    const options = inherited
+      ? [['inherit', 'Heredada'], ['enforced', 'Obligatoria'], ['default_once', 'Valor inicial']]
+      : [['none', 'Sin regla'], ['enforced', 'Obligatoria'], ['default_once', 'Valor inicial']];
+    options.forEach(function (option) {
+      const item = document.createElement('option'); item.value = option[0]; item.textContent = option[1]; control.appendChild(item);
+    });
+    control.value = local ? local.policy : (inherited ? 'inherit' : 'none');
+    if (inherited && !canOverride) {
+      control.disabled = true;
+      control.title = 'La regla del perfil base no permite cambiarse en esta rama.';
+    }
+    control.addEventListener('change', function () {
+      if (control.value === 'inherit' || control.value === 'none') state.localConfigSettings.delete(id);
+      else state.localConfigSettings.set(id, { path: path, format: entry.format, key: entry.key, value: entry.value, policy: control.value });
+      invalidatePrepared();
+    });
+    row.append(identity, control);
+    if (inherited) row.appendChild(make('span', 'config-rule-origin', canOverride ? (local ? 'Sustituye regla heredada' : 'Regla heredada') : 'Fijada por el perfil base'));
+    else row.appendChild(make('span', 'config-rule-origin', local ? 'Regla de esta rama' : ''));
+    fragment.appendChild(row);
+  });
+  rows.replaceChildren(fragment);
+  qs('#toml-rule-empty').hidden = entries.length > 0;
+  qs('#toml-rule-help').textContent = format === 'text_lines'
+    ? 'Cada línea se identifica por su número. Si insertas o quitas líneas antes de una regla, cambiará su identidad.'
+    : format === 'properties'
+      ? 'Las propiedades se reconocen por su clave. Se conservan comentarios y formato; las claves escapadas o duplicadas usan la última aparición reconocida.'
+      : 'Edita el TOML a la izquierda. En cada ajuste puedes conservar la regla heredada, imponer el valor o usarlo como valor inicial. Las demás líneas y comentarios se conservan.';
+}
+
+function syncConfigRulesFromEditor() {
+  const path = state.editorPath;
+  const kind = (state.parentMap.get(path) || {}).kind || (state.selectedFiles.get(path) || {}).kind;
+  const entries = new Map(parseConfigRuleEntries(path, qs('#file-editor-content').value, kind).map(function (entry) { return [entry.key, entry]; }));
+  Array.from(state.localConfigSettings.entries()).forEach(function (pair) {
+    const id = pair[0], rule = pair[1];
+    if (rule.path !== path) return;
+    const current = entries.get(rule.key);
+    if (!current) state.localConfigSettings.delete(id);
+    else rule.value = current.value;
+  });
+}
+
 function renderDiff() {
   const counts = { added: 0, changed: 0, removed: 0, unsupported: 0 };
   let stagingBytes = 0;
@@ -1066,10 +1621,14 @@ function renderDiff() {
   qs('#diff-added').textContent = String(counts.added);
   qs('#diff-changed').textContent = String(counts.changed);
   qs('#diff-removed').textContent = String(counts.removed);
-  qs('#diff-changed-card').hidden = !state.parentRef;
-  qs('#diff-removed-card').hidden = !state.parentRef;
   qs('#diff-bytes').textContent = formatBytes(stagingBytes);
-  renderConfigFileChoices();
+  const hasBase = Boolean(state.parentRef);
+  qs('#diff-changed-card').hidden = !hasBase;
+  qs('#diff-removed-card').hidden = !hasBase;
+  qs('#diff-stats').classList.toggle('independent', !hasBase);
+  nodes.diffContext.textContent = hasBase
+    ? 'Las diferencias afectan solo al perfil derivado: los cambios reemplazan archivos heredados y las eliminaciones los excluyen. El perfil base permanece intacto.'
+    : 'Perfil independiente: todos los archivos elegidos serán altas. No se cambiarán ni eliminarán archivos de otro perfil.';
 
   if (counts.unsupported) {
     nodes.diffWarning.hidden = false;
@@ -1081,10 +1640,14 @@ function renderDiff() {
 
   if (!state.diff.length) {
     const row = document.createElement('tr');
-    const cell = make('td', 'muted-cell', state.selectedFiles.size ? 'No hay cambios respecto a la versión base.' : 'Selecciona una carpeta para ver los cambios.');
+    const emptyMessage = !state.folderSelected
+      ? 'Selecciona una carpeta para ver los cambios.'
+      : (state.selectedFiles.size ? 'No hay cambios respecto al perfil base.' : 'La carpeta seleccionada está vacía; se excluirán los archivos heredados que permita quitar.');
+    const cell = make('td', 'muted-cell', emptyMessage);
     cell.colSpan = 5;
     row.appendChild(cell);
     nodes.diffBody.replaceChildren(row);
+    renderExplorer();
     return;
   }
 
@@ -1142,281 +1705,7 @@ function renderDiff() {
   });
 
   nodes.diffBody.replaceChildren(fragment);
-}
-
-function configFormatForPath(path) {
-  const lower = String(path || '').toLowerCase();
-  if (lower.endsWith('.toml')) return 'toml';
-  if (lower.endsWith('.properties')) return 'properties';
-  if (lower.endsWith('.txt')) return 'text_lines';
-  return '';
-}
-
-function configFileEntries() {
-  const files = new Map();
-  state.parentMap.forEach(function (entry, path) {
-    if (entry.kind === 'config' && configFormatForPath(path)) files.set(path, { entry: entry, selected: false });
-  });
-  state.selectedFiles.forEach(function (entry, path) {
-    if (entry.kind === 'config' && configFormatForPath(path)) files.set(path, { entry: entry, selected: true });
-  });
-  return Array.from(files.entries()).sort(function (left, right) { return left[0].localeCompare(right[0]); });
-}
-
-function renderConfigFileChoices() {
-  const files = configFileEntries();
-  const previous = nodes.configFileSelect.value;
-  const fragment = document.createDocumentFragment();
-  const placeholder = document.createElement('option');
-  placeholder.value = '';
-  placeholder.textContent = files.length ? 'Selecciona una configuración' : 'No hay archivos TOML, properties o TXT';
-  fragment.appendChild(placeholder);
-  files.forEach(function (pair) {
-    const option = document.createElement('option');
-    option.value = pair[0];
-    option.textContent = pair[0] + (pair[1].selected ? ' · selección' : ' · base');
-    fragment.appendChild(option);
-  });
-  nodes.configFileSelect.replaceChildren(fragment);
-  nodes.configFileSelect.disabled = files.length === 0;
-  if (files.some(function (pair) { return pair[0] === previous; })) nodes.configFileSelect.value = previous;
-  else if (files.length) nodes.configFileSelect.value = files[0][0];
-  renderSelectedConfigEditor();
-}
-
-async function configFileText(path) {
-  if (state.configTextCache.has(path)) return state.configTextCache.get(path);
-  const selected = state.selectedFiles.get(path);
-  if (selected) {
-    const text = await selected.file.text();
-    state.configTextCache.set(path, text);
-    return text;
-  }
-  const inherited = state.parentMap.get(path);
-  const digest = objectDigest(inherited);
-  if (!digest) throw new Error('El archivo base no tiene un objeto verificable.');
-  const response = await fetch('/v1/objects/sha256/' + encodeURIComponent(digest), {
-    credentials: 'same-origin',
-    cache: 'no-store'
-  });
-  if (!response.ok) throw new Error('HTTP ' + response.status + ' al cargar el objeto de configuración.');
-  const text = await response.text();
-  state.configTextCache.set(path, text);
-  return text;
-}
-
-function stripTomlComment(value) {
-  let quoted = false;
-  let escaped = false;
-  for (let index = 0; index < value.length; index += 1) {
-    const character = value[index];
-    if (escaped) { escaped = false; continue; }
-    if (quoted && character === '\\') { escaped = true; continue; }
-    if (character === '"') quoted = !quoted;
-    else if (character === '#' && !quoted) return value.slice(0, index).trim();
-  }
-  return value.trim();
-}
-
-function parseTomlSettingValue(raw) {
-  const value = stripTomlComment(raw);
-  if (!value) return { supported: false };
-  if (value.startsWith('"') || value.startsWith('[')) {
-    try { return { supported: true, value: JSON.parse(value) }; } catch (error) { return { supported: false }; }
-  }
-  if (value.startsWith("'" ) && value.endsWith("'") && value.length >= 2) {
-    return { supported: true, value: value.slice(1, -1) };
-  }
-  if (value === 'true' || value === 'false') return { supported: true, value: value === 'true' };
-  if (/^[+-]?(?:\d+(?:_\d+)*(?:\.\d+(?:_\d+)*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)) {
-    const number = Number(value.replace(/_/g, ''));
-    return Number.isFinite(number) ? { supported: true, value: number } : { supported: false };
-  }
-  return { supported: false };
-}
-
-function parseConfigOptions(path, source) {
-  const format = configFormatForPath(path);
-  const records = [];
-  if (format === 'toml') {
-    let section = '';
-    source.split(/\r?\n/).forEach(function (line) {
-      const trimmed = line.trim();
-      const table = /^\[([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)\]$/.exec(trimmed);
-      if (table) { section = table[1]; return; }
-      const assignment = /^([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)\s*=\s*(.*)$/.exec(trimmed);
-      if (!assignment) return;
-      const parsed = parseTomlSettingValue(assignment[2]);
-      records.push({ key: section ? section + '.' + assignment[1] : assignment[1], value: parsed.value, supported: parsed.supported });
-    });
-  } else if (format === 'properties') {
-    source.split(/\r?\n/).forEach(function (line) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('!')) return;
-      const separator = trimmed.search(/[=:\s]/);
-      const rawKey = separator < 0 ? trimmed : trimmed.slice(0, separator);
-      if (!/^[A-Za-z0-9_.-]{1,256}$/.test(rawKey)) return;
-      let valueStart = separator < 0 ? trimmed.length : separator;
-      while (/\s/.test(trimmed[valueStart] || '')) valueStart += 1;
-      if (trimmed[valueStart] === '=' || trimmed[valueStart] === ':') valueStart += 1;
-      while (/\s/.test(trimmed[valueStart] || '')) valueStart += 1;
-      records.push({ key: rawKey, value: trimmed.slice(valueStart), supported: true });
-    });
-  } else if (format === 'text_lines') {
-    let lines = source.split(/\r?\n/);
-    if (source.endsWith('\n')) lines = lines.slice(0, -1);
-    lines.slice(0, 1000).forEach(function (line, index) {
-      records.push({ key: 'line:' + (index + 1), value: line, supported: true });
-    });
-  }
-
-  const counts = new Map();
-  records.forEach(function (record) { counts.set(record.key, (counts.get(record.key) || 0) + 1); });
-  records.forEach(function (record) { record.ambiguous = counts.get(record.key) > 1; });
-  const seen = new Set(records.map(function (record) { return record.key; }));
-  state.parentConfigSettings.forEach(function (setting) {
-    if (setting.path === path && !seen.has(setting.key)) {
-      records.push({ key: setting.key, value: setting.value, supported: false, inheritedOnly: true, ambiguous: false });
-    }
-  });
-  return { format: format, records: records };
-}
-
-function settingIdentity(path, key) { return path + '\u0000' + key; }
-
-function makeTypedSettingInput(value) {
-  let input;
-  if (typeof value === 'boolean') {
-    input = document.createElement('input');
-    input.type = 'checkbox';
-    input.checked = value;
-  } else if (Array.isArray(value)) {
-    input = document.createElement('textarea');
-    input.rows = 2;
-    input.value = JSON.stringify(value);
-  } else {
-    input = document.createElement('input');
-    input.type = 'text';
-    input.value = value === undefined || value === null ? '' : String(value);
-  }
-  input.className = 'config-rule-value';
-  return input;
-}
-
-function readTypedSettingInput(input, prototype) {
-  if (typeof prototype === 'boolean') return input.checked;
-  if (typeof prototype === 'number') {
-    const number = Number(input.value);
-    if (!Number.isFinite(number)) throw new Error('Introduce un número válido.');
-    return number;
-  }
-  if (Array.isArray(prototype)) {
-    const value = JSON.parse(input.value);
-    if (!Array.isArray(value) || !value.every(function (item) { return ['string', 'number', 'boolean'].includes(typeof item); })) {
-      throw new Error('La lista TOML debe contener valores simples.');
-    }
-    return value;
-  }
-  return input.value;
-}
-
-function renderConfigRuleRecord(path, format, record) {
-  const identity = settingIdentity(path, record.key);
-  const parentRule = state.parentConfigSettings.get(identity);
-  const ownRule = state.configRuleEdits.get(identity);
-  const row = make('article', 'config-rule-row');
-  const key = make('code', 'config-rule-key', record.key);
-  const prototype = ownRule ? ownRule.value : (parentRule ? parentRule.value : record.value);
-  const valueInput = makeTypedSettingInput(prototype);
-  valueInput.setAttribute('aria-label', 'Valor de ' + record.key);
-  const policy = document.createElement('select');
-  policy.setAttribute('aria-label', 'Política de ' + record.key);
-  const choices = parentRule
-    ? [['inherit', 'Usar heredada']]
-    : [['none', 'Sin regla']];
-  const canOverrideParent = !parentRule || (parentRule.policy === 'enforced'
-    ? state.parentConfigPermissions.override_enforced
-    : state.parentConfigPermissions.override_default_once);
-  if (!parentRule || canOverrideParent) {
-    choices.push(['enforced', 'Obligatoria']);
-    choices.push(['default_once', 'Valor inicial']);
-  }
-  choices.forEach(function (choice) {
-    const option = document.createElement('option');
-    option.value = choice[0];
-    option.textContent = choice[1];
-    policy.appendChild(option);
-  });
-  policy.value = ownRule ? ownRule.policy : (parentRule ? 'inherit' : 'none');
-  valueInput.disabled = !record.supported || record.ambiguous || policy.value === 'inherit' || policy.value === 'none';
-  policy.disabled = !record.supported || record.ambiguous;
-  valueInput.addEventListener('change', function () {
-    if (policy.value === 'none' || policy.value === 'inherit') return;
-    try {
-      state.configRuleEdits.set(identity, {
-        path: path, format: format, key: record.key,
-        value: readTypedSettingInput(valueInput, prototype), policy: policy.value
-      });
-      setStatus(nodes.configEditorStatus, 'Regla preparada para ' + record.key + '.', 'success');
-      invalidatePrepared();
-    } catch (error) {
-      setStatus(nodes.configEditorStatus, describeError(error), 'error');
-    }
-  });
-  policy.addEventListener('change', function () {
-    if (policy.value === 'none' || policy.value === 'inherit') state.configRuleEdits.delete(identity);
-    else {
-      try {
-        state.configRuleEdits.set(identity, {
-          path: path, format: format, key: record.key,
-          value: readTypedSettingInput(valueInput, prototype), policy: policy.value
-        });
-      } catch (error) {
-        setStatus(nodes.configEditorStatus, describeError(error), 'error');
-        policy.value = ownRule ? ownRule.policy : (parentRule ? 'inherit' : 'none');
-        return;
-      }
-    }
-    invalidatePrepared();
-    renderSelectedConfigEditor();
-  });
-  row.append(key, valueInput, policy);
-  const sourceLabel = make('span', 'config-rule-source', 'En el archivo: ' + String(record.value === undefined ? '—' : record.value));
-  row.appendChild(sourceLabel);
-  if (record.ambiguous) row.appendChild(make('span', 'config-rule-lock', 'Clave duplicada; corrige el archivo para que la regla no sea ambigua.'));
-  else if (!record.supported) row.appendChild(make('span', 'config-rule-lock', 'Valor heredado o sintaxis no compatible con edición estructurada.'));
-  else if (parentRule && !canOverrideParent) row.appendChild(make('span', 'config-rule-lock', 'El perfil base no permite cambiar esta opción.'));
-  return row;
-}
-
-async function renderSelectedConfigEditor() {
-  const path = nodes.configFileSelect.value;
-  nodes.configRuleList.replaceChildren();
-  if (!path) {
-    nodes.configSourcePreview.textContent = 'Selecciona un archivo compatible.';
-    setStatus(nodes.configEditorStatus, '');
-    nodes.configRuleList.appendChild(make('p', 'muted-cell', 'Aún no hay opciones para editar.'));
-    return;
-  }
-  setStatus(nodes.configEditorStatus, 'Leyendo ' + path + '…');
-  try {
-    const source = await configFileText(path);
-    if (new TextEncoder().encode(source).length > 1024 * 1024) throw new Error('El editor admite configuraciones de hasta 1 MiB.');
-    nodes.configSourcePreview.textContent = source;
-    const parsed = parseConfigOptions(path, source);
-    if (!parsed.records.length) {
-      nodes.configRuleList.appendChild(make('p', 'muted-cell', 'No se encontraron opciones compatibles en este archivo.'));
-    } else {
-      const fragment = document.createDocumentFragment();
-      parsed.records.forEach(function (record) { fragment.appendChild(renderConfigRuleRecord(path, parsed.format, record)); });
-      nodes.configRuleList.replaceChildren(fragment);
-    }
-    setStatus(nodes.configEditorStatus, 'Las reglas solo afectan las opciones seleccionadas; las demás líneas se conservan.', 'success');
-  } catch (error) {
-    nodes.configSourcePreview.textContent = 'No se pudo mostrar el archivo.';
-    nodes.configRuleList.appendChild(make('p', 'config-rule-lock', describeError(error)));
-    setStatus(nodes.configEditorStatus, describeError(error), 'error');
-  }
+  renderExplorer();
 }
 
 function objectRef(local) {
@@ -1437,7 +1726,7 @@ function requiredValue(selector, label) {
 function buildManifest() {
   const unsupported = state.diff.filter(function (entry) { return entry.status === 'unsupported'; });
   if (unsupported.length) throw new Error('El diff contiene entradas no compatibles que deben corregirse antes de publicar.');
-  if (!state.selectedFiles.size && !state.diff.some(function (entry) { return entry.status === 'removed'; })) {
+  if (!state.selectedFiles.size && !state.diff.some(function (entry) { return entry.status === 'removed'; }) && !state.parentRef) {
     throw new Error('Selecciona un pack antes de preparar la publicación.');
   }
 
@@ -1446,20 +1735,25 @@ function buildManifest() {
   const revision = requiredValue('#revision-id', 'el ID de revisión');
   const minecraft = requiredValue('#minecraft-version', 'la versión de Minecraft');
   const neoforge = requiredValue('#neoforge-version', 'la versión de NeoForge');
+  if (!state.minecraftVersions.includes(minecraft)) throw new Error('Selecciona una versión de Minecraft del catálogo.');
+  if (!allowedNeoForgeVersions().includes(neoforge)) throw new Error('Selecciona una versión de NeoForge compatible con Minecraft ' + minecraft + '.');
   const sequence = Number(qs('#revision-sequence').value);
   if (!Number.isSafeInteger(sequence) || sequence < 1) throw new Error('La secuencia debe ser un entero positivo.');
 
   if (nodes.parentProfile.value && !state.parentRef) {
     throw new Error('La revisión madre seleccionada no está resuelta.');
   }
-
-  const maxDepth = Number(qs('#max-depth').value);
-  if (!Number.isSafeInteger(maxDepth) || maxDepth < 1 || maxDepth > 8) {
-    throw new Error('La profundidad máxima de herencia debe estar entre 1 y 8.');
+  if (state.parentRef && state.parentDepth >= MAX_INHERITANCE_LEVELS) {
+    throw new Error('No se puede crear este perfil: la cadena superaría el máximo de 8 niveles heredados.');
+  }
+  for (const rule of state.localConfigSettings.values()) {
+    if (!state.selectedFiles.has(rule.path) && (!state.parentMap.has(rule.path) || state.removedPaths.has(rule.path))) {
+      throw new Error('El ajuste ' + rule.key + ' apunta a un archivo de configuración que ya no forma parte de esta rama.');
+    }
   }
 
   const manifest = {
-    schema_version: state.configRuleEdits.size ? 2 : 1,
+    schema_version: state.localConfigSettings.size ? 2 : 1,
     revision: {
       id: revision,
       sequence: sequence,
@@ -1468,7 +1762,7 @@ function buildManifest() {
     profile: {
       id: profile,
       name: name,
-      official: qs('#profile-official').checked
+      official: true
     },
     game: {
       minecraft: minecraft,
@@ -1489,19 +1783,17 @@ function buildManifest() {
         override_enforced: qs('#config-enforced').checked,
         override_default_once: qs('#config-default').checked
       },
-      max_inheritance_depth: maxDepth
+      // Kept at the protocol's fixed cap for schema-v1 compatibility. The
+      // server ignores this legacy per-profile value when resolving chains.
+      max_inheritance_depth: 8
     },
     mods: [],
     remove_mods: [],
     configs: [],
     remove_configs: [],
+    config_settings: Array.from(state.localConfigSettings.values()),
     objects: []
   };
-  if (state.configRuleEdits.size) {
-    manifest.config_settings = Array.from(state.configRuleEdits.values()).sort(function (left, right) {
-      return left.path.localeCompare(right.path) || left.key.localeCompare(right.key);
-    });
-  }
 
   const notes = qs('#release-notes').value.trim();
   if (notes) manifest.revision.release_notes = notes;
@@ -1768,32 +2060,232 @@ function bindInvalidation() {
     '#minecraft-version',
     '#neoforge-version',
     '#release-notes',
-    '#profile-official',
     '#derive-local',
     '#mods-add',
     '#mods-remove',
     '#config-enforced',
-    '#config-default',
-    '#max-depth'
+    '#config-default'
   ];
   selectors.forEach(function (selector) {
     const node = qs(selector);
     node.addEventListener('input', invalidatePrepared);
     node.addEventListener('change', invalidatePrepared);
   });
+  qs('#profile-name').addEventListener('input', function () {
+    qs('#profile-id').value = generatedProfileID(qs('#profile-name').value);
+    invalidatePrepared();
+  });
+}
+
+function generatedProfileID(name) {
+  const base = String(name || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 44);
+  if (!base) return '';
+  const used = new Set(state.profiles.map(profileId));
+  if (!used.has(base)) return base;
+  let suffix = 2;
+  while (used.has(base + '-' + suffix)) suffix += 1;
+  return base + '-' + suffix;
+}
+
+function searchableCombobox(input, toggle, list, getOptions, onSelect) {
+  let activeIndex = -1;
+  let selectedValue = '';
+
+  function close() {
+    list.hidden = true;
+    input.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+    activeIndex = -1;
+  }
+
+  function render(query, open) {
+    const normalized = String(query || '').trim().toLowerCase();
+    const options = getOptions().filter(function (value) { return !normalized || value.toLowerCase().includes(normalized); });
+    list.replaceChildren();
+    activeIndex = -1;
+    if (!options.length) {
+      const empty = document.createElement('div');
+      empty.className = 'combobox-empty';
+      empty.textContent = normalized ? 'No hay coincidencias' : 'No hay versiones disponibles';
+      list.appendChild(empty);
+    } else {
+      options.forEach(function (value, index) {
+        const option = document.createElement('div');
+        option.id = list.id + '-option-' + index;
+        option.className = 'combobox-option';
+        option.setAttribute('role', 'option');
+        option.setAttribute('aria-selected', String(value === selectedValue));
+        option.textContent = value;
+        option.addEventListener('pointerdown', function (event) { event.preventDefault(); });
+        option.addEventListener('click', function () {
+          input.value = value;
+          selectedValue = value;
+          close();
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          onSelect(value);
+        });
+        list.appendChild(option);
+      });
+    }
+    if (open) {
+      list.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+      toggle.setAttribute('aria-expanded', 'true');
+    }
+  }
+
+  function setActive(index) {
+    const options = list.querySelectorAll('[role="option"]');
+    if (!options.length) return;
+    activeIndex = Math.max(0, Math.min(index, options.length - 1));
+    options.forEach(function (option, optionIndex) {
+      option.setAttribute('aria-selected', String(optionIndex === activeIndex));
+    });
+    input.setAttribute('aria-activedescendant', options[activeIndex].id);
+    options[activeIndex].scrollIntoView({ block: 'nearest' });
+  }
+
+  input.addEventListener('focus', function () { render(input.value === selectedValue ? '' : input.value, true); });
+  input.addEventListener('input', function () {
+    if (input.value !== selectedValue) selectedValue = '';
+    render(input.value, true);
+    onSelect(input.value);
+  });
+  input.addEventListener('keydown', function (event) {
+    const options = list.querySelectorAll('[role="option"]');
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (list.hidden) render('', true);
+      setActive(activeIndex + 1);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (list.hidden) render('', true);
+      setActive(activeIndex < 0 ? options.length - 1 : activeIndex - 1);
+    } else if (event.key === 'Enter' && !list.hidden && activeIndex >= 0) {
+      event.preventDefault();
+      const option = list.querySelectorAll('[role="option"]')[activeIndex];
+      if (option) option.click();
+    } else if (event.key === 'Escape') {
+      close();
+    }
+  });
+  toggle.addEventListener('click', function () {
+    if (list.hidden) {
+      input.focus();
+      render(input.value === selectedValue ? '' : input.value, true);
+    } else close();
+  });
+  document.addEventListener('pointerdown', function (event) {
+    if (!input.parentElement.contains(event.target)) close();
+  });
+
+  return {
+    refresh: function () { render(input.value, !list.hidden); },
+    close: close
+  };
+}
+
+function neoforgeFamily(minecraftVersion) {
+  if (!state.minecraftVersions.includes(minecraftVersion)) return '';
+  const parts = minecraftVersion.split('.');
+  if (parts[0] === '1') return (parts[1] || '') + '.' + (parts[2] || '0') + '.';
+  return (parts[0] || '') + '.' + (parts[1] || '0') + '.';
+}
+
+function allowedNeoForgeVersions() {
+  const prefix = neoforgeFamily(qs('#minecraft-version').value);
+  return prefix ? state.neoForgeVersions.filter(function (version) { return version.startsWith(prefix); }) : [];
+}
+
+function updateNeoForgeOptions() {
+  const neoForgeInput = qs('#neoforge-version');
+  if (neoForgeInput.value && !allowedNeoForgeVersions().includes(neoForgeInput.value)) {
+    neoForgeInput.value = '';
+  }
+  if (neoForgeCombobox) neoForgeCombobox.refresh();
+  invalidatePrepared();
+}
+
+let minecraftCombobox;
+let neoForgeCombobox;
+
+async function loadGameVersions() {
+  try {
+    const catalog = await request('/admin/api/game-versions');
+    state.minecraftVersions = Array.isArray(catalog.minecraft) ? catalog.minecraft : [];
+    state.neoForgeVersions = Array.isArray(catalog.neoforge) ? catalog.neoforge : [];
+    minecraftCombobox.refresh();
+    neoForgeCombobox.refresh();
+  } catch (error) {
+    setStatus(nodes.parentStatus, 'No se pudo cargar el catálogo de versiones oficiales: ' + describeError(error), 'error');
+  }
 }
 
 function bindEvents() {
   window.addEventListener('hashchange', route);
   nodes.parentProfile.addEventListener('change', handleParentProfileChange);
   nodes.parentRevision.addEventListener('change', handleParentRevisionChange);
-  nodes.configFileSelect.addEventListener('change', renderSelectedConfigEditor);
+  minecraftCombobox = searchableCombobox(
+    qs('#minecraft-version'), qs('#minecraft-combobox .combobox-toggle'), qs('#minecraft-options'),
+    function () { return state.minecraftVersions; }, updateNeoForgeOptions
+  );
+  neoForgeCombobox = searchableCombobox(
+    qs('#neoforge-version'), qs('#neoforge-combobox .combobox-toggle'), qs('#neoforge-options'),
+    allowedNeoForgeVersions, invalidatePrepared
+  );
+  qs('#minecraft-version').addEventListener('change', updateNeoForgeOptions);
   nodes.pickDirectory.addEventListener('click', chooseDirectory);
+  nodes.addFiles.addEventListener('click', function () { state.pendingReplacePath = ''; state.pendingFolderPath = ''; nodes.filePicker.click(); });
+  nodes.createFolder.addEventListener('click', function () { openCreateFolder(''); });
+  nodes.filePicker.addEventListener('change', function () {
+    addFiles(nodes.filePicker.files, state.pendingReplacePath, state.pendingFolderPath);
+    nodes.filePicker.value = '';
+  });
   nodes.folderFallback.addEventListener('change', function () {
     loadFallbackFiles(nodes.folderFallback.files);
     nodes.folderFallback.value = '';
   });
   nodes.loadSynthetic.addEventListener('click', loadSyntheticPack);
+  qs('#explorer-search').addEventListener('input', renderExplorer);
+  qs('#file-editor-content').addEventListener('input', function () {
+    if (state.editorPath && isConfigRuleFile(state.editorPath, (state.parentMap.get(state.editorPath) || {}).kind || (state.selectedFiles.get(state.editorPath) || {}).kind)) renderConfigRuleEditor();
+  });
+  const drop = qs('#explorer-drop');
+  ['dragenter', 'dragover'].forEach(function (type) {
+    drop.addEventListener(type, function (event) {
+      event.preventDefault();
+      drop.classList.add('is-dragover');
+      drop.querySelectorAll('.is-folder-drop-target').forEach(function (node) { node.classList.remove('is-folder-drop-target'); });
+      const target = event.target && event.target.closest('.tree-branch');
+      if (target) target.classList.add('is-folder-drop-target');
+    });
+  });
+  ['dragleave', 'drop'].forEach(function (type) {
+    drop.addEventListener(type, function (event) {
+      event.preventDefault();
+      if (type === 'drop' || !drop.contains(event.relatedTarget)) {
+        drop.classList.remove('is-dragover');
+        drop.querySelectorAll('.is-folder-drop-target').forEach(function (node) { node.classList.remove('is-folder-drop-target'); });
+      }
+    });
+  });
+  drop.addEventListener('drop', function (event) {
+    handleExplorerDrop(event);
+  });
+  qs('#file-editor-form').addEventListener('submit', function (event) {
+    if (event.submitter && event.submitter.id === 'file-editor-save') {
+      event.preventDefault();
+      saveEditedFile();
+    }
+  });
+  qs('#create-folder-form').addEventListener('submit', function (event) {
+    if (event.submitter && event.submitter.id === 'create-folder-save') {
+      event.preventDefault();
+      createFolderFromDialog();
+    }
+  });
   nodes.stageButton.addEventListener('click', prepareAndStage);
   nodes.downloadRequest.addEventListener('click', downloadSigningRequest);
   nodes.signedEnvelope.addEventListener('change', function () {
@@ -1823,6 +2315,8 @@ async function init() {
   }
   await loadOverview();
   await loadProfiles();
+  renderExplorer();
+  await loadGameVersions();
 }
 
 init();

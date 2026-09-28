@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Wachiland · Distribución</title>
-  <link rel="stylesheet" href="/admin/assets/style.css?v=3">
+  <link rel="stylesheet" href="/admin/assets/style.css?v=16">
 </head>
 <body>
   <a class="skip-link" href="#main">Ir al contenido</a>
@@ -84,7 +84,7 @@
         <div>
           <p class="eyebrow">PUBLICACIÓN</p>
           <h2 id="create-title">Nuevo perfil global</h2>
-          <p class="lede">Prepara una versión nueva del modpack para el launcher.</p>
+          <p class="lede">Crea un perfil global para Wachiland Launcher.</p>
         </div>
       </div>
 
@@ -95,42 +95,39 @@
               <span class="step-number">1</span>
               <div>
                 <h3 id="identity-title">Información del perfil</h3>
-                <p>Indica el nombre y la versión que vas a publicar.</p>
+                <p>El nombre se mostrará en el launcher. Los identificadores se generan automáticamente.</p>
               </div>
             </div>
 
             <div class="form-grid">
-              <label>
-                <span>Identificador</span>
-                <input id="profile-id" autocomplete="off" placeholder="perfil-global-ejemplo">
-              </label>
-              <label>
+              <label class="span-2">
                 <span>Nombre visible</span>
-                <input id="profile-name" autocomplete="off" placeholder="Perfil global de prueba">
+                <input id="profile-name" autocomplete="off" placeholder="Wachiland Elite">
               </label>
-              <label>
-                <span>Identificador de versión</span>
-                <input id="revision-id" autocomplete="off" placeholder="revision-001">
-              </label>
-              <label>
-                <span>Número de versión</span>
-                <input id="revision-sequence" type="number" min="1" step="1" value="1">
-              </label>
-              <label>
+              <input id="profile-id" type="hidden">
+              <input id="revision-id" type="hidden" value="v1">
+              <input id="revision-sequence" type="hidden" value="1">
+              <label class="version-picker">
                 <span>Minecraft</span>
-                <input id="minecraft-version" autocomplete="off" placeholder="Versión requerida">
+                <div class="version-combobox" id="minecraft-combobox">
+                  <input id="minecraft-version" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="minecraft-options" autocomplete="off" placeholder="Buscar o seleccionar…" aria-label="Buscar y seleccionar versión de Minecraft" required>
+                  <button class="combobox-toggle" type="button" aria-label="Mostrar versiones de Minecraft" aria-haspopup="listbox" aria-expanded="false" aria-controls="minecraft-options">▾</button>
+                  <div id="minecraft-options" class="combobox-options" role="listbox" aria-label="Versiones de Minecraft" hidden></div>
+                </div>
+                <small>Versiones oficiales de lanzamiento.</small>
               </label>
-              <label>
+              <label class="version-picker">
                 <span>NeoForge</span>
-                <input id="neoforge-version" autocomplete="off" placeholder="Versión requerida">
+                <div class="version-combobox" id="neoforge-combobox">
+                  <input id="neoforge-version" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="neoforge-options" autocomplete="off" placeholder="Buscar o seleccionar…" aria-label="Buscar y seleccionar versión de NeoForge" required>
+                  <button class="combobox-toggle" type="button" aria-label="Mostrar versiones de NeoForge" aria-haspopup="listbox" aria-expanded="false" aria-controls="neoforge-options">▾</button>
+                  <div id="neoforge-options" class="combobox-options" role="listbox" aria-label="Versiones de NeoForge" hidden></div>
+                </div>
+                <small>Versiones publicadas en NeoForged Maven.</small>
               </label>
               <label class="span-2">
-                <span>Notas de la versión <small>(opcional)</small></span>
-                <textarea id="release-notes" rows="2" maxlength="4000" placeholder="Qué cambia en esta revisión"></textarea>
-              </label>
-              <label class="check-row span-2">
-                <input id="profile-official" type="checkbox" checked>
-                <span>Marcar como perfil oficial</span>
+                <span>Descripción para el launcher <small>(opcional)</small></span>
+                <textarea id="release-notes" rows="2" maxlength="4000" placeholder="Qué incluye este perfil"></textarea>
               </label>
               <label>
                 <span>Basado en el perfil</span>
@@ -145,7 +142,7 @@
                 </select>
               </label>
             </div>
-            <p id="parent-status" class="inline-status" role="status">Perfil independiente: todos sus archivos se publicarán como versión inicial.</p>
+            <p id="parent-status" class="inline-status" role="status">Sin perfil base: este perfil comienza en su versión 1 y contiene sus propios archivos.</p>
           </section>
 
           <section class="panel step" aria-labelledby="folder-title">
@@ -153,89 +150,59 @@
               <span class="step-number">2</span>
               <div>
                 <h3 id="folder-title">Archivos del modpack</h3>
-                <p>Elige la carpeta del modpack. Revisa los cambios antes de subirlos.</p>
+                <p>Empieza vacío o continúa desde el perfil base. Añade, reemplaza y organiza archivos en esta rama.</p>
               </div>
             </div>
 
             <div class="action-row">
-              <button id="pick-directory" class="button button-primary" type="button">Elegir carpeta</button>
-              <label class="button button-secondary file-button" for="folder-fallback">Explorar archivos</label>
+              <button id="add-files" class="button button-primary" type="button">＋ Archivo</button>
+              <button id="create-folder" class="button button-secondary" type="button">＋ Carpeta</button>
+              <button id="pick-directory" class="button button-secondary" type="button" title="Importar una carpeta completa y sustituir la selección actual">Carpeta completa…</button>
+              <input id="file-picker" class="visually-hidden" type="file" multiple>
               <input id="folder-fallback" class="visually-hidden" type="file" multiple webkitdirectory>
-              <button id="load-synthetic" class="button button-secondary" type="button">Cargar ejemplo</button>
             </div>
             <div class="callout callout-info">
-              <strong>Ejemplo de prueba.</strong>
-              <span id="synthetic-hint">Muestra cómo aparecerán los archivos y cambios antes de publicar.</span>
-            </div>
-            <p id="folder-status" class="inline-status" role="status">Aún no se ha seleccionado ninguna carpeta.</p>
-            <p id="picker-support" class="microcopy"></p>
-          </section>
-
-          <section class="panel step" aria-labelledby="diff-title">
-            <div class="step-heading">
-              <span class="step-number">3</span>
-              <div>
-                <h3 id="diff-title">Cambios detectados</h3>
-                <p>Comprueba qué archivos se añadirán, cambiarán o eliminarán.</p>
+              <div><strong>Ejemplo de prueba.</strong>
+                <span id="synthetic-hint">Muestra cómo aparecerán los archivos y cambios antes de publicar.</span>
               </div>
+              <button id="load-synthetic" class="button button-quiet" type="button">Cargar ejemplo</button>
+            </div>
+            <p id="folder-status" class="inline-status" role="status">Perfil vacío. Añade archivos o arrástralos aquí.</p>
+            <p id="picker-support" class="microcopy"></p>
+
+            <div id="explorer-drop" class="explorer-drop" tabindex="0" role="region" aria-label="Explorador de archivos del perfil">
+              <div class="explorer-toolbar">
+                <div>
+                  <strong id="explorer-root-label">Archivos del perfil</strong>
+                  <span id="explorer-count" class="explorer-count">0 archivos</span>
+                </div>
+                <label class="explorer-search"><span class="visually-hidden">Filtrar archivos</span><input id="explorer-search" type="search" placeholder="Filtrar por nombre o ruta…"></label>
+              </div>
+              <p id="explorer-empty" class="explorer-empty">Arrastra archivos aquí o pulsa «Añadir archivos».</p>
+              <div id="explorer-tree" class="explorer-tree" role="list"></div>
+            <p class="explorer-help">Suelta archivos o carpetas para añadirlos o reemplazarlos. «Importar carpeta completa» sustituye la selección actual. En perfiles derivados, quitar mods y configs crea una exclusión solo para esta rama.</p>
             </div>
 
-            <div class="metric-grid compact">
+            <div class="step-subheading">
+              <h4 id="diff-title">Cambios detectados</h4>
+              <p>Revisa el contenido que formará el perfil.</p>
+            </div>
+            <p id="diff-context" class="microcopy">Perfil independiente: todos los archivos elegidos serán altas. No se cambiarán ni eliminarán archivos de otro perfil.</p>
+
+            <div id="diff-stats" class="metric-grid compact independent">
               <article class="metric-card"><span class="metric-label">Altas</span><strong id="diff-added">0</strong></article>
-              <article class="metric-card" id="diff-changed-card"><span class="metric-label">Cambios</span><strong id="diff-changed">0</strong></article>
-              <article class="metric-card" id="diff-removed-card"><span class="metric-label">Eliminaciones</span><strong id="diff-removed">0</strong></article>
+              <article id="diff-changed-card" class="metric-card" hidden><span class="metric-label">Cambios</span><strong id="diff-changed">0</strong></article>
+              <article id="diff-removed-card" class="metric-card" hidden><span class="metric-label">Eliminaciones</span><strong id="diff-removed">0</strong></article>
               <article class="metric-card"><span class="metric-label">Datos por subir</span><strong id="diff-bytes">0 B</strong></article>
             </div>
 
             <div id="diff-warning" class="alert alert-warning" hidden></div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Cambio</th>
-                    <th>Ruta</th>
-                    <th>Tipo</th>
-                    <th>Regla</th>
-                    <th>Tamaño</th>
-                  </tr>
-                </thead>
-                <tbody id="diff-body">
-                  <tr><td colspan="5" class="muted-cell">Selecciona una carpeta para ver los cambios.</td></tr>
-                </tbody>
-              </table>
-            </div>
-            <section class="config-editor" aria-labelledby="config-editor-title">
-              <div class="config-editor-heading">
-                <div>
-                  <h4 id="config-editor-title">Reglas por opción</h4>
-                  <p>Elige una opción de TOML, properties o texto. El resto del archivo conserva los valores del jugador.</p>
-                </div>
-                <label class="config-file-picker">
-                  <span>Archivo</span>
-                  <select id="config-file-select" disabled>
-                    <option value="">Selecciona una carpeta para ver configuraciones</option>
-                  </select>
-                </label>
-              </div>
-              <div class="config-editor-grid">
-                <div class="config-source-pane">
-                  <span class="pane-label">Vista del archivo</span>
-                  <pre id="config-source-preview" class="config-source-preview">Selecciona un archivo compatible.</pre>
-                </div>
-                <div class="config-rule-pane">
-                  <span class="pane-label">Opciones publicadas</span>
-                  <div id="config-rule-list" class="config-rule-list">
-                    <p class="muted-cell">Aún no hay opciones para editar.</p>
-                  </div>
-                </div>
-              </div>
-              <p id="config-editor-status" class="inline-status" role="status"></p>
-            </section>
+            <div class="visually-hidden" aria-hidden="true"><table><tbody id="diff-body"></tbody></table></div>
           </section>
 
           <section class="panel step" aria-labelledby="publish-title">
             <div class="step-heading">
-              <span class="step-number">4</span>
+              <span class="step-number">3</span>
               <div>
                 <h3 id="publish-title">Subir y publicar</h3>
                 <p>Sube los cambios y valida la firma de la nueva versión.</p>
@@ -283,17 +250,14 @@
 
         <aside class="workflow-side">
           <section class="panel sticky-card" aria-labelledby="advanced-title">
-            <h3 id="advanced-title">Opciones para instancias derivadas</h3>
-            <p class="microcopy">Controla cómo podrán modificarse las instancias derivadas de este perfil.</p>
-            <label class="check-row"><input id="derive-local" type="checkbox" checked><span>Permitir derivación local</span></label>
+            <h3 id="advanced-title">Permisos para perfiles derivados</h3>
+            <p class="microcopy">Controla qué puede cambiar un perfil local creado como hijo de este perfil global.</p>
+            <label class="check-row"><input id="derive-local" type="checkbox" checked><span>Permitir crear perfiles locales hijos</span></label>
             <label class="check-row"><input id="mods-add" type="checkbox" checked><span>Permitir añadir mods</span></label>
             <label class="check-row"><input id="mods-remove" type="checkbox" checked><span>Permitir retirar mods</span></label>
             <label class="check-row"><input id="config-enforced" type="checkbox"><span>Permitir cambiar opciones obligatorias</span></label>
             <label class="check-row"><input id="config-default" type="checkbox" checked><span>Permitir cambiar valores iniciales</span></label>
-              <label>
-                <span>Máximo de perfiles base</span>
-              <input id="max-depth" type="number" min="1" max="8" value="8">
-            </label>
+            <p class="microcopy">Las cadenas pueden tener hasta 8 niveles heredados. El servicio bloquea cualquier perfil que supere ese límite.</p>
           </section>
         </aside>
       </div>
@@ -352,6 +316,42 @@
     </form>
   </dialog>
 
-  <script src="/admin/assets/app.js?v=3" defer></script>
+  <dialog id="file-editor" class="file-editor" aria-labelledby="file-editor-title">
+    <form method="dialog" id="file-editor-form">
+      <h2 id="file-editor-title">Editar archivo</h2>
+      <p id="file-editor-path" class="microcopy"></p>
+      <div class="file-editor-workspace">
+        <div class="toml-source">
+          <label for="file-editor-content" class="config-source-label">Contenido del archivo</label>
+          <textarea id="file-editor-content" spellcheck="false" rows="18" aria-label="Contenido del archivo"></textarea>
+        </div>
+        <section id="toml-rule-editor" class="config-rule-editor" hidden aria-label="Reglas de configuración">
+          <div class="config-rule-heading"><strong>Reglas de esta rama</strong><span>Se guardan junto a este archivo y siguen la herencia.</span></div>
+          <div id="toml-rule-rows" class="config-rule-rows"></div>
+          <p id="toml-rule-empty" class="microcopy" hidden>No se han encontrado ajustes editables en este archivo.</p>
+          <p id="toml-rule-help" class="microcopy">Edita el archivo a la izquierda. En cada ajuste puedes conservar la regla heredada, imponer el valor o usarlo como valor inicial.</p>
+        </section>
+      </div>
+      <div class="dialog-actions">
+        <button class="button button-secondary" value="cancel">Cancelar</button>
+        <button id="file-editor-save" class="button button-primary" value="save">Guardar cambio</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="create-folder-dialog" class="compact-dialog" aria-labelledby="create-folder-title">
+    <form method="dialog" id="create-folder-form">
+      <h2 id="create-folder-title">Crear carpeta</h2>
+      <p id="create-folder-parent" class="microcopy">Carpeta en la raíz del perfil.</p>
+      <label><span>Nombre de la carpeta</span><input id="create-folder-name" autocomplete="off" placeholder="por ejemplo, config" required></label>
+      <p class="microcopy">Las carpetas vacías se muestran aquí; solo se publican cuando contienen archivos.</p>
+      <div class="dialog-actions">
+        <button class="button button-secondary" value="cancel">Cancelar</button>
+        <button id="create-folder-save" class="button button-primary" value="save">Crear carpeta</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/admin/assets/app.js?v=16" defer></script>
 </body>
 </html>

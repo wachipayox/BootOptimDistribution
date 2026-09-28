@@ -15,6 +15,7 @@ import (
 
 	"github.com/wachipayox/BootOptimDistribution/internal/adminauth"
 	"github.com/wachipayox/BootOptimDistribution/internal/adminui"
+	"github.com/wachipayox/BootOptimDistribution/internal/gameversions"
 	"github.com/wachipayox/BootOptimDistribution/internal/profileapi"
 	"github.com/wachipayox/BootOptimDistribution/internal/storage"
 )
@@ -38,6 +39,7 @@ type handlerConfig struct {
 	AdminUIModel   adminui.ReadModel
 	AdminAuth      *adminauth.Manager
 	ProfileAPI     http.Handler
+	GameVersions   http.Handler
 }
 
 func main() {
@@ -87,7 +89,9 @@ func main() {
 	var model adminui.ReadModel = adminui.EmptyReadModel{}
 	var store *storage.SQLiteStore
 	var profileHandler http.Handler
+	var gameVersionsHandler http.Handler
 	if adminUIEnabled {
+		gameVersionsHandler = gameversions.NewProvider(nil, "", "", 0)
 		cas, err := storage.OpenCAS(*dataDir, storage.DefaultMaxObjectBytes)
 		if err != nil {
 			log.Fatalf("open content store: %v", err)
@@ -122,6 +126,7 @@ func main() {
 		AdminUIModel:   model,
 		AdminAuth:      authManager,
 		ProfileAPI:     profileHandler,
+		GameVersions:   gameVersionsHandler,
 	}), *adminUIHTTPS)
 	if allowedNetwork != nil {
 		handler = restrictToCIDR(handler, allowedNetwork)
@@ -199,6 +204,13 @@ func newHandlerWithConfig(cfg handlerConfig) http.Handler {
 			mux.Handle("/admin/logout", adminauth.RequireAdmin(cfg.AdminAuth.RequireCSRF(cfg.AdminAuth.LogoutHandler())))
 			mux.Handle("/admin/api/session", adminauth.RequireAdmin(cfg.AdminAuth.SessionHandler()))
 			adminHandler = adminauth.RequireAdminPage("/admin/login", adminHandler)
+		}
+		if cfg.GameVersions != nil {
+			gameVersionsHandler := cfg.GameVersions
+			if cfg.AdminAuth != nil {
+				gameVersionsHandler = adminauth.RequireAdmin(gameVersionsHandler)
+			}
+			mux.Handle("/admin/api/game-versions", gameVersionsHandler)
 		}
 		mux.Handle("/admin/", adminHandler)
 	}
