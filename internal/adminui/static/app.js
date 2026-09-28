@@ -2375,6 +2375,7 @@ function bindEvents() {
 }
 
 async function init() {
+  qs('#revision-id').value = generatedRevisionID();
   setupCSRFHint();
   setupPickerSupport();
   bindEvents();
@@ -2391,6 +2392,16 @@ async function init() {
   await loadProfiles();
   renderExplorer();
   await loadGameVersions();
+}
+
+function generatedRevisionID() {
+  if (!window.crypto || typeof window.crypto.getRandomValues !== 'function') {
+    throw new Error('No se puede generar un identificador seguro para la revisión.');
+  }
+  const bytes = new Uint8Array(16);
+  window.crypto.getRandomValues(bytes);
+  const suffix = Array.from(bytes, function (byte) { return byte.toString(16).padStart(2, '0'); }).join('');
+  return 'rev_' + suffix;
 }
 
 init();
