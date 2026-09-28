@@ -58,6 +58,25 @@ capacidades activas. No contiene datos de jugadores ni secretos.
 
 ## Buscar e instalar una actualización
 
+### Desde el panel (recomendado)
+
+La primera ejecución de `update.sh --apply` en una instalación que ya tenga la
+unidad `bootoptim-distribution.service` instala automáticamente el ejecutor
+limitado. Si se necesita repetir esa configuración:
+
+```bash
+sudo /home/wachi/launcher_manager/scripts/install-admin-updater.sh
+```
+
+El instalador crea una unidad root oneshot y un socket Unix que sólo puede
+abrir la cuenta del servicio. También apunta `ExecStart` al ejecutable
+root-owned de `/usr/local/bin`, conservando los argumentos actuales. Después,
+en **Servicio → Actualización del servicio**, los botones permiten buscar una
+versión en `main` y, si existe, instalarla y reiniciar automáticamente. La web
+no acepta nombres de rama ni comandos configurables.
+
+### Comandos de recuperación
+
 El servidor consulta GitHub sólo cuando el administrador lo solicita:
 
 ```bash
@@ -65,8 +84,11 @@ sudo /opt/bootoptim-distribution/scripts/update.sh --check
 sudo /opt/bootoptim-distribution/scripts/update.sh --apply
 ```
 
-`--check` compara `.installed-commit` con `origin/main` y muestra ambas
-versiones. `--apply` descarga exclusivamente el tip de `main`, compila antes
+`--check` compara el marcador instalado con `origin/main` y muestra ambas
+versiones. Después de habilitar la actualización desde el panel, el marcador
+root-owned está en `/var/lib/bootoptim-distribution-updater/installed-commit`;
+antes de eso usa `.installed-commit` en el checkout. `--apply` descarga
+exclusivamente el tip de `main`, compila antes
 de sustituir el binario y conserva el binario previo como
 `bin/bootoptim-distribution.previous` y
 `/usr/local/bin/bootoptim-distribution.previous`.

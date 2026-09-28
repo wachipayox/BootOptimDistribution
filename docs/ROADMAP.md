@@ -1,8 +1,8 @@
 # Distribution service roadmap
 
 `agent/integration-current` is the service integration authority; `main` alone
-is deployable. As of 2026-09-28, the live service is Distribution `0.2.7`
-(`53cea53`); the current admin UI work targets `0.2.8`. The
+is deployable. As of 2026-09-28, the live service is Distribution `0.2.8`
+(`60f9036`); the current self-update work targets `0.2.9`. The
 authenticated native-HTTPS admin panel, signed profile API, LAN-restricted
 launcher reads, schema-v2 signed per-setting rule validation, refined profile
 workflow, and complete official Minecraft/NeoForge version catalog are live.
@@ -12,10 +12,19 @@ individual manifests may use schema 2. The first synthetic signing attempt
 found that profile IDs lacked the protocol-required `profile_` prefix; that
 generator fix is present in live `0.2.6`. Version `0.2.7` bumps the admin
 asset URL to v19 and adds revalidation headers, resolving stale browser assets.
-The next `0.2.8` correction gives generated mod and object entries their
-required `mod_` and `obj_` protocol prefixes and bumps the asset URL to v20.
-The live profile catalog remains empty until the corrected form publishes the
-synthetic root and child.
+Version `0.2.8` gives generated mod and object entries their required `mod_`
+and `obj_` protocol prefixes and bumps the asset URL to v20. The live profile
+catalog remains empty until the corrected form publishes the synthetic root
+and child.
+
+Planned for version `0.2.9`: an authenticated admin update check against the
+public tip of `main` and an action that invokes one fixed root-owned systemd
+updater, then restarts Distribution. A one-time installer creates the oneshot
+unit and a root-owned Unix socket limited to the service account. The web
+process cannot supply commands, branches, or arbitrary unit names. The updater
+builds a fresh checkout in a root-owned staging directory, remains restricted
+to `origin/main`, and retains the previous binary for recovery. The installer
+preserves service arguments while moving `ExecStart` to `/usr/local/bin`.
 
 The offline signer and its recovery/rotation tests are included in deployable
 `main`. The signer runs on the administrator PC; it is not required on the

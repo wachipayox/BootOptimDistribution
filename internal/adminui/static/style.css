@@ -304,6 +304,11 @@ main {
 }
 
 .panel { padding: 1.1rem; }
+.service-update-panel { margin-top: 1rem; }
+.service-update-actions { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: 1rem; }
+.service-update-status { min-height: 1.5rem; margin: .8rem 0 0; color: var(--muted); }
+.service-update-status[data-tone="success"] { color: var(--success); }
+.service-update-status[data-tone="error"] { color: var(--danger); }
 .metric-card { padding: 1rem; }
 .profile-card,
 .revision-card { padding: 1rem; }

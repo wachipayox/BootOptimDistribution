@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Wachiland · Distribución</title>
-  <link rel="stylesheet" href="/admin/assets/style.css?v=20">
+  <link rel="stylesheet" href="/admin/assets/style.css?v=22">
 </head>
 <body>
   <a class="skip-link" href="#main">Ir al contenido</a>
@@ -302,6 +302,16 @@
         </section>
       </div>
 
+      <section class="panel service-update-panel" aria-labelledby="service-update-title">
+        <h3 id="service-update-title">Actualización del servicio</h3>
+        <p class="microcopy">Consulta la versión de <code>main</code>. Al instalarla, el servidor se reiniciará automáticamente.</p>
+        <div class="service-update-actions">
+          <button id="check-service-update" class="button button-secondary" type="button">Buscar actualización</button>
+          <button id="apply-service-update" class="button button-primary" type="button" hidden>Actualizar y reiniciar</button>
+        </div>
+        <p id="service-update-status" class="service-update-status" role="status" aria-live="polite">Aún no se ha comprobado si hay una versión nueva.</p>
+      </section>
+
     </section>
   </main>
 
@@ -359,6 +369,6 @@
     </form>
   </dialog>
 
-  <script src="/admin/assets/app.js?v=20" defer></script>
+  <script src="/admin/assets/app.js?v=22" defer></script>
 </body>
 </html>
