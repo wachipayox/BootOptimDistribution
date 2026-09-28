@@ -521,7 +521,7 @@ function renderService() {
   qs('#service-revisions').textContent = valueText(storage.revision_count, '0');
   qs('#service-objects').textContent = valueText(storage.object_count, '0');
   qs('#service-bytes').textContent = formatBytes(storage.object_bytes);
-  qs('#service-picker').textContent = typeof window.showDirectoryPicker === 'function' ? 'Disponible' : 'No disponible; se usa la alternativa';
+  qs('#service-picker').textContent = 'webkitdirectory' in nodes.folderFallback ? 'Disponible' : 'No disponible';
   qs('#service-secure').textContent = window.isSecureContext ? 'Sí' : 'No';
   qs('#service-crypto').textContent = window.crypto && window.crypto.subtle ? 'Disponible' : 'No disponible';
 }
@@ -588,19 +588,6 @@ async function sha256Text(text) {
 
 async function hashFile(file) {
   return sha256Bytes(await file.arrayBuffer());
-}
-
-async function collectDirectory(handle, prefix, out) {
-  for await (const entryPair of handle.entries()) {
-    const name = entryPair[0];
-    const child = entryPair[1];
-    const path = prefix ? prefix + '/' + name : name;
-    if (child.kind === 'file') {
-      out.push({ path: path, file: await child.getFile() });
-    } else if (child.kind === 'directory') {
-      await collectDirectory(child, path, out);
-    }
-  }
 }
 
 function fallbackPath(file) {
@@ -680,32 +667,25 @@ async function scanRecords(records, label, mode) {
 }
 
 async function chooseDirectory() {
-  if (typeof window.showDirectoryPicker !== 'function') {
-    nodes.folderFallback.click();
+  if (!('webkitdirectory' in nodes.folderFallback)) {
+    setStatus(nodes.folderStatus, 'Este navegador no permite seleccionar carpetas. Usa «Elegir archivos» o arrastra el contenido aquí.', 'error');
     return;
   }
 
-  const previousMessage = nodes.folderStatus.textContent;
-  try {
-    const handle = await window.showDirectoryPicker({ mode: 'read' });
-    const records = [];
-    await collectDirectory(handle, '', records);
-    await scanRecords(records, 'Carpeta ' + valueText(handle.name, 'seleccionada'));
-  } catch (error) {
-    if (error && error.name === 'AbortError') {
-      setStatus(nodes.folderStatus, previousMessage || 'Selección cancelada; no se han perdido los archivos anteriores.');
-      return;
-    }
-    setStatus(nodes.folderStatus, 'No se pudo abrir la carpeta. Se conservan los archivos anteriores. ' + describeError(error), 'error');
-  }
+  nodes.folderFallback.value = '';
+  setStatus(nodes.folderStatus, 'Elige la carpeta raíz del modpack. Se importarán sus contenidos directamente en la raíz del perfil…');
+  nodes.folderFallback.click();
 }
 
 function loadFallbackFiles(fileList) {
   const records = Array.from(fileList || []).map(function (file) {
     return { path: fallbackPath(file), file: file };
   });
-  if (!records.length) return;
-  scanRecords(records, 'Selección alternativa');
+  if (!records.length) {
+    setStatus(nodes.folderStatus, 'No se seleccionó ninguna carpeta; se conserva la selección anterior.');
+    return;
+  }
+  scanRecords(records, 'Carpeta importada');
 }
 
 function addFiles(fileList, replacePath, folderPath) {
@@ -725,10 +705,10 @@ function addFiles(fileList, replacePath, folderPath) {
   scanRecords(records, replacePath ? 'Archivo reemplazado' : 'Archivos añadidos', 'overlay');
 }
 
-function droppedEntryRecords(entry, prefix) {
+function droppedEntryRecords(entry, prefix, omitName) {
   return new Promise(function (resolve, reject) {
     if (!entry) return resolve([]);
-    const path = prefix ? prefix + '/' + entry.name : entry.name;
+    const path = omitName ? prefix : (prefix ? prefix + '/' + entry.name : entry.name);
     if (entry.isFile) {
       entry.file(function (file) { resolve([{ path: path, file: file }]); }, reject);
       return;
@@ -740,7 +720,7 @@ function droppedEntryRecords(entry, prefix) {
       reader.readEntries(async function (batch) {
         if (!batch.length) return resolve(all);
         try {
-          for (const child of batch) all.push.apply(all, await droppedEntryRecords(child, path));
+          for (const child of batch) all.push.apply(all, await droppedEntryRecords(child, path, false));
           readBatch();
         } catch (error) { reject(error); }
       }, reject);
@@ -759,10 +739,7 @@ async function handleExplorerDrop(event) {
     const records = [];
     try {
       for (const entry of entries) {
-        const found = await droppedEntryRecords(entry, '');
-        found.forEach(function (record) {
-          records.push({ path: folderPrefix ? folderPrefix + '/' + record.path : record.path, file: record.file });
-        });
+        records.push.apply(records, await droppedEntryRecords(entry, folderPrefix, Boolean(entry.isDirectory)));
       }
       if (records.length) scanRecords(records, 'Archivos soltados', 'overlay');
     } catch (error) {
@@ -2246,6 +2223,9 @@ function bindEvents() {
   nodes.folderFallback.addEventListener('change', function () {
     loadFallbackFiles(nodes.folderFallback.files);
     nodes.folderFallback.value = '';
+  });
+  nodes.folderFallback.addEventListener('cancel', function () {
+    setStatus(nodes.folderStatus, 'Importación cancelada; se conserva la selección anterior.');
   });
   nodes.loadSynthetic.addEventListener('click', loadSyntheticPack);
   qs('#explorer-search').addEventListener('input', renderExplorer);
