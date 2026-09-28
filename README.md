@@ -12,17 +12,37 @@ la API de perfiles globales sobre el contrato definido en
 `docs/PROFILE_PROTOCOL.md`. La firma privada permanece en la máquina del
 operador; el servidor recibe sólo las claves públicas de confianza.
 
-## Actualización administrada desde Linux
+## Actualización del servicio
 
-El servidor **no** recibe conexiones de GitHub. Una vez clonado este repositorio
-privado con una deploy key de sólo lectura, el administrador ejecuta:
+El servidor **no** recibe conexiones de GitHub. Tras instalar una vez el
+ejecutor restringido, el administrador puede buscar, instalar y reiniciar
+desde **Servicio → Actualización del servicio** en el panel autenticado. El
+servidor consulta el tip público de `main`; el ejecutor root descarga ese tip,
+construye el binario y reinicia la unidad. No se acepta una rama ni una orden
+arbitraria desde la web.
+
+En la primera actualización con este instalador, si ya existe la unidad
+`bootoptim-distribution.service`, el proceso configura automáticamente el
+ejecutor restringido. Si se necesita configurarlo por separado:
+
+```bash
+sudo /opt/bootoptim-distribution/scripts/install-admin-updater.sh
+```
+
+El instalador crea una unidad `systemd` root de tipo oneshot y un socket Unix
+que sólo puede abrir la cuenta del servicio. El socket acepta una petición
+fija; no concede una consola ni permisos generales de root. También ajusta el
+`ExecStart` para usar el binario root-owned de `/usr/local/bin`, conservando
+los argumentos actuales. La operación compila desde un checkout temporal
+root-owned y se limita a `origin/main`. Los comandos manuales siguen
+disponibles como recuperación:
 
 ```bash
 sudo /opt/bootoptim-distribution/scripts/update.sh --check
 sudo /opt/bootoptim-distribution/scripts/update.sh --apply
 ```
 
-`--check` compara el commit instalado con `origin/main`; `--apply` sólo acepta
+`--check` compara el marcador instalado con `origin/main`; `--apply` sólo acepta
 el tip actual de `main`, construye el binario localmente y conserva el binario
 anterior hasta que la construcción termina bien. La política es que `main` es
 la única rama desplegable y debe protegerse con revisión/CI en GitHub.
@@ -47,6 +67,10 @@ curl http://127.0.0.1:8088/v1/meta/version
   CSRF en modo HTTPS.
 - `GET /admin/api/game-versions` — catálogo actualizado de versiones de
   Minecraft de tipo release y NeoForge, protegido por sesión admin.
+- `GET /admin/api/service-update` — consulta versión y commit de `main` para
+  comprobar si hay actualización; requiere sesión de administrador.
+- `POST /admin/api/service-update` — instala el tip actual de `main` y reinicia
+  el servicio; requiere sesión, token CSRF y el ejecutor systemd configurado.
 
 La lista de capacidades de `/v1/meta/version` indica si los endpoints de
 perfiles están habilitados. La publicación valida firmas Ed25519, manifiestos

@@ -33,6 +33,7 @@ const state = {
   signedEnvelope: null,
   staged: false,
   csrfToken: '',
+  serviceUpdate: null,
   overviewSource: '',
   apiErrors: [],
   minecraftVersions: [],
@@ -527,6 +528,76 @@ function renderService() {
   qs('#service-picker').textContent = 'webkitdirectory' in nodes.folderFallback ? 'Disponible' : 'No disponible';
   qs('#service-secure').textContent = window.isSecureContext ? 'Sí' : 'No';
   qs('#service-crypto').textContent = window.crypto && window.crypto.subtle ? 'Disponible' : 'No disponible';
+}
+
+async function checkServiceUpdate() {
+  const checkButton = qs('#check-service-update');
+  const applyButton = qs('#apply-service-update');
+  const statusNode = qs('#service-update-status');
+  checkButton.disabled = true;
+  applyButton.hidden = true;
+  setStatus(statusNode, 'Comprobando la versión de main…');
+  try {
+    const result = await request('/admin/api/service-update');
+    state.serviceUpdate = result;
+    if (result.update_available) {
+      setStatus(statusNode, 'Disponible: ' + result.available_version + ' · ' + result.available_commit.slice(0, 12) + '.', 'success');
+      applyButton.hidden = false;
+    } else {
+      setStatus(statusNode, 'El servicio ya está actualizado (' + result.current_version + ').', 'success');
+    }
+  } catch (error) {
+    state.serviceUpdate = null;
+    setStatus(statusNode, describeError(error), 'error');
+  } finally {
+    checkButton.disabled = false;
+  }
+}
+
+async function applyServiceUpdate() {
+  const checkButton = qs('#check-service-update');
+  const applyButton = qs('#apply-service-update');
+  const statusNode = qs('#service-update-status');
+  const checked = state.serviceUpdate;
+  if (!checked || !checked.update_available) return;
+
+  checkButton.disabled = true;
+  applyButton.disabled = true;
+  setStatus(statusNode, 'Instalando ' + checked.available_version + ' y reiniciando el servicio…');
+  try {
+    const result = await request('/admin/api/service-update', { method: 'POST' });
+    if (result.state === 'current') {
+      state.serviceUpdate = result;
+      setStatus(statusNode, result.message, 'success');
+      applyButton.hidden = true;
+      checkButton.disabled = false;
+      return;
+    }
+    await waitForServiceRestart(checked.current_commit, checked.available_version);
+    setStatus(statusNode, 'Actualización completada. El panel volverá a abrirse para iniciar sesión.', 'success');
+    window.setTimeout(function () { window.location.reload(); }, 1800);
+  } catch (error) {
+    setStatus(statusNode, describeError(error), 'error');
+    checkButton.disabled = false;
+    applyButton.disabled = false;
+  }
+}
+
+async function waitForServiceRestart(previousCommit, targetVersion) {
+  const deadline = Date.now() + 10 * 60 * 1000;
+  let delay = 3000;
+  while (Date.now() < deadline) {
+    await new Promise(function (resolve) { window.setTimeout(resolve, delay); });
+    try {
+      const current = await request('/v1/meta/version');
+      if (current.commit && current.commit !== previousCommit) return;
+      if (current.version === targetVersion) return;
+    } catch (_) {
+      // The listener is expected to disappear while systemd replaces it.
+    }
+    delay = Math.min(Math.round(delay * 1.5), 12000);
+  }
+  throw new Error('No se pudo confirmar el reinicio del servicio.');
 }
 
 function route() {
@@ -2381,6 +2452,8 @@ function bindEvents() {
   });
   nodes.confirmDiff.addEventListener('change', updatePublishEnabled);
   nodes.publishButton.addEventListener('click', confirmPublication);
+  qs('#check-service-update').addEventListener('click', checkServiceUpdate);
+  qs('#apply-service-update').addEventListener('click', applyServiceUpdate);
   nodes.dialog.addEventListener('close', function () {
     if (nodes.dialog.returnValue === 'publish') publishEnvelope();
   });

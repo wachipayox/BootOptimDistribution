@@ -17,6 +17,7 @@ import (
 	"github.com/wachipayox/BootOptimDistribution/internal/adminui"
 	"github.com/wachipayox/BootOptimDistribution/internal/gameversions"
 	"github.com/wachipayox/BootOptimDistribution/internal/profileapi"
+	"github.com/wachipayox/BootOptimDistribution/internal/serviceupdate"
 	"github.com/wachipayox/BootOptimDistribution/internal/storage"
 )
 
@@ -40,6 +41,7 @@ type handlerConfig struct {
 	AdminAuth      *adminauth.Manager
 	ProfileAPI     http.Handler
 	GameVersions   http.Handler
+	ServiceUpdate  http.Handler
 }
 
 func main() {
@@ -90,6 +92,7 @@ func main() {
 	var store *storage.SQLiteStore
 	var profileHandler http.Handler
 	var gameVersionsHandler http.Handler
+	var serviceUpdateHandler http.Handler
 	if adminUIEnabled {
 		gameVersionsHandler = gameversions.NewProvider(nil, "", "", 0)
 		cas, err := storage.OpenCAS(*dataDir, storage.DefaultMaxObjectBytes)
@@ -107,6 +110,9 @@ func main() {
 			if err != nil {
 				log.Fatalf("configure signed profile distribution: %v", err)
 			}
+			serviceUpdateHandler = adminauth.RequireAdmin(authManager.RequireCSRF(
+				serviceupdate.NewHandler(buildVersion, buildCommit),
+			))
 			profileHandler, err = profileapi.New(profileapi.Dependencies{
 				Objects: cas, Store: store, Keys: keys,
 			}, profileapi.Options{
@@ -127,6 +133,7 @@ func main() {
 		AdminAuth:      authManager,
 		ProfileAPI:     profileHandler,
 		GameVersions:   gameVersionsHandler,
+		ServiceUpdate:  serviceUpdateHandler,
 	}), *adminUIHTTPS)
 	if allowedNetwork != nil {
 		handler = restrictToCIDR(handler, allowedNetwork)
@@ -180,6 +187,9 @@ func newHandlerWithConfig(cfg handlerConfig) http.Handler {
 		if cfg.ProfileAPI != nil {
 			capabilities = append(capabilities, "signed-global-profiles", "admin-profile-publication", "signed-config-setting-rules-v1")
 		}
+		if cfg.ServiceUpdate != nil {
+			capabilities = append(capabilities, "admin-service-update")
+		}
 		_ = json.NewEncoder(w).Encode(versionResponse{
 			Service:        "bootoptim-distribution",
 			Version:        buildVersion,
@@ -211,6 +221,9 @@ func newHandlerWithConfig(cfg handlerConfig) http.Handler {
 				gameVersionsHandler = adminauth.RequireAdmin(gameVersionsHandler)
 			}
 			mux.Handle("/admin/api/game-versions", gameVersionsHandler)
+		}
+		if cfg.ServiceUpdate != nil && cfg.AdminAuth != nil {
+			mux.Handle("/admin/api/service-update", cfg.ServiceUpdate)
 		}
 		mux.Handle("/admin/", adminHandler)
 	}

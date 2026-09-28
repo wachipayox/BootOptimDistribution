@@ -290,14 +290,22 @@ No publiques capturas con cookies, tokens CSRF, hashes de contraseña, contenido
 
 ## Actualizar y volver atrás
 
-El actualizador sigue `origin/main`, no `agent/integration-current` ni ramas de trabajo. Comprueba qué versión se instalaría antes de aplicar:
+El actualizador sigue `origin/main`, no `agent/integration-current` ni ramas de trabajo. En el panel autenticado, abre **Servicio → Actualización del servicio**. **Buscar actualización** compara el commit ejecutado con el tip público de `main`; **Actualizar y reiniciar** instala ese tip y reinicia la unidad al acabar.
+
+La primera actualización manual después de instalar esta versión configura el ejecutor automáticamente si `bootoptim-distribution.service` ya existe. Para instalarlo o reparar su configuración por separado, ejecuta:
+
+```bash
+sudo /home/wachi/launcher_manager/scripts/install-admin-updater.sh
+```
+
+Esto instala una unidad oneshot root, protegida por `flock`, y un socket Unix propiedad de la cuenta definida en `User=`. El proceso web sólo puede enviar la petición fija de actualizar; no recibe permisos generales de root ni una consola. La configuración conserva los argumentos actuales y cambia `ExecStart` a `/usr/local/bin/bootoptim-distribution`. Las futuras versiones se compilan desde un checkout temporal root-owned. Si el panel no está disponible, conserva este método manual de recuperación:
 
 ```bash
 sudo /home/wachi/launcher_manager/scripts/update.sh --check
 sudo /home/wachi/launcher_manager/scripts/update.sh --apply
 ```
 
-`--check` compara el commit registrado en `.installed-commit` con `origin/main`. `--apply` hace fetch, restablece el checkout al tip de `main`, compila e instala el binario. **El reset descarta cambios rastreados locales en ese checkout**; no guardes configuración manual dentro del repositorio. La configuración real del servicio, las claves y los datos están fuera del checkout.
+`--check` compara el commit del servicio con `origin/main`. Después de habilitar el actualizador web, lee el marcador root-owned de `/var/lib/bootoptim-distribution-updater/installed-commit`; antes de eso usa `.installed-commit` en el checkout. `--apply` hace fetch, restablece el checkout al tip de `main`, compila e instala el binario. **El reset descarta cambios rastreados locales en ese checkout**; no guardes configuración manual dentro del repositorio. La configuración real del servicio, las claves y los datos están fuera del checkout.
 
 Al terminar, reinicia el servicio explícitamente y verifica versión/estado:
 
