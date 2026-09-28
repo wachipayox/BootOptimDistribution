@@ -572,7 +572,19 @@ function kindLabel(kind) {
 
 function defaultModId(path) {
   const name = path.split('/').pop() || 'mod';
-  return name.replace(/\.jar$/i, '').replace(/[^A-Za-z0-9._-]+/g, '-');
+  return 'mod_' + name.replace(/\.jar$/i, '').replace(/[^A-Za-z0-9._-]+/g, '-');
+}
+
+function defaultObjectId(path) {
+  const normalized = String(path || '').replace(/\\/g, '/');
+  const name = normalized.split('/').pop() || 'object';
+  let hash = 2166136261;
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash ^= normalized.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  const slug = name.replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 96) || 'object';
+  return 'obj_' + slug + '-' + (hash >>> 0).toString(16).padStart(8, '0');
 }
 
 async function sha256Bytes(buffer) {
@@ -1867,7 +1879,7 @@ function buildManifest() {
         manifest.configs.push(config);
       } else {
         const object = {
-          id: entry.parent && entry.parent.id ? entry.parent.id : entry.path,
+          id: entry.parent && entry.parent.id ? entry.parent.id : defaultObjectId(entry.path),
           path: entry.path,
           object: objectRef(local)
         };
