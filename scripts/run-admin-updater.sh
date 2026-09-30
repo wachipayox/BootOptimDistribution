@@ -43,10 +43,18 @@ fi
 	-ldflags "-s -w -X main.buildVersion=$version -X main.buildCommit=$commit" \
 	-o "$work_dir/bootoptim-distribution" ./cmd/bootoptim-distribution)
 
-# Refresh the root-owned helper and its systemd units from this trusted main
-# checkout before replacing the running service binary. Fail closed if that
-# configuration cannot be verified.
-bash "$source_dir/scripts/install-admin-updater.sh"
+# Refresh the root-owned updater helper from this trusted main checkout. The
+# updater unit deliberately cannot write /etc/systemd/system: changing systemd
+# units is an installation-time action, not part of a routine application
+# update. Keep the replacement inside the explicitly writable libexec path.
+install -o root -g root -m 0755 \
+  "$source_dir/scripts/run-admin-updater.sh" \
+  "$work_dir/bootoptim-distribution-update.new"
+install -o root -g root -m 0755 \
+  "$work_dir/bootoptim-distribution-update.new" \
+  /usr/local/libexec/bootoptim-distribution-update.new
+mv -f /usr/local/libexec/bootoptim-distribution-update.new \
+  /usr/local/libexec/bootoptim-distribution-update
 
 if [[ -x "$runtime_binary" ]]; then
   cp -p "$runtime_binary" "$runtime_binary.previous"
