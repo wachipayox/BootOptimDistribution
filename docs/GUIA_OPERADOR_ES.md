@@ -337,6 +337,20 @@ sudo systemctl status bootoptim-distribution.service --no-pager --full
 
 Esto revierte el ejecutable, no el esquema ni los datos publicados. Antes de volver atrás por una migración, revisa la versión y las notas de la actualización; haz copia del directorio de datos antes de operaciones que puedan cambiar el formato.
 
+Si una versión antigua del actualizador falla con `Read-only file system` al
+intentar instalar `50-admin-updater-binary.conf` o una unidad bajo
+`/etc/systemd/system`, no amplíes los permisos de escritura del servicio
+oneshot. Ejecuta una actualización manual una sola vez desde el checkout:
+
+```bash
+sudo /home/wachi/launcher_manager/scripts/update.sh --apply
+sudo systemctl restart bootoptim-distribution.service
+```
+
+El instalador manual puede actualizar el helper fuera del sandbox. Las
+siguientes versiones no reescriben unidades `systemd` desde el actualizador y
+se pueden instalar otra vez desde el panel.
+
 ## Desactivar o desinstalar
 
 ### Parar temporalmente
