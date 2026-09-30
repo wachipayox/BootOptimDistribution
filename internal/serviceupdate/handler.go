@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	commitURL = "https://api.github.com/repos/wachipayox/BootOptimDistribution/commits/main"
-	rawURL    = "https://raw.githubusercontent.com/wachipayox/BootOptimDistribution/"
+	refURL = "https://api.github.com/repos/wachipayox/BootOptimDistribution/git/ref/heads/main"
+	rawURL = "https://raw.githubusercontent.com/wachipayox/BootOptimDistribution/"
 )
 
 var (
@@ -104,7 +104,7 @@ func (h *Handler) check(ctx context.Context) (status, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, commitURL, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, refURL, nil)
 	if err != nil {
 		return status{}, err
 	}
@@ -112,24 +112,27 @@ func (h *Handler) check(ctx context.Context) (status, error) {
 	request.Header.Set("User-Agent", "BootOptim-Distribution-Update-Check")
 	commitResponse, err := h.client.Do(request)
 	if err != nil {
-		return status{}, fmt.Errorf("request GitHub commit: %w", err)
+		return status{}, fmt.Errorf("request GitHub main reference: %w", err)
 	}
 	defer commitResponse.Body.Close()
 	if commitResponse.StatusCode != http.StatusOK {
 		return status{}, fmt.Errorf("GitHub commit endpoint returned %s", commitResponse.Status)
 	}
-	var commit struct {
-		SHA string `json:"sha"`
+	var reference struct {
+		Object struct {
+			Type string `json:"type"`
+			SHA  string `json:"sha"`
+		} `json:"object"`
 	}
-	if err := json.NewDecoder(io.LimitReader(commitResponse.Body, 16*1024)).Decode(&commit); err != nil {
-		return status{}, fmt.Errorf("decode GitHub commit response: %w", err)
+	if err := json.NewDecoder(io.LimitReader(commitResponse.Body, 4*1024)).Decode(&reference); err != nil {
+		return status{}, fmt.Errorf("decode GitHub main reference response: %w", err)
 	}
-	commit.SHA = strings.ToLower(commit.SHA)
-	if !commitPattern.MatchString(commit.SHA) {
-		return status{}, fmt.Errorf("GitHub returned an invalid commit SHA %q", commit.SHA)
+	commitSHA := strings.ToLower(reference.Object.SHA)
+	if reference.Object.Type != "commit" || !commitPattern.MatchString(commitSHA) {
+		return status{}, fmt.Errorf("GitHub returned an invalid main reference (type %q, SHA %q)", reference.Object.Type, commitSHA)
 	}
 
-	versionRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL+commit.SHA+"/VERSION", nil)
+	versionRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL+commitSHA+"/VERSION", nil)
 	if err != nil {
 		return status{}, err
 	}
@@ -155,8 +158,8 @@ func (h *Handler) check(ctx context.Context) (status, error) {
 		CurrentVersion:   h.currentVersion,
 		CurrentCommit:    h.currentCommit,
 		AvailableVersion: version,
-		AvailableCommit:  commit.SHA,
-		UpdateAvailable:  commit.SHA != strings.ToLower(h.currentCommit),
+		AvailableCommit:  commitSHA,
+		UpdateAvailable:  commitSHA != strings.ToLower(h.currentCommit),
 		CheckedAt:        time.Now().UTC(),
 	}, nil
 }

@@ -23,9 +23,11 @@ func TestCheckReturnsPublishedMainVersion(t *testing.T) {
 		currentVersion: "0.2.9",
 		currentCommit:  testCommit,
 		client: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			body := `{"sha":"` + testCommit + `"}`
+			body := `{"object":{"type":"commit","sha":"` + testCommit + `"}}`
 			if strings.HasSuffix(r.URL.Path, "/VERSION") {
 				body = "0.2.9\n"
+			} else if r.URL.String() != refURL {
+				t.Fatalf("unexpected GitHub request URL: %s", r.URL)
 			}
 			return &http.Response{
 				StatusCode: http.StatusOK,
@@ -68,7 +70,7 @@ func TestCheckFailureKeepsBrowserMessageGenericAndLogsCause(t *testing.T) {
 	if strings.Contains(recorder.Body.String(), "proxyconnect") {
 		t.Fatalf("response leaked internal diagnostic: %s", recorder.Body.String())
 	}
-	if !strings.Contains(logs.String(), "request GitHub commit: Get \"https://api.github.com/") || !strings.Contains(logs.String(), "connection refused") {
+	if !strings.Contains(logs.String(), "request GitHub main reference: Get \"https://api.github.com/") || !strings.Contains(logs.String(), "connection refused") {
 		t.Fatalf("journal log omitted check cause: %s", logs.String())
 	}
 }
