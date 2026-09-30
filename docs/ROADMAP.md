@@ -2,10 +2,14 @@
 
 `agent/integration-current` is the service integration authority; `main` alone
 is deployable. On 2026-09-30 the live service is Distribution `0.2.12`
-(`1f3bc297`). Release `0.2.13` (`2ae19aa`) is now on `main`, but the panel-
-driven deployment attempt did not complete: the panel timed out waiting for a
-restart and the endpoint still reports `0.2.12`. Diagnose the updater unit
-journal before retrying. The authenticated native-HTTPS admin panel, LAN-restricted
+(`1f3bc297`). Release `0.2.13` (`2ae19aa`) is on `main`, but its panel-driven
+deployment failed: the old updater tried to rewrite `/etc/systemd/system`
+while its systemd sandbox mounts that directory read-only. Release `0.2.14`
+removes that runtime unit rewrite and refreshes only the helper under
+`/usr/local/libexec`. Because the installed 0.2.12 helper cannot update itself
+under this restriction, one manual `scripts/update.sh --apply` and service
+restart will be required after 0.2.14 is on `main`; subsequent updates can use
+the panel. The authenticated native-HTTPS admin panel, LAN-restricted
 profile reads, signed publication API, schema-v2 setting-rule validation,
 searchable official Minecraft/NeoForge versions, and the panel-driven service
 updater are deployed. The updater was exercised from the panel and reported
@@ -25,9 +29,8 @@ non-optional list cannot decode. Release `0.2.13` fixes this to emit
 and displays nested API error messages correctly. The client reconciliation
 PR #76 has passing CI and local focused tests, but remains unmerged until the
 same live root/child chain passes the client E2E harness after the server fix
-is deployed. The first update attempt through the panel timed out; the live
-endpoint remained on `0.2.12`, so the client harness still fails decoding a
-null channel list.
+is deployed. The client harness still fails decoding a null channel list until
+the one-time updater bootstrap installs 0.2.14 or later.
 
 The offline signer and its recovery/rotation tests are included in deployable
 `main`. The signer runs on the administrator PC; it is not required on the
@@ -91,8 +94,9 @@ Status: signed publication API, schema-v2 config-rule validation, refined
 editor, official version catalog and offline signer are deployed. Synthetic
 root and child profiles have been signed and published on the live server.
 The client E2E read is currently blocked by `channels: null` on profiles
-without a stable channel; the fix is on `main` as `0.2.13`, but the first
-panel deployment attempt timed out and needs updater journal diagnosis.
+without a stable channel. The fix is on `main` as `0.2.13`; the old updater
+cannot deploy it under its current filesystem sandbox, so a one-time manual
+bootstrap is required after the updater fix is promoted.
 
 The service API and browser workflow create a global profile, select a local
 folder, inspect additions/changes/removals, and stage a new immutable revision.

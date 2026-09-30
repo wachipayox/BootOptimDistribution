@@ -47,6 +47,14 @@ el tip actual de `main`, construye el binario localmente y conserva el binario
 anterior hasta que la construcción termina bien. La política es que `main` es
 la única rama desplegable y debe protegerse con revisión/CI en GitHub.
 
+El actualizador no reescribe unidades `systemd` durante actualizaciones
+normales: su sandbox sólo permite cambiar los directorios de estado, binarios
+y helpers que necesita. Si una instalación anterior falla al actualizar con
+`Read-only file system` al instalar unidades, actualiza una vez desde la
+terminal con `scripts/update.sh --apply` y reinicia el servicio. Esa ejecución
+manual instala el helper corregido fuera del sandbox; después, las siguientes
+versiones pueden instalarse desde el panel.
+
 El instalador inicial y la unidad `systemd` se documentarán al habilitar el
 primer servicio operativo. Por ahora el binario se puede ejecutar de forma
 explícita para la prueba:

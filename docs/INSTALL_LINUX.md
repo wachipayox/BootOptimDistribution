@@ -75,6 +75,13 @@ en **Servicio → Actualización del servicio**, los botones permiten buscar una
 versión en `main` y, si existe, instalarla y reiniciar automáticamente. La web
 no acepta nombres de rama ni comandos configurables.
 
+Las versiones actuales del helper no reescriben unidades `systemd` durante
+actualizaciones normales. Si una instalación anterior falla al actualizar una
+unidad por el sistema de archivos de solo lectura, ejecuta el procedimiento de
+**Comandos de recuperación** y reinicia el servicio; eso actualiza el helper
+fuera del sandbox. Las siguientes versiones vuelven a instalarse desde el
+panel.
+
 ### Comandos de recuperación
 
 El servidor consulta GitHub sólo cuando el administrador lo solicita:
