@@ -113,6 +113,9 @@ func TestSyntheticPublicationReadPromotionRollbackAndKeyRotation(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "profile_root") {
 		t.Fatalf("profiles status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	if !strings.Contains(rec.Body.String(), `"channels":[]`) {
+		t.Fatalf("profiles without a stable channel must encode channels as an empty array, body=%s", rec.Body.String())
+	}
 
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/v1/profiles/profile_root/revisions/rev_0000000000000001", nil)

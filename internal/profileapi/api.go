@@ -547,11 +547,15 @@ func (a *API) handleProfiles(w http.ResponseWriter, r *http.Request, admin bool)
 			manifest := verified.Manifest()
 			i = len(views)
 			index[item.ProfileID] = i
+			profileChannels := channelByProfile[item.ProfileID]
+			if profileChannels == nil {
+				profileChannels = []channelView{}
+			}
 			views = append(views, profileView{
 				ProfileID:      item.ProfileID,
 				Name:           manifest.Profile.Name,
 				LatestRevision: revisionRef{RevisionID: item.RevisionID, Sequence: item.Sequence, ManifestSHA256: item.ManifestSHA256},
-				Channels:       channelByProfile[item.ProfileID],
+				Channels:       profileChannels,
 			})
 		}
 		if admin {

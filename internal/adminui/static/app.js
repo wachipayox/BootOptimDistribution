@@ -141,7 +141,7 @@ function clearAlerts() {
 
 function describeError(error) {
   if (error instanceof ApiError) {
-    const code = error.code ? ' · ' + error.code : '';
+    const code = typeof error.code === 'string' && error.code ? ' · ' + error.code : '';
     return error.message + code;
   }
   return error instanceof Error ? error.message : String(error);
@@ -189,11 +189,14 @@ async function request(path, options) {
   }
 
   if (!response.ok) {
-    const code = payload && typeof payload === 'object'
-      ? (payload.code || payload.error_code || payload.error || '')
+    const body = payload && typeof payload === 'object' && payload.error && typeof payload.error === 'object'
+      ? payload.error
+      : payload;
+    const code = body && typeof body === 'object'
+      ? (body.code || body.error_code || '')
       : '';
-    const serverMessage = payload && typeof payload === 'object'
-      ? (payload.message || payload.detail || payload.error_description || '')
+    const serverMessage = body && typeof body === 'object'
+      ? (body.message || body.detail || body.error_description || '')
       : '';
     const message = serverMessage || ('HTTP ' + response.status + ' en ' + path);
     throw new ApiError(message, response.status, String(code || ''), payload);
@@ -2186,6 +2189,7 @@ async function publishEnvelope() {
     setStatus(nodes.publishStatus, 'Versión publicada' + (revision ? ': ' + revision : '') + '.', 'success');
     nodes.confirmDiff.checked = false;
     state.signedEnvelope = null;
+    qs('#revision-id').value = generatedRevisionID();
     updatePublishEnabled();
     await loadOverview();
     await loadProfiles();
