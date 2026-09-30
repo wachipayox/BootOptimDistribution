@@ -6,7 +6,7 @@ Guía práctica para administrar el servicio privado de distribución de perfile
 
 **Servidor conocido:** `wachilandserver` · Ubuntu/Debian · IP LAN `192.168.1.69`
 
-**Versión que respondió durante la puesta en marcha:** `0.2.1` (`ce2cf5125b35ce9a8d4ddd56431ccdcb2ab9b0c1`). Comprueba siempre la versión actual con los comandos de esta guía.
+**Última versión publicada en esta guía:** `0.2.12`. Comprueba siempre la versión instalada con los comandos de esta guía.
 
 ## Índice
 
@@ -26,7 +26,7 @@ Guía práctica para administrar el servicio privado de distribución de perfile
 
 Distribution guarda revisiones globales inmutables, valida sus firmas y almacena los archivos publicados como objetos identificados por SHA-256. El panel permite preparar y publicar perfiles; el launcher consulta las revisiones firmadas que tiene permitidas.
 
-El servidor **no** contiene la clave privada que firma las publicaciones. La firma se hace en un PC administrador con `bootoptim-release-signer`. El servidor conserva sólo las claves públicas necesarias para verificar. El servicio tampoco actualiza automáticamente desde GitHub: el administrador ejecuta manualmente el actualizador desde Linux, que sólo instala `origin/main`.
+El servidor **no** contiene la clave privada que firma las publicaciones. La firma se hace en un PC administrador con `bootoptim-release-signer`. El servidor conserva sólo las claves públicas necesarias para verificar. En el panel autenticado, el administrador puede consultar `main` e instalar su versión actual; el servicio se reinicia al terminar. El método manual desde Linux permanece disponible para recuperación y sólo instala `origin/main`.
 
 La interfaz administrativa actual está en `https://welite.ddns.net:8444/admin/`. En la LAN, el nombre `welite.ddns.net` debe resolver a `192.168.1.69` para que el certificado Certbot coincida. No uses la URL por IP como dirección habitual porque el certificado es para el nombre DNS.
 
@@ -37,8 +37,8 @@ El proceso escucha en `192.168.1.69:8444`, restringe clientes a `192.168.1.0/24`
 | Elemento | Ruta o valor conocido |
 |---|---|
 | Checkout Linux | `/home/wachi/launcher_manager` |
-| Binario que ejecuta systemd | `/home/wachi/launcher_manager/bin/bootoptim-distribution` |
-| Otro binario instalado por el instalador | `/usr/local/bin/bootoptim-distribution` |
+| Binario que ejecuta systemd con el actualizador habilitado | `/usr/local/bin/bootoptim-distribution` |
+| Copia del binario del checkout | `/home/wachi/launcher_manager/bin/bootoptim-distribution` |
 | Unidad systemd | `/etc/systemd/system/bootoptim-distribution.service` |
 | Datos publicados y objetos | `/var/lib/bootoptim-distribution` |
 | Mapa de claves públicas de firma | `/etc/bootoptim-distribution/release-public-keys.json` |
@@ -51,7 +51,7 @@ El proceso escucha en `192.168.1.69:8444`, restringe clientes a `192.168.1.0/24`
 
 Las rutas de Certbot son gestionadas por Certbot y Nginx; no cambies sus permisos ni copies los archivos a mano. La unidad usa credenciales de systemd para entregarlas al proceso sin abrir los directorios privados de Certbot.
 
-El repositorio instalado actualiza el binario local `bin/` que usa la unidad y también instala `/usr/local/bin/bootoptim-distribution`. El instalador conserva copias `.previous` de ambos binarios. El directorio de datos, `/etc/bootoptim-distribution` y el certificado son independientes del checkout y no se borran al actualizar el código.
+El instalador y el actualizador mantienen el binario del checkout y el binario root-owned `/usr/local/bin/bootoptim-distribution`; la unidad ejecuta este último después de instalar el actualizador del panel. Se conservan copias `.previous` de ambos. El directorio de datos, `/etc/bootoptim-distribution` y el certificado son independientes del checkout y no se borran al actualizar el código.
 
 ## Uso del panel y publicación
 
@@ -215,6 +215,12 @@ sudo systemd-analyze verify /etc/systemd/system/bootoptim-distribution.service
 
 `systemctl cat` enseña la unidad base y sus overrides. `systemctl show` presenta la configuración efectiva. Para comprobar red y firewall:
 
+Si la búsqueda de versión falla en el panel con `update_check_failed`, consulta el error detallado que registra el servicio:
+
+```bash
+sudo journalctl -u bootoptim-distribution.service --since '-10 minutes' --no-pager | grep 'admin service update'
+```
+
 ```bash
 sudo ss -ltnp | grep ':8444'
 sudo ufw status numbered
@@ -292,6 +298,8 @@ No publiques capturas con cookies, tokens CSRF, hashes de contraseña, contenido
 
 El actualizador sigue `origin/main`, no `agent/integration-current` ni ramas de trabajo. En el panel autenticado, abre **Servicio → Actualización del servicio**. **Buscar actualización** compara el commit ejecutado con el tip público de `main`; **Actualizar y reiniciar** instala ese tip y reinicia la unidad al acabar.
 
+Si la consulta de GitHub falla, la web muestra un mensaje genérico y el journal conserva el detalle técnico. Revisa ese registro antes de cambiar la unidad o la conectividad.
+
 La primera actualización manual después de instalar esta versión configura el ejecutor automáticamente si `bootoptim-distribution.service` ya existe. Para instalarlo o reparar su configuración por separado, ejecuta:
 
 ```bash
@@ -315,7 +323,7 @@ sudo systemctl status bootoptim-distribution.service --no-pager --full
 curl -fsS https://welite.ddns.net:8444/v1/meta/version
 ```
 
-El script mantiene `bin/bootoptim-distribution.previous` y `/usr/local/bin/bootoptim-distribution.previous`. La unidad activa usa el binario del checkout. Para restaurar manualmente el anterior, detén el servicio, conserva primero el binario actual y copia el anterior sobre el ejecutado:
+El script mantiene `bin/bootoptim-distribution.previous` y `/usr/local/bin/bootoptim-distribution.previous`. Con el actualizador habilitado, la unidad activa usa `/usr/local/bin/bootoptim-distribution`. Para restaurar manualmente el anterior, detén el servicio, conserva primero el binario actual y copia el anterior sobre el ejecutado:
 
 ```bash
 sudo systemctl stop bootoptim-distribution.service
