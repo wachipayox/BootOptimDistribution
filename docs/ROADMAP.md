@@ -1,30 +1,27 @@
 # Distribution service roadmap
 
 `agent/integration-current` is the service integration authority; `main` alone
-is deployable. As of 2026-09-28, the live service is Distribution `0.2.8`
-(`60f9036`); the current self-update work targets `0.2.9`. The
-authenticated native-HTTPS admin panel, signed profile API, LAN-restricted
-launcher reads, schema-v2 signed per-setting rule validation, refined profile
-workflow, and complete official Minecraft/NeoForge version catalog are live.
-The live version endpoint reports capability
-`signed-config-setting-rules-v1`; the top-level protocol schema remains 1, while
-individual manifests may use schema 2. The first synthetic signing attempt
-found that profile IDs lacked the protocol-required `profile_` prefix; that
-generator fix is present in live `0.2.6`. Version `0.2.7` bumps the admin
-asset URL to v19 and adds revalidation headers, resolving stale browser assets.
-Version `0.2.8` gives generated mod and object entries their required `mod_`
-and `obj_` protocol prefixes and bumps the asset URL to v20. The live profile
-catalog remains empty until the corrected form publishes the synthetic root
-and child.
+is deployable. On 2026-09-30 the live service is Distribution `0.2.12`
+(`1f3bc297`). The authenticated native-HTTPS admin panel, LAN-restricted
+profile reads, signed publication API, schema-v2 setting-rule validation,
+searchable official Minecraft/NeoForge versions, and the panel-driven service
+updater are deployed. The updater was exercised from the panel and reported
+the live service current at `0.2.12`.
 
-Planned for version `0.2.9`: an authenticated admin update check against the
-public tip of `main` and an action that invokes one fixed root-owned systemd
-updater, then restarts Distribution. A one-time installer creates the oneshot
-unit and a root-owned Unix socket limited to the service account. The web
-process cannot supply commands, branches, or arbitrary unit names. The updater
-builds a fresh checkout in a root-owned staging directory, remains restricted
-to `origin/main`, and retains the previous binary for recovery. The installer
-preserves service arguments while moving `ExecStart` to `/usr/local/bin`.
+Two signed synthetic profiles are now published on the live server for the
+end-to-end check: root `profile_wachiland-config-rules-e2e-root` and child
+`profile_wachiland-config-rules-e2e-child`. They contain only generated test
+bytes, not player files. The child pins the root revision and replaces config
+rules in TOML, Java properties, and TXT while also changing/removing/adding
+synthetic pack entries.
+
+The first real Pandora client read exposed an API serialization bug: profiles
+without a stable channel currently return `channels: null`, which the client's
+non-optional list cannot decode. The `0.2.13` work branch fixes this to emit
+`channels: []`, renews the hidden revision ID after successful publication,
+and displays nested API error messages correctly. The client reconciliation
+PR #76 has passing CI and local focused tests, but remains unmerged until the
+same live root/child chain passes the client E2E harness after the server fix.
 
 The offline signer and its recovery/rotation tests are included in deployable
 `main`. The signer runs on the administrator PC; it is not required on the
@@ -33,13 +30,11 @@ at a published revision from its history.
 
 File schema policies are `enforced` and `default_once`. Manifest schema v2
 adds per-setting TOML, `.properties`, and `.txt` rules in the panel, API, and
-server validator; that validator is already in the live `0.2.6` build. The
-matching client transaction/merge is in Pandora PR #76. Its CI checks passed
-as of this roadmap revision, but the PR remains a draft pending a synthetic
-signed server publication and live client application. Current end-to-end
-validation is blocked until the admin-generated manifest uses protocol-valid
-IDs for every mod and object entry. The broader
-`user_owned` file policy and arbitrary structured formats remain out of scope.
+server validator. Pandora PR #76 adds transactional client merging and repair
+support, including descendants replacing rules inherited from ancestors. Its
+focused tests and CI are green; live-client verification is the remaining
+gate. The broader `user_owned` file policy and arbitrary structured formats
+remain out of scope.
 
 The product is a private profile distribution service, not a public modpack
 catalog. The Linux service owns immutable global profiles/revisions and their
@@ -71,7 +66,7 @@ participates in the launch path.
 
 ### 1. Authenticated LAN administration
 
-Status: implemented and deployed as Distribution `0.2.5`.
+Status: implemented and deployed as Distribution `0.2.12`.
 
 Replace the current read-only badge/page with a useful admin shell and clear
 navigation for Overview, Global profiles, and Service settings. The overview
@@ -87,9 +82,10 @@ Do not add Caddy as a dependency and do not expose unauthenticated write APIs.
 ### 2. Global profile publication and test profile creation
 
 Status: signed publication API, schema-v2 config-rule validation, refined
-`v16` editor and official version catalog are deployed. The offline signer is
-merged to `agent/integration-current` but not yet `main`; no synthetic profile
-has been published to the live server yet.
+editor, official version catalog and offline signer are deployed. Synthetic
+root and child profiles have been signed and published on the live server.
+The client E2E read is currently blocked by `channels: null` on profiles
+without a stable channel; the server fix is in the `0.2.13` work branch.
 
 The service API and browser workflow create a global profile, select a local
 folder, inspect additions/changes/removals, and stage a new immutable revision.
@@ -112,8 +108,9 @@ one mod, one config, one resource pack, and one removal.
 ### 3. Branch graph and effective profile resolution
 
 Status: core direct-global reconciliation is integrated in Pandora. Option
-rule transaction support is in Pandora PR #76; its CI checks passed, and its
-remaining gate is a signed synthetic publication plus live client application.
+rule transaction support is in Pandora PR #76; its CI and local focused tests
+passed. The live synthetic publication is complete; client application is
+pending after the server fixes the nullable-channel response.
 Global-to-global and global-to-local setting inheritance is represented in
 schema v2. Multi-key release verification is integrated in Pandora PR #77.
 
@@ -133,27 +130,24 @@ ambiguous selectors at publication time. Avoid format-agnostic text replacement.
 
 Public-profile discovery, immutable revision resolution, authenticated object
 downloads, protocol version, and capability reporting are integrated. The live
-LAN HTTPS endpoint is reachable. Deployment 0.2.4 fixed revision ID generation;
-0.2.5 restored all stable NeoForge versions from the official public artifact
-index after Maven metadata returned only prereleases; 0.2.6 fixed profile ID
-generation. Retest the refreshed form, then publish a synthetic root/child
-chain and validate client connection and reconciliation against it. Follow
-with backup/restore, retention, audit-safe
+LAN HTTPS endpoint is reachable and the signed synthetic chain is published.
+The client E2E harness currently fails while decoding `channels: null`; deploy
+the `0.2.13` server fix, rerun the harness, and then integrate Pandora PR #76.
+Follow with backup/restore, retention, audit-safe
 publication diagnostics, and a loopback/LAN deployment smoke path. The service
 still stores only global profile data and never receives a client filesystem
 listing.
 
 ## Acceptance path
 
-1. Sign in from another device on the private LAN over HTTPS.
-2. Create a synthetic global root profile by choosing a folder and review the
-   file-level diff.
-3. Sign and publish it with the local signer; confirm the server rejects a
-   malformed signature or hash and leaves no partial revision.
-4. Create a child revision that changes a mod, sets a selected config option,
-   removes one inherited file, and adds a resource pack; verify the parent
-   remains unchanged and the resolved history is reproducible.
-5. Have Pandora install and update a derived test profile using only the
+1. Sign in over HTTPS and prepare the synthetic root/child profiles in the
+   admin panel. **Complete:** both signed revisions are published and the
+   child pins the root; no player data is involved.
+2. Have Pandora resolve the signed root and child, apply config setting rules
+   transactionally, and preserve locally edited `default_once` values on a
+   later merge. **Pending:** rerun the live client harness after deploying the
+   server's `channels: []` fix.
+3. Have Pandora install and update a derived test profile using only the
    changed revision entries. Confirm a no-op update does not walk/hash the
    entire `.minecraft` tree. Exercise explicit full repair separately.
 
