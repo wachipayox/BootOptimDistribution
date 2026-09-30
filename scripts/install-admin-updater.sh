@@ -64,7 +64,7 @@ install -d -o root -g root -m 0755 /etc/systemd/system/bootoptim-distribution.se
 temp_dir="$(mktemp -d /run/bootoptim-update-setup.XXXXXX)"
 unit_tmp="$temp_dir/bootoptim-distribution-update.service"
 socket_tmp="$temp_dir/bootoptim-distribution-update.socket"
-trigger_tmp="$temp_dir/bootoptim-distribution-update-trigger@.service"
+trigger_tmp="$temp_dir/bootoptim-distribution-update@.service"
 dropin_tmp="$temp_dir/50-admin-updater-binary.conf"
 helper_tmp="$temp_dir/bootoptim-distribution-update"
 trigger_script_tmp="$temp_dir/trigger-script"
@@ -104,7 +104,6 @@ SocketUser=$service_user
 SocketMode=0600
 Accept=yes
 MaxConnections=1
-Service=bootoptim-distribution-update-trigger@.service
 
 [Install]
 WantedBy=sockets.target
@@ -153,9 +152,9 @@ systemd-analyze verify "$unit_tmp" "$socket_tmp" "$trigger_tmp"
 install -o root -g root -m 0644 "$dropin_tmp" "$dropin_path"
 install -o root -g root -m 0644 "$unit_tmp" /etc/systemd/system/bootoptim-distribution-update.service
 install -o root -g root -m 0644 "$socket_tmp" /etc/systemd/system/bootoptim-distribution-update.socket
-install -o root -g root -m 0644 "$trigger_tmp" /etc/systemd/system/bootoptim-distribution-update-trigger@.service
+install -o root -g root -m 0644 "$trigger_tmp" /etc/systemd/system/bootoptim-distribution-update@.service
 systemctl daemon-reload
-systemd-analyze verify "$service_name" bootoptim-distribution-update.service bootoptim-distribution-update.socket 'bootoptim-distribution-update-trigger@.service'
+systemd-analyze verify "$service_name" bootoptim-distribution-update.service bootoptim-distribution-update.socket 'bootoptim-distribution-update@.service'
 systemctl enable --now bootoptim-distribution-update.socket
 echo "Installed the restricted update socket for $service_name (account $service_user)."
 echo "The service now runs from the root-owned /usr/local/bin binary."

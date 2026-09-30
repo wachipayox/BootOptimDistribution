@@ -6,7 +6,7 @@ Guía práctica para administrar el servicio privado de distribución de perfile
 
 **Servidor conocido:** `wachilandserver` · Ubuntu/Debian · IP LAN `192.168.1.69`
 
-**Última versión publicada en esta guía:** `0.2.11`. Comprueba siempre la versión instalada con los comandos de esta guía.
+**Última versión publicada en esta guía:** `0.2.12`. Comprueba siempre la versión instalada con los comandos de esta guía.
 
 ## Índice
 
