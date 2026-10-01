@@ -259,13 +259,14 @@ func (s *SQLiteStore) PublishedObject(ctx context.Context, digest string) (Objec
 		`SELECT o.sha256, o.size
 		 FROM objects o
 		 WHERE o.sha256 = ?
-		   AND EXISTS (
+		   AND (EXISTS (
 		       SELECT 1
 		       FROM revision_objects ro
 		       JOIN revision_envelopes e ON e.revision_id = ro.revision_id
 		       WHERE ro.object_sha256 = o.sha256
-		   )
-		 LIMIT 1`, digest).Scan(&object.SHA256, &object.Size)
+		   ) OR EXISTS (SELECT 1 FROM profile_presentation p WHERE p.icon_sha256 = o.sha256))
+		 UNION SELECT p.icon_sha256, json_extract(p.payload, '$.icon.size') FROM profile_presentation p WHERE p.icon_sha256 = ?
+         LIMIT 1`, digest, digest).Scan(&object.SHA256, &object.Size)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Object{}, ErrObjectMissing
 	}
@@ -402,6 +403,10 @@ func (s *SQLiteStore) CompareAndSetChannel(ctx context.Context, expected *Channe
 }
 
 const profileAPISchema = `
+CREATE TABLE IF NOT EXISTS profile_presentation (
+ profile_id TEXT PRIMARY KEY, payload BLOB NOT NULL, icon_sha256 TEXT
+);
+
 CREATE TABLE IF NOT EXISTS revision_envelopes (
     revision_id TEXT PRIMARY KEY REFERENCES revisions(id),
     envelope BLOB NOT NULL CHECK(length(envelope) > 0)
@@ -426,3 +431,23 @@ CREATE TABLE IF NOT EXISTS channels (
     PRIMARY KEY(profile_id, channel)
 );
 `
+
+// Presentation is mutable catalog metadata; game revisions remain immutable.
+func (s *SQLiteStore) ProfilePresentation(ctx context.Context, id string) ([]byte, error) {
+	if err := s.ensureProfileAPISchema(ctx); err != nil {
+		return nil, err
+	}
+	var raw []byte
+	err := s.db.QueryRowContext(ctx, "SELECT payload FROM profile_presentation WHERE profile_id = ?", id).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return raw, err
+}
+func (s *SQLiteStore) SetProfilePresentation(ctx context.Context, id string, raw []byte, icon string) error {
+	if err := s.ensureProfileAPISchema(ctx); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, "INSERT INTO profile_presentation(profile_id,payload,icon_sha256) VALUES(?,?,?) ON CONFLICT(profile_id) DO UPDATE SET payload=excluded.payload,icon_sha256=excluded.icon_sha256", id, raw, icon)
+	return err
+}

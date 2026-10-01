@@ -31,9 +31,11 @@ type Revision struct {
 }
 
 type Profile struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Official bool   `json:"official"`
+	Description string     `json:"description,omitempty"`
+	Icon        *ObjectRef `json:"icon,omitempty"`
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Official    bool       `json:"official"`
 }
 
 type Game struct {
