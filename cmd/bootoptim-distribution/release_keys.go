@@ -16,6 +16,14 @@ import (
 
 type releaseKeySet map[string]ed25519.PublicKey
 
+func (keys releaseKeySet) Encoded() map[string]string {
+	encoded := make(map[string]string, len(keys))
+	for id, key := range keys {
+		encoded[id] = base64.RawURLEncoding.EncodeToString(key)
+	}
+	return encoded
+}
+
 func loadReleaseKeys(path string) (releaseKeySet, error) {
 	if strings.TrimSpace(path) == "" {
 		return releaseKeySet{}, nil

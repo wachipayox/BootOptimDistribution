@@ -9,8 +9,11 @@ launcher.
 El proceso Linux mantiene loopback por defecto y expone healthcheck e identidad
 de versión. En el modo administrativo HTTPS, también sirve el panel privado y
 la API de perfiles globales sobre el contrato definido en
-`docs/PROFILE_PROTOCOL.md`. La firma privada permanece en la máquina del
-operador; el servidor recibe sólo las claves públicas de confianza.
+`docs/PROFILE_PROTOCOL.md`. El servidor firma automáticamente las publicaciones
+autorizadas: en el panel basta preparar archivos, revisar y publicar. Su clave
+se genera una vez en el directorio de datos; no necesitas firmar JSON en tu PC.
+El launcher obtiene las claves públicas por el mismo HTTPS verificado. Consulta
+`docs/GUIA_OPERADOR_ES.md` para copias y recuperación.
 
 ## Actualización del servicio
 
@@ -69,6 +72,8 @@ curl http://127.0.0.1:8088/v1/meta/version
 - `GET /healthz` — disponibilidad del proceso.
 - `GET /v1/meta/version` — versión semántica, commit instalado, esquema de
   protocolo y capacidades expuestas.
+- `GET /v1/signing-keys` — claves públicas actuales e históricas, nunca privadas.
+- `POST /v1/admin/publications` — valida y firma una publicación desde el panel.
 - `GET /v1/profiles`, revisiones y objetos por SHA-256 — catálogo y contenido
   global para el launcher en modo HTTPS autenticado.
 - `/v1/admin/...` — publicación e historial protegidos por sesión admin y
@@ -82,11 +87,10 @@ curl http://127.0.0.1:8088/v1/meta/version
 
 La lista de capacidades de `/v1/meta/version` indica si los endpoints de
 perfiles están habilitados. La publicación valida firmas Ed25519, manifiestos
-canónicos, objetos y reglas de secuencia/herencia. La herramienta local
-`bootoptim-release-signer` genera claves en un PC administrador y firma allí
-las solicitudes descargadas; su clave privada nunca va al servidor. Consulta
-`docs/RELEASE_SIGNER.md` para uso y recuperación, y
-`docs/PROFILE_PROTOCOL.md` para el contrato de rotación.
+canónicos, objetos y reglas de secuencia/herencia. El panel firma automáticamente
+las solicitudes mediante el servicio. La herramienta offline permanece como
+compatibilidad opcional para sobres externos, no como paso del flujo normal.
+Consulta `docs/GUIA_OPERADOR_ES.md` para copias y recuperación.
 
 ## Panel de administración en red local
 
@@ -102,13 +106,14 @@ lectura en una LAN de confianza. Para la frontera administrativa segura usa
 sesión segura y CSRF, y conserva el bind privado y el filtro CIDR como defensa
 adicional. Certificado, clave TLS, nombre de administrador y archivo de
 verificador de contraseña son explícitos; no existe una identidad admin
-predeterminada. `--release-public-keys-file` configura los verificadores
-Ed25519 confiables; sin ellos, el servicio rechaza toda publicación firmada.
+predeterminada. `--release-public-keys-file` conserva verificadores Ed25519
+anteriores; la identidad automática se genera en el directorio de datos.
 
 Consulta `docs/ADMIN_UI_LAN.md` para la configuración HTTPS, credenciales
 locales, firewall y ejemplo de `systemd`. No uses `0.0.0.0`, no permitas el
 puerto desde redes invitadas y no lo reenvíes desde el router a Internet. Las
-claves Ed25519 privadas de firma de releases permanecen fuera del servicio.
+claves privadas de publicación permanecen en el directorio privado de datos
+del servicio y no se exportan por HTTP.
 
 Para operar la instalación actual, cambiar la contraseña o recuperar/rotar las
 claves de firma, consulta la [guía del operador](docs/GUIA_OPERADOR_ES.md).
