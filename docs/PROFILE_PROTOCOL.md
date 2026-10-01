@@ -58,14 +58,16 @@ and inheritance permissions; the client validates and merges the text format.
 ## HTTP shape
 
 All state-changing admin routes require authenticated administrator session and
-CSRF protection over Distribution-native HTTPS. No Caddy dependency. Release
-signing remains separate: browser and service may see an unsigned manifest and
-the resulting signature, but never the Ed25519 private key. A local signer
-tool signs a saved canonical request and returns an envelope.
+CSRF protection over Distribution-native HTTPS. As explicitly requested on
+2026-10-01, signing is automatic in the service's persistent private data
+folder. Browser and launcher never receive the private key. This supersedes
+the earlier workstation-only signing policy: publication authority now follows
+admin authentication and verified HTTPS server identity.
 
 Public/client read routes:
 
 ```text
+GET /v1/signing-keys  # schema_version: 1, keys: {id: base64url public key}
 GET /v1/profiles
 GET /v1/profiles/{profile_id}/revisions/{revision_id}
 GET /v1/objects/sha256/{sha256}
@@ -77,6 +79,7 @@ Implemented administrator routes:
 GET  /v1/admin/profiles
 GET  /v1/admin/profiles/{profile_id}/revisions
 POST /v1/admin/objects/sha256/{sha256}                 # authenticated staged upload
+POST /v1/admin/publications                           # validated request, server signs
 POST /v1/admin/revisions                              # signed immutable envelope
 POST /v1/admin/profiles/{profile_id}/channels/{name}/promote
 POST /v1/admin/profiles/{profile_id}/channels/{name}/rollback
@@ -109,42 +112,30 @@ where that distinction leaks private state.
 2. The panel hashes files, compares the folder with the selected parent
    revision's effective manifest, and previews additions, replacements,
    removals, size, policies, and unsupported paths.
-3. The panel uploads changed bytes to authenticated staging endpoints and
-   downloads a canonical signing request. It never accesses a private key.
-4. The `bootoptim-release-signer` utility validates the downloaded request,
-   displays profile identity and digest, and signs locally only after the
-   administrator confirms the profile ID. The admin returns the signed envelope
-   to the panel for atomic publication. The private key stays on the admin PC;
-   neither the browser nor the service loads it.
-5. The service verifies authorization, signature, parent pin, object hashes,
-   policies, sequence and anti-rollback invariants before making the revision
-   visible.
-
-The initial acceptance fixture is a synthetic root and child profile. No
-player save/config directory should be used for the first test.
+3. The panel stages changed bytes, computes a canonical manifest digest and
+   asks the administrator to review and confirm publication.
+4. `POST /v1/admin/publications` accepts `{canonicalization, manifest_sha256,
+   manifest}`, validates the schema/digest, signs canonical bytes and passes
+   the envelope to the existing signature/object/parent/sequence checks.
+5. Publication becomes visible only after the existing atomic store succeeds.
+   The legacy signed-envelope endpoint remains compatible.
 
 ## Release-key recovery and rotation
 
-Distribution's `--release-public-keys-file` is a JSON map from key IDs to
-unpadded base64url Ed25519 public keys. It may contain multiple keys. Pandora
-verifies each revision using the public key named by its signature; retain old
-public keys so existing signed history remains verifiable.
+The service creates `signing/server-release-key.json` in its data directory
+(mode 0600; folder 0700). `signing/public-keys.json` preserves all generated
+public identities. Restart reuses the private identity; malformed identity
+fails startup without replacement. If an operator explicitly removes a lost
+private identity, restart generates another while retaining public history.
+Back up the complete data directory together with the legacy key map.
 
-If an admin PC is lost, generate a replacement signer on the replacement PC
-with `bootoptim-release-signer keygen`, add its public entry to the server key
-map, and add the same public key to Pandora's trusted-key list through the
-private launcher update. Restart Distribution after changing its key-map file.
-Then sign the next sequence of an existing profile, or a new root profile, with
-the replacement key ID. Profile IDs, revision history and parent pins remain
-unchanged. Do not remove old public keys while any installed launcher may need
-to verify their revisions.
-
-Back up each private signer file encrypted and offline. The server must never
-generate, retain or export a release-signing private key: that would let a
-compromised web service forge releases. If the workstation and all private-key
-backups are lost, the replacement PC can generate a new signer, but its public
-key must be explicitly trusted by both service and launcher before publishing.
-The TLS certificate and admin password do not recover a release signing key.
+`--release-public-keys-file` remains the legacy JSON public-key map. The
+HTTPS/CIDR read endpoint `/v1/signing-keys` exposes its union with automatic
+public identities, not private key material. Pandora discovers unknown signers
+through the configured HTTPS origin (no redirects; bounded document and key
+count), still verifies signatures and rejects disagreement with a locally
+pinned key. Losing the administrator PC requires no key migration. Older
+launchers must be updated before consuming automatically signed revisions.
 
 ## Profile presentation (2026-10-01)
 `profile.description` is optional UTF-8 text (maximum 8192 bytes). `profile.icon`
@@ -158,7 +149,7 @@ presentation; installation authority remains the signed revision.
 
 Presentation edits publish a new monotonically increasing revision of the same
 profile, retaining its exact game identity, base pin, files and rules. They use
-the same offline signing workflow as modpack changes. Editing never rewrites an
+the same automatic signing workflow as modpack changes. Editing never rewrites an
 existing immutable revision. Channel promotion remains an explicit separate
 operation; a launcher following `stable` sees the edit after promotion.
 

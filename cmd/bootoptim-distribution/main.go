@@ -17,6 +17,7 @@ import (
 	"github.com/wachipayox/BootOptimDistribution/internal/adminui"
 	"github.com/wachipayox/BootOptimDistribution/internal/gameversions"
 	"github.com/wachipayox/BootOptimDistribution/internal/profileapi"
+	"github.com/wachipayox/BootOptimDistribution/internal/releasesigning"
 	"github.com/wachipayox/BootOptimDistribution/internal/serviceupdate"
 	"github.com/wachipayox/BootOptimDistribution/internal/storage"
 )
@@ -110,11 +111,18 @@ func main() {
 			if err != nil {
 				log.Fatalf("configure signed profile distribution: %v", err)
 			}
+			signer, err := releasesigning.Open(*dataDir)
+			if err != nil {
+				log.Fatalf("configure automatic publication: %v", err)
+			}
+			for id, public := range signer.PublicKeys() {
+				keys[id] = public
+			}
 			serviceUpdateHandler = adminauth.RequireAdmin(authManager.RequireCSRF(
 				serviceupdate.NewHandler(buildVersion, buildCommit),
 			))
 			profileHandler, err = profileapi.New(profileapi.Dependencies{
-				Objects: cas, Store: store, Keys: keys,
+				Objects: cas, Store: store, Keys: keys, Signer: signer, PublicKeys: keys.Encoded(),
 			}, profileapi.Options{
 				ReadMiddleware: identityMiddleware,
 				AdminMiddleware: func(next http.Handler) http.Handler {
@@ -185,7 +193,7 @@ func newHandlerWithConfig(cfg handlerConfig) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		capabilities := []string{"health", "build-version"}
 		if cfg.ProfileAPI != nil {
-			capabilities = append(capabilities, "signed-global-profiles", "admin-profile-publication", "signed-config-setting-rules-v1")
+			capabilities = append(capabilities, "signed-global-profiles", "admin-profile-publication", "signed-config-setting-rules-v1", "admin-automatic-publication")
 		}
 		if cfg.ServiceUpdate != nil {
 			capabilities = append(capabilities, "admin-service-update")

@@ -10,7 +10,9 @@ Wachiland Elite modpack. Read `README.md` before changing code.
   request.
 - Never store a release signing private key, GitHub token, deploy private key,
   player inventory or Microsoft token in the repository, service config or
-  logs.
+  logs. Release signing is the explicit 2026-10-01 product-policy exception:
+  the HTTPS service generates its identity only in its private persistent data
+  directory; never expose it through HTTP, browser, repository or logs.
 - Preserve the Pandora PR #35 contract: immutable signed revisions, SHA-256
   CAS objects, pinned inheritance, anti-rollback, hidden inaccessible objects,
   and no Start-time local filesystem scan.

@@ -71,9 +71,11 @@ type RevisionStore interface {
 }
 
 type Dependencies struct {
-	Objects ObjectStore
-	Store   RevisionStore
-	Keys    KeyResolver
+	Objects    ObjectStore
+	Store      RevisionStore
+	Keys       KeyResolver
+	Signer     interface{ SignRequest([]byte) ([]byte, error) }
+	PublicKeys map[string]string
 }
 
 type Options struct {
@@ -85,6 +87,8 @@ type Options struct {
 }
 
 type API struct {
+	signer         interface{ SignRequest([]byte) ([]byte, error) }
+	publicKeys     map[string]string
 	objects        ObjectStore
 	store          RevisionStore
 	keys           KeyResolver
@@ -115,6 +119,7 @@ func New(deps Dependencies, opts Options) (http.Handler, error) {
 
 	api := &API{
 		objects: deps.Objects, store: deps.Store, keys: deps.Keys,
+		signer: deps.Signer, publicKeys: deps.PublicKeys,
 		maxJSONBytes: opts.MaxJSONBytes, maxObjectBytes: opts.MaxObjectBytes,
 		listLimit: opts.ListLimit,
 	}
@@ -166,6 +171,21 @@ type profileView struct {
 }
 
 func (a *API) serveRead(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/v1/signing-keys" {
+		if r.Method != http.MethodGet {
+			a.methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		keys := a.publicKeys
+		if keys == nil {
+			keys = map[string]string{}
+		}
+		a.writeJSON(w, http.StatusOK, struct {
+			Schema int               `json:"schema_version"`
+			Keys   map[string]string `json:"keys"`
+		}{1, keys})
+		return
+	}
 	if r.URL.Path == "/v1/profiles" {
 		if r.Method != http.MethodGet {
 			a.methodNotAllowed(w, http.MethodGet)
@@ -195,6 +215,28 @@ func (a *API) serveRead(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) serveAdmin(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/v1/admin/publications" {
+		if r.Method != http.MethodPost {
+			a.methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		if a.signer == nil {
+			a.writeError(w, http.StatusServiceUnavailable, "publication_unavailable", "automatic publication is unavailable")
+			return
+		}
+		raw, err := a.readJSONBody(w, r)
+		if err != nil {
+			a.writeBodyReadError(w, err)
+			return
+		}
+		envelope, err := a.signer.SignRequest(raw)
+		if err != nil {
+			a.writeRevisionVerifyError(w, err)
+			return
+		}
+		a.publishEnvelope(w, r, envelope)
+		return
+	}
 	if r.URL.Path == "/v1/admin/profiles" {
 		if r.Method != http.MethodGet {
 			a.methodNotAllowed(w, http.MethodGet)
@@ -386,6 +428,10 @@ func (a *API) handlePublishRevision(w http.ResponseWriter, r *http.Request) {
 		a.writeBodyReadError(w, err)
 		return
 	}
+	a.publishEnvelope(w, r, raw)
+}
+
+func (a *API) publishEnvelope(w http.ResponseWriter, r *http.Request, raw []byte) {
 	verified, canonicalEnvelope, err := a.verifyRevisionEnvelope(r.Context(), raw)
 	if err != nil {
 		a.writeRevisionVerifyError(w, err)

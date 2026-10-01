@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Wachiland · Distribución</title>
-  <link rel="stylesheet" href="/admin/assets/style.css?refresh=profile-presentation-0216">
+  <link rel="stylesheet" href="/admin/assets/style.css?refresh=automatic-publication-0217">
 </head>
 <body>
   <a class="skip-link" href="#main">Ir al contenido</a>
@@ -211,44 +211,19 @@
               <span class="step-number">3</span>
               <div>
                 <h3 id="publish-title">Subir y publicar</h3>
-                <p>Sube los cambios y valida la firma de la nueva versión.</p>
+                <p>Prepara los archivos y publica la nueva versión.</p>
               </div>
             </div>
 
             <div class="publish-stage">
               <div>
-                <strong>A. Subir archivos</strong>
+                <strong>Subir archivos</strong>
                 <p>Se enviarán únicamente los archivos nuevos o modificados.</p>
               </div>
               <button id="stage-button" class="button button-primary" type="button">Preparar archivos</button>
             </div>
             <p id="stage-status" class="inline-status" role="status">Pendiente.</p>
             <progress id="stage-progress" max="1" value="0" hidden></progress>
-
-            <div class="publish-stage">
-              <div>
-                <strong>B. Firmar la versión</strong>
-                <p>Descarga la solicitud o muéstrala para copiarla y complétala con la herramienta del administrador.</p>
-              </div>
-              <div class="button-row">
-                <button id="download-request" class="button button-secondary" type="button" disabled>Descargar solicitud</button>
-                <button id="show-request" class="button button-secondary" type="button" disabled>Mostrar solicitud</button>
-              </div>
-            </div>
-            <label id="request-preview-label" class="request-preview-field" for="signing-request-preview" hidden>
-              <span>Solicitud de firma (JSON)</span>
-              <textarea id="signing-request-preview" rows="8" readonly spellcheck="false"></textarea>
-            </label>
-
-            <div class="publish-stage">
-              <div>
-                <strong>C. Validar la firma</strong>
-                <p>Selecciona el archivo firmado para verificarlo antes de publicar.</p>
-              </div>
-              <label class="button button-secondary file-button" for="signed-envelope">Elegir archivo firmado</label>
-              <input id="signed-envelope" class="visually-hidden" type="file" accept="application/json,.json">
-            </div>
-            <p id="envelope-status" class="inline-status" role="status">Ningún archivo de firma seleccionado.</p>
 
             <div class="publish-final">
               <label class="check-row">
@@ -375,6 +350,6 @@
     </form>
   </dialog>
 
-  <script src="/admin/assets/app.js?refresh=profile-presentation-0216" defer></script>
+  <script src="/admin/assets/app.js?refresh=automatic-publication-0217" defer></script>
 </body>
 </html>
