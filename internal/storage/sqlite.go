@@ -271,7 +271,7 @@ func (s *SQLiteStore) ListRevisions(ctx context.Context, limit int) ([]StoredRev
 	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, profile_id, sequence, manifest_sha256, manifest, created_at
-		 FROM revisions ORDER BY julianday(created_at) DESC, profile_id, sequence DESC LIMIT ?`, limit)
+		 FROM revisions WHERE NOT EXISTS (SELECT 1 FROM deleted_profiles d WHERE d.profile_id = revisions.profile_id) ORDER BY julianday(created_at) DESC, profile_id, sequence DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
