@@ -156,6 +156,7 @@ func (s *SQLiteStore) ListSignedRevisions(ctx context.Context, limit int) ([]Sto
 		`SELECT r.id, r.profile_id, r.sequence, r.manifest_sha256, r.manifest, r.created_at, e.envelope
 		 FROM revisions r
 		 JOIN revision_envelopes e ON e.revision_id = r.id
+		 WHERE NOT EXISTS (SELECT 1 FROM deleted_profiles d WHERE d.profile_id = r.profile_id)
 		 ORDER BY r.profile_id, r.sequence DESC, r.id
 		 LIMIT ?`, limit)
 	if err != nil {
@@ -230,7 +231,7 @@ func (s *SQLiteStore) ProfileHead(ctx context.Context, profileID string) (Stored
 	var created string
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, profile_id, sequence, manifest_sha256, manifest, created_at
-		 FROM revisions WHERE profile_id = ?
+		 FROM revisions WHERE profile_id = ? AND NOT EXISTS (SELECT 1 FROM deleted_profiles d WHERE d.profile_id = revisions.profile_id)
 		 ORDER BY sequence DESC, id LIMIT 1`, profileID).Scan(
 		&stored.RevisionID, &stored.ProfileID, &stored.Sequence,
 		&stored.ManifestSHA256, &stored.Manifest, &created)
@@ -351,6 +352,10 @@ func (s *SQLiteStore) CompareAndSetChannel(ctx context.Context, expected *Channe
 	}
 	defer tx.Rollback()
 
+	if err := rejectDeletedProfile(ctx, tx, candidate.ProfileID); err != nil {
+		return ErrChannelConflict
+	}
+
 	var current ChannelRecord
 	err = tx.QueryRowContext(ctx,
 		`SELECT profile_id, channel, revision_id, sequence, manifest_sha256
@@ -403,6 +408,9 @@ func (s *SQLiteStore) CompareAndSetChannel(ctx context.Context, expected *Channe
 }
 
 const profileAPISchema = `
+CREATE TABLE IF NOT EXISTS deleted_profiles (
+ profile_id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS profile_presentation (
  profile_id TEXT PRIMARY KEY, payload BLOB NOT NULL, icon_sha256 TEXT
 );
@@ -450,4 +458,42 @@ func (s *SQLiteStore) SetProfilePresentation(ctx context.Context, id string, raw
 	}
 	_, err := s.db.ExecContext(ctx, "INSERT INTO profile_presentation(profile_id,payload,icon_sha256) VALUES(?,?,?) ON CONFLICT(profile_id) DO UPDATE SET payload=excluded.payload,icon_sha256=excluded.icon_sha256", id, raw, icon)
 	return err
+}
+
+// DeleteProfile withdraws a profile from the catalog. Immutable revisions remain
+// available by exact pin so existing installations and descendants stay valid.
+// The tombstone also reserves the ID against accidental republication.
+func (s *SQLiteStore) DeleteProfile(ctx context.Context, id string) error {
+	if err := s.ensureProfileAPISchema(ctx); err != nil {
+		return err
+	}
+	s.publishMu.Lock()
+	defer s.publishMu.Unlock()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var exists int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM revisions WHERE profile_id = ?", id).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return ErrRevisionNotFound
+	}
+	if _, err := tx.ExecContext(ctx, "INSERT INTO deleted_profiles(profile_id,deleted_at) VALUES(?,?) ON CONFLICT(profile_id) DO NOTHING", id, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func rejectDeletedProfile(ctx context.Context, tx *sql.Tx, id string) error {
+	var count int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM deleted_profiles WHERE profile_id = ?", id).Scan(&count); err != nil {
+		return err
+	}
+	if count != 0 {
+		return fmt.Errorf("%w: profile has been deleted", ErrImmutableConflict)
+	}
+	return nil
 }

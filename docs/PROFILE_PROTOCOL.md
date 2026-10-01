@@ -177,3 +177,19 @@ included with its ordinary backup. Concurrent presentation edits are last-write-
 mutable presentation object (including its existing icon), falling back to
 signed profile metadata for never-edited profiles. Asset query is bumped to
 profile-presentation-0216.
+
+
+## Global profile deletion (0.2.18)
+
+`DELETE /v1/admin/profiles/{profile_id}` requires the existing administrator
+session, LAN boundary and CSRF protection, plus a strict JSON body
+`{confirm_profile_id: "the exact profile_id"}`. A mismatch is rejected.
+The panel requires entering that identifier before enabling its final action.
+
+Deletion is a durable catalog tombstone (`deleted_profiles`), not deletion of
+immutable signed history or shared CAS files. The profile disappears from both
+admin/client catalog and recent publication lists. Existing exact revision pins
+remain readable so local installations and derived profiles keep their valid
+ancestry. Deleted identifiers cannot receive publications or channel changes
+and cannot be reused for a different profile. It is idempotent. No filesystem
+or player-world deletion is performed.

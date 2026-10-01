@@ -124,6 +124,9 @@ func (s *SQLiteStore) initialize() error {
 	if _, err := s.db.Exec(schemaV1); err != nil {
 		return fmt.Errorf("initialize sqlite schema: %w", err)
 	}
+	if _, err := s.db.Exec(profileAPISchema); err != nil {
+		return fmt.Errorf("initialize profile schema: %w", err)
+	}
 	return nil
 }
 
@@ -170,6 +173,9 @@ func (s *SQLiteStore) publishRevision(ctx context.Context, publication RevisionP
 	}
 	defer tx.Rollback()
 
+	if err := rejectDeletedProfile(ctx, tx, publication.ProfileID); err != nil {
+		return err
+	}
 	identical, err := identicalExistingRevision(ctx, tx, publication, objects)
 	if err != nil {
 		return err
