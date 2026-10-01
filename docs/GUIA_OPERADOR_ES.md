@@ -2,11 +2,11 @@
 
 Guía práctica para administrar el servicio privado de distribución de perfiles de Wachiland Elite. Está pensada para el servidor actual y distingue sus rutas conocidas de las instrucciones generales. No contiene contraseñas, claves privadas ni tokens.
 
-**Última revisión:** 28 de septiembre de 2026
+**Última revisión:** 1 de octubre de 2026
 
 **Servidor conocido:** `wachilandserver` · Ubuntu/Debian · IP LAN `192.168.1.69`
 
-**Última versión publicada en esta guía:** `0.2.12`. Comprueba siempre la versión instalada con los comandos de esta guía.
+**Última versión publicada en esta guía:** `0.2.17`. Comprueba siempre la versión instalada con los comandos de esta guía.
 
 ## Índice
 
@@ -26,7 +26,7 @@ Guía práctica para administrar el servicio privado de distribución de perfile
 
 Distribution guarda revisiones globales inmutables, valida sus firmas y almacena los archivos publicados como objetos identificados por SHA-256. El panel permite preparar y publicar perfiles; el launcher consulta las revisiones firmadas que tiene permitidas.
 
-El servidor **no** contiene la clave privada que firma las publicaciones. La firma se hace en un PC administrador con `bootoptim-release-signer`. El servidor conserva sólo las claves públicas necesarias para verificar. En el panel autenticado, el administrador puede consultar `main` e instalar su versión actual; el servicio se reinicia al terminar. El método manual desde Linux permanece disponible para recuperación y sólo instala `origin/main`.
+El servidor firma automáticamente al publicar desde el panel autenticado. La clave privada se genera una vez y permanece en el directorio de datos de Linux; el navegador y el launcher sólo reciben claves públicas y firmas. No necesitas guardar ni usar claves en tu PC. El administrador puede instalar y reiniciar las actualizaciones desde Servicio; la recuperación manual sigue disponible.
 
 La interfaz administrativa actual está en `https://welite.ddns.net:8444/admin/`. En la LAN, el nombre `welite.ddns.net` debe resolver a `192.168.1.69` para que el certificado Certbot coincida. No uses la URL por IP como dirección habitual porque el certificado es para el nombre DNS.
 
@@ -41,7 +41,9 @@ El proceso escucha en `192.168.1.69:8444`, restringe clientes a `192.168.1.0/24`
 | Copia del binario del checkout | `/home/wachi/launcher_manager/bin/bootoptim-distribution` |
 | Unidad systemd | `/etc/systemd/system/bootoptim-distribution.service` |
 | Datos publicados y objetos | `/var/lib/bootoptim-distribution` |
-| Mapa de claves públicas de firma | `/etc/bootoptim-distribution/release-public-keys.json` |
+| Clave automática del servidor (privada, no compartir) | `/var/lib/bootoptim-distribution/signing/server-release-key.json` |
+| Historial automático de claves públicas | `/var/lib/bootoptim-distribution/signing/public-keys.json` |
+| Mapa de claves públicas de firma anteriores | `/etc/bootoptim-distribution/release-public-keys.json` |
 | Verificador de contraseña admin | `/etc/bootoptim-distribution/admin-password.hash` |
 | Certificado TLS Certbot | `/etc/letsencrypt/live/welite.ddns.net/fullchain.pem` |
 | Clave privada TLS Certbot | `/etc/letsencrypt/live/welite.ddns.net/privkey.pem` |
@@ -57,11 +59,11 @@ El instalador y el actualizador mantienen el binario del checkout y el binario r
 
 1. Abre `https://welite.ddns.net:8444/admin/` desde la LAN e inicia sesión con el usuario administrador configurado (`wachi`) y la contraseña elegida al crear el verificador. No hay una contraseña predeterminada.
 2. En Perfiles globales, crea o selecciona el perfil y prepara el contenido/revisión. Para una hija, comprueba la versión base y los permisos heredados antes de publicar.
-3. Revisa la vista previa de archivos y reglas. El panel sube los objetos y ofrece descargar la solicitud de firma. Si la descarga del navegador no funciona, usa «Mostrar solicitud», copia el JSON completo y guárdalo como `profile.signing-request.json`.
-4. En el PC administrador, firma localmente la solicitud con `bootoptim-release-signer`; confirma el ID exacto del perfil que muestra el programa.
-5. Sube el sobre firmado al mismo flujo del panel y publica la revisión. Comprueba el historial del perfil.
+3. Revisa los archivos y reglas y pulsa **Preparar archivos**. Sólo se suben los objetos necesarios.
+4. Marca que has revisado los cambios y pulsa **Publicar versión**. Confirma la publicación. El servidor valida, firma y almacena la revisión automáticamente.
+5. Comprueba el historial. No hay descarga de solicitudes ni subida de archivos firmados.
 
-Una solicitud subida sin sobre válido no publica una revisión visible. Las revisiones ya publicadas son inmutables; una corrección se publica como una secuencia posterior. La promoción o rollback de canal cambia qué revisión señala el canal, no reescribe la historia.
+Las revisiones publicadas son inmutables; una corrección del contenido crea una secuencia posterior. Nombre, descripción e icono se cambian con **Editar perfil**, sin crear una revisión del juego.
 
 ### Comprobar servicio y catálogo
 
@@ -79,16 +81,9 @@ curl -fsS https://welite.ddns.net:8444/v1/profiles
 
 ### 1. Clave privada de firma de perfiles
 
-Es Ed25519 y autoriza revisiones del modpack. Debe existir sólo en el PC operador y sus copias cifradas. La clave pública correspondiente está en `release-public-keys.json` y en la lista de claves de firma confiables del launcher.
+Es Ed25519 y firma las revisiones del modpack. El servicio la crea automáticamente en `/var/lib/bootoptim-distribution/signing/server-release-key.json`, con permisos de propietario. No la descargues ni la copies al navegador.
 
-Estado conocido del PC operador:
-
-- ID de clave activa: `wachiland-release-2026-09`.
-- Archivo privado: `%LOCALAPPDATA%\WachilandLauncher\release-signing\wachiland-release-2026-09.private.json`.
-- La ACL de Windows se limitó a la cuenta `WACHI-PC\Wachii`, `SYSTEM` y administradores.
-- En el servidor sólo se conserva la clave pública en `/etc/bootoptim-distribution/release-public-keys.json`.
-
-La ACL limita quién puede leer el archivo en ese PC, pero no sustituye una copia de seguridad cifrada y desconectada. No subas el archivo privado a Git, al servidor, al panel, a una carpeta compartida sin cifrar ni a una incidencia/chat.
+Las claves públicas anteriores siguen en `/etc/bootoptim-distribution/release-public-keys.json`; las nuevas y su historial se conservan en `signing/public-keys.json`. El launcher consulta `/v1/signing-keys` mediante HTTPS verificado y conserva la compatibilidad con claves ya configuradas.
 
 ### 2. Verificador de contraseña del panel
 
@@ -100,59 +95,33 @@ Es la clave de Certbot `privkey.pem` para HTTPS. No firma perfiles y no es la co
 
 ## Copia, recuperación y rotación de la clave de firma
 
-### Preparar una copia de recuperación
+### Copia de seguridad del servidor
 
-Guarda una copia cifrada del archivo privado activo en un dispositivo o almacenamiento seguro que no dependa del PC operador. Guarda también el ID de clave y conserva su clave pública. Verifica que la copia cifrada se puede abrir, pero no pegues ni imprimas su contenido para comprobarla. Si usas un gestor de contraseñas o volumen cifrado, limita el acceso y documenta cómo recuperar ese cifrado.
+La copia debe incluir **todo** `/var/lib/bootoptim-distribution` (base de datos, objetos e identidad de firma) y `/etc/bootoptim-distribution` (verificador y claves públicas anteriores). Guarda el archivo en un almacenamiento privado, preferiblemente cifrado, separado del servidor. Contiene información privada; no lo subas al repositorio.
 
-No guardes la copia junto al repositorio ni en el mismo disco del PC como única copia. La clave pública no es secreta; la privada sí.
+Para una copia consistente, detén el servicio brevemente:
 
-### Caso A: el PC falla, pero conservas la clave privada o su copia
-
-1. Instala/abre un checkout confiable de BootOptimDistribution en el nuevo PC y localiza `cmd/bootoptim-release-signer`.
-2. Restaura el archivo privado desde la copia cifrada a una carpeta privada del usuario; vuelve a restringir la ACL de Windows.
-3. Usa el mismo `--key-id` y ese archivo para firmar. No hace falta cambiar la clave pública del servidor ni la confianza del launcher.
-4. Continúa el perfil existente con su siguiente número de secuencia/revisión. No crees otro perfil sólo por cambiar de PC.
-
-Comando de firma, adaptando rutas:
-
-```powershell
-go run ./cmd/bootoptim-release-signer sign `
-  --key "$env:LOCALAPPDATA\WachilandLauncher\release-signing\wachiland-release-2026-09.private.json" `
-  --request "$env:USERPROFILE\Downloads\profile.signing-request.json" `
-  --out "$env:TEMP\profile.signed-envelope.json"
+```bash
+sudo systemctl stop bootoptim-distribution
+sudo tar -czpf /root/bootoptim-backup-$(date +%Y%m%d-%H%M%S).tar.gz /var/lib/bootoptim-distribution /etc/bootoptim-distribution
+sudo systemctl start bootoptim-distribution
 ```
 
-El firmador valida la solicitud canónica y pide escribir el ID exacto del perfil antes de firmar. No reutilices una solicitud antigua si el panel preparó una revisión nueva.
+Comprueba que volvió a quedar activo. Si `tar` falla, reinicia igualmente el servicio y repite la copia cuando hayas resuelto el error. Conserva también la unidad y sus drop-ins; sus rutas aparecen en la sección de systemd.
 
-### Caso B: se perdió el PC y también todas las copias privadas
+### Si pierdes o cambias el PC
 
-No hay forma de recuperar la clave privada a partir de la pública ni del hash de una firma. El servidor **no** puede regenerarla. Crea otra clave en un PC nuevo y autoriza explícitamente su pública en el servidor y el launcher:
+Abre el panel desde el nuevo PC e inicia sesión. Puedes publicar nuevas revisiones de los mismos perfiles y crear otros. No necesitas recuperar una clave del PC. Instala la versión nueva del launcher para usar publicaciones automáticas.
 
-```powershell
-go run ./cmd/bootoptim-release-signer keygen `
-  --key-id wachiland-release-2026-10 `
-  --private-out "$env:LOCALAPPDATA\WachilandLauncher\release-signing\wachiland-release-2026-10.private.json" `
-  --public-out "$env:TEMP\wachiland-release-2026-10-public.json"
-```
+### Si recuperas el servidor desde una copia
 
-1. Protege la nueva clave privada y crea inmediatamente una copia cifrada de recuperación.
-2. Abre el JSON público temporal y añade **sólo su nueva entrada** al mapa existente en `/etc/bootoptim-distribution/release-public-keys.json`. No borres las claves antiguas. Mantén JSON válido y conserva una copia del archivo anterior.
-3. Añade esa misma clave pública a las claves de firma confiables del launcher y distribuye una versión del launcher que la reconozca antes de entregar perfiles firmados con ella.
-4. Reinicia Distribution y verifica `/v1/meta/version` y el login del panel.
-5. Publica la secuencia siguiente del perfil existente con el nuevo `--key-id`. Los IDs de perfil y su historia permanecen iguales.
+Detén el servicio, restaura los directorios anteriores con sus propietarios y permisos y vuelve a iniciarlo. Usa la misma configuración de HTTPS y directorio de datos. La identidad, perfiles e historial continuarán siendo los mismos. No mezcles una base de datos reciente con objetos de una copia antigua.
 
-La ubicación exacta de la lista confiable del launcher depende de la versión privada del cliente; debe modificarse en su configuración/código de confianza de firmantes, no en una ruta inventada del servidor. Si todos los clientes antiguos sólo confían en las claves anteriores, necesitarán actualizar esa confianza antes de aceptar nuevas firmas. Conserva las claves públicas antiguas para validar revisiones históricas.
+### Si se pierde sólo la clave privada del servidor
 
-El mapa del servidor es un objeto JSON con IDs y claves públicas base64url sin padding, por ejemplo:
+Si `server-release-key.json` falta, el siguiente arranque genera otra identidad. Conserva `signing/public-keys.json` y el mapa de claves públicas anterior: permiten verificar revisiones históricas. Se pueden publicar secuencias nuevas para los mismos IDs de perfil. Un archivo privado corrupto provoca un error explícito al arrancar; no se reemplaza silenciosamente. Antes de retirarlo para regenerar, guarda una copia completa del estado y confirma que está realmente corrupto.
 
-```json
-{
-  "wachiland-release-2026-09": "CLAVE_PUBLICA_EXISTENTE",
-  "wachiland-release-2026-10": "NUEVA_CLAVE_PUBLICA"
-}
-```
-
-No copies texto privado al servidor. La rotación no cambia el TLS ni la contraseña administrativa.
+La regeneración no recupera perfiles, objetos ni una base de datos perdidos: para eso necesitas la copia completa. No borres claves públicas antiguas. La clave TLS y la contraseña admin cumplen funciones distintas.
 
 ### Cambiar la contraseña administrativa
 
@@ -290,7 +259,7 @@ Cambiar el puerto requiere actualizar `--listen`, la regla UFW y la URL utilizad
 | Login incorrecto | Usuario configurado (`wachi`), contraseña introducida y ruta/hash legible. Reemplaza el verificador con el procedimiento anterior si se perdió la contraseña. |
 | Panel no conecta | Confirma servicio activo, escucha en `192.168.1.69:8444`, regla LAN UFW, DNS local `welite.ddns.net → 192.168.1.69` y que el cliente esté en `192.168.1.0/24`. |
 | El perfil no aparece | Consulta historial de perfiles y `/v1/profiles`; comprueba que la revisión se publicó y que el sobre fue firmado con un ID de clave confiable. |
-| Cliente rechaza una firma | Comprueba que la clave pública del `key_id` esté tanto en el mapa del servidor como en la lista confiable del launcher, y que se haya actualizado el cliente. |
+| Cliente rechaza una firma | Comprueba HTTPS y `/v1/signing-keys`, conserva el historial público y actualiza el launcher a una versión con descubrimiento automático. |
 
 No publiques capturas con cookies, tokens CSRF, hashes de contraseña, contenido de claves privadas o solicitudes de firma que puedan contener datos del perfil.
 
@@ -402,8 +371,8 @@ Si `systemctl cat` mostraba un directorio `bootoptim-distribution.service.d`, in
 - Consultar `/v1/meta/version` después de una actualización.
 - Probar que el login del panel funciona y que DNS local apunta al servidor correcto.
 - Verificar espacio libre y realizar copia consistente de `/var/lib/bootoptim-distribution` si ya hay publicaciones importantes.
-- Mantener la clave privada de firma y una copia cifrada de recuperación bajo control del operador.
-- Conservar las claves públicas anteriores en el servidor y el launcher mientras haya revisiones firmadas con ellas.
+- Mantener una copia privada y consistente de los datos del servidor, incluida su identidad de firma.
+- Conservar el historial de claves públicas anteriores mientras haya revisiones firmadas con ellas.
 - Después de renovar Certbot, reiniciar el servicio y confirmar que HTTPS sigue respondiendo.
 - Mantener el puerto accesible sólo desde la LAN; no activar port forwarding público.
 - Revisar `--check` antes de `--apply`; actualizar sólo desde `main`.

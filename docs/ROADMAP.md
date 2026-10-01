@@ -188,3 +188,12 @@ immutable. API regression test proves unchanged sequence and CAS icon lifecycle.
 mutable presentation object (including its existing icon), falling back to
 signed profile metadata for never-edited profiles. Asset query is bumped to
 profile-presentation-0216.
+
+
+## Publication policy override — 2026-10-01
+
+The user explicitly replaced mandatory workstation signing with automatic
+server signing for the private friends-only modpack. This supersedes earlier
+private-key-on-PC requirements in this historical roadmap. Implemented in
+0.2.17: authenticated CSRF publication, persistent server identity/public
+history, unchanged immutable revision validation, HTTPS public-key discovery.

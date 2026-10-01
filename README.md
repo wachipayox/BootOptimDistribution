@@ -9,8 +9,11 @@ launcher.
 El proceso Linux mantiene loopback por defecto y expone healthcheck e identidad
 de versión. En el modo administrativo HTTPS, también sirve el panel privado y
 la API de perfiles globales sobre el contrato definido en
-`docs/PROFILE_PROTOCOL.md`. La firma privada permanece en la máquina del
-operador; el servidor recibe sólo las claves públicas de confianza.
+`docs/PROFILE_PROTOCOL.md`. El servidor firma automáticamente las publicaciones
+autorizadas: en el panel basta preparar archivos, revisar y publicar. Su clave
+se genera una vez en el directorio de datos; no necesitas firmar JSON en tu PC.
+El launcher obtiene las claves públicas por el mismo HTTPS verificado. Consulta
+`docs/GUIA_OPERADOR_ES.md` para copias y recuperación.
 
 ## Actualización del servicio
 
@@ -69,6 +72,8 @@ curl http://127.0.0.1:8088/v1/meta/version
 - `GET /healthz` — disponibilidad del proceso.
 - `GET /v1/meta/version` — versión semántica, commit instalado, esquema de
   protocolo y capacidades expuestas.
+- `GET /v1/signing-keys` — claves públicas actuales e históricas, nunca privadas.
+- `POST /v1/admin/publications` — valida y firma una publicación desde el panel.
 - `GET /v1/profiles`, revisiones y objetos por SHA-256 — catálogo y contenido
   global para el launcher en modo HTTPS autenticado.
 - `/v1/admin/...` — publicación e historial protegidos por sesión admin y

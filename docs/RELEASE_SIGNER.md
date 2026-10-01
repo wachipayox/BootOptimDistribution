@@ -1,4 +1,18 @@
-# Offline release signer
+# Automatic publication (current workflow)
+
+Since 0.2.17, use the authenticated panel: **Preparar archivos → revisar →
+Publicar versión**. Distribution signs automatically and the launcher discovers
+public identities through verified HTTPS. No local signing tool or key is
+required. Back up the server data directory; see `GUIA_OPERADOR_ES.md`.
+
+## Legacy offline tool (optional)
+
+The following instructions describe compatibility tooling for externally signed
+envelopes, not the current panel workflow. The old download/import controls are
+no longer present. Workstation-only signing policy was superseded by the user's
+explicit decision on 2026-10-01.
+
+### Offline release signer
 
 `bootoptim-release-signer` creates Ed25519 release keys and signs a canonical
 request downloaded from the Distribution panel. Run it on an administrator PC,

@@ -32,7 +32,6 @@ const state = {
   manifest: null,
   canonicalManifest: '',
   manifestSHA256: '',
-  signedEnvelope: null,
   staged: false,
   csrfToken: '',
   serviceUpdate: null,
@@ -66,12 +65,6 @@ const nodes = {
   stageButton: document.querySelector('#stage-button'),
   stageStatus: document.querySelector('#stage-status'),
   stageProgress: document.querySelector('#stage-progress'),
-  downloadRequest: document.querySelector('#download-request'),
-  showRequest: document.querySelector('#show-request'),
-  requestPreviewLabel: document.querySelector('#request-preview-label'),
-  requestPreview: document.querySelector('#signing-request-preview'),
-  signedEnvelope: document.querySelector('#signed-envelope'),
-  envelopeStatus: document.querySelector('#envelope-status'),
   confirmDiff: document.querySelector('#confirm-diff'),
   publishButton: document.querySelector('#publish-button'),
   publishStatus: document.querySelector('#publish-status'),
@@ -1480,15 +1473,9 @@ function invalidatePrepared() {
   state.manifest = null;
   state.canonicalManifest = '';
   state.manifestSHA256 = '';
-  state.signedEnvelope = null;
   state.staged = false;
-  nodes.downloadRequest.disabled = true;
-  nodes.showRequest.disabled = true;
-  nodes.requestPreview.value = '';
-  nodes.requestPreviewLabel.hidden = true;
   nodes.publishButton.disabled = true;
   nodes.confirmDiff.checked = false;
-  setStatus(nodes.envelopeStatus, 'Ningún archivo de firma seleccionado.');
   setStatus(nodes.publishStatus, '');
 }
 
@@ -2053,13 +2040,10 @@ async function prepareAndStage() {
 
     if (!uploads.length) nodes.stageProgress.value = 1;
     state.staged = true;
-    nodes.downloadRequest.disabled = false;
-    nodes.showRequest.disabled = false;
-    setStatus(nodes.stageStatus, 'Archivos preparados y subidos. Ya puedes descargar el archivo de firma.', 'success');
+    updatePublishEnabled();
+    setStatus(nodes.stageStatus, 'Archivos preparados. Revisa los cambios y publica la versión.', 'success');
   } catch (error) {
     state.staged = false;
-    nodes.downloadRequest.disabled = true;
-    nodes.showRequest.disabled = true;
     setStatus(nodes.stageStatus, 'No se pudieron preparar los archivos: ' + describeError(error), 'error');
   } finally {
     nodes.stageButton.disabled = false;
@@ -2080,80 +2064,6 @@ function signingRequestText() {
   return canonicalRequest + '\n';
 }
 
-function downloadSigningRequest() {
-  let requestText;
-  try {
-    requestText = signingRequestText();
-  } catch (error) {
-    setStatus(nodes.stageStatus, describeError(error), 'error');
-    return;
-  }
-  const blob = new Blob([requestText], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = safeFilename(state.manifest.profile.id) + '-' + safeFilename(state.manifest.revision.id) + '.signing-request.json';
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  // Let the browser finish reading the blob before revoking its object URL.
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  setStatus(nodes.stageStatus, 'Archivo descargado. Complétalo con la herramienta de firma y selecciona el resultado.', 'success');
-}
-
-function showSigningRequest() {
-  try {
-    nodes.requestPreview.value = signingRequestText();
-    nodes.requestPreviewLabel.hidden = false;
-    nodes.requestPreview.focus();
-    nodes.requestPreview.select();
-    setStatus(nodes.stageStatus, 'Solicitud lista. Puedes copiar el JSON y guardarlo como archivo para firmarlo.', 'success');
-  } catch (error) {
-    setStatus(nodes.stageStatus, describeError(error), 'error');
-  }
-}
-
-async function readSignedEnvelope(file) {
-  if (!file) return;
-  let envelope;
-  try {
-    envelope = JSON.parse(await file.text());
-  } catch (error) {
-    state.signedEnvelope = null;
-    setStatus(nodes.envelopeStatus, 'El archivo elegido no contiene JSON válido.', 'error');
-    updatePublishEnabled();
-    return;
-  }
-
-  try {
-    if (!state.staged || !state.manifest || !state.manifestSHA256) {
-      throw new Error('No hay un staging preparado contra el que validar este envelope.');
-    }
-    if (!envelope || typeof envelope !== 'object') throw new Error('El envelope no es un objeto JSON.');
-    if (envelope.canonicalization !== 'RFC8785-JCS') throw new Error('La canonicalización no es RFC8785-JCS.');
-    if (envelope.manifest_sha256 !== state.manifestSHA256) throw new Error('El SHA-256 del envelope no coincide con el diff preparado.');
-
-    const manifest = typeof envelope.manifest === 'string' ? JSON.parse(envelope.manifest) : envelope.manifest;
-    if (!manifest || canonicalize(manifest) !== state.canonicalManifest) {
-      throw new Error('El manifest firmado no coincide exactamente con el manifest preparado.');
-    }
-
-    const signature = envelope.signature;
-    if (!signature || typeof signature !== 'object') throw new Error('Falta la firma.');
-    if (signature.algorithm !== 'Ed25519') throw new Error('El algoritmo de firma debe ser Ed25519.');
-    if (typeof signature.key_id !== 'string' || !signature.key_id) throw new Error('Falta key_id en la firma.');
-    if (typeof signature.value !== 'string' || !signature.value) throw new Error('Falta el valor de firma.');
-
-    state.signedEnvelope = envelope;
-    setStatus(nodes.envelopeStatus, 'Firma reconocida. El servicio la comprobará al publicar.', 'success');
-  } catch (error) {
-    state.signedEnvelope = null;
-    setStatus(nodes.envelopeStatus, 'No se pudo validar el archivo de firma: ' + describeError(error), 'error');
-  }
-
-  updatePublishEnabled();
-}
-
 function summarizeDiff() {
   const counts = { added: 0, changed: 0, removed: 0 };
   state.diff.forEach(function (entry) {
@@ -2170,11 +2080,11 @@ function summarizeDiff() {
 }
 
 function updatePublishEnabled() {
-  nodes.publishButton.disabled = !(state.signedEnvelope && nodes.confirmDiff.checked);
+  nodes.publishButton.disabled = !(state.staged && state.manifest && nodes.confirmDiff.checked);
 }
 
 function confirmPublication() {
-  if (!state.signedEnvelope || !nodes.confirmDiff.checked) return;
+  if (!state.staged || !state.manifest || !nodes.confirmDiff.checked) return;
   nodes.dialogSummary.textContent = summarizeDiff();
   if (typeof nodes.dialog.showModal === 'function') {
     nodes.dialog.showModal();
@@ -2184,20 +2094,20 @@ function confirmPublication() {
 }
 
 async function publishEnvelope() {
-  if (!state.signedEnvelope) return;
+  if (!state.staged || !state.manifest) return;
   nodes.publishButton.disabled = true;
   setStatus(nodes.publishStatus, 'Publicando versión…');
 
   try {
-    await request('/v1/admin/revisions', {
+    await request('/v1/admin/publications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(state.signedEnvelope)
+      body: signingRequestText()
     });
     const revision = state.manifest && state.manifest.revision ? state.manifest.revision.id : '';
     setStatus(nodes.publishStatus, 'Versión publicada' + (revision ? ': ' + revision : '') + '.', 'success');
     nodes.confirmDiff.checked = false;
-    state.signedEnvelope = null;
+    state.staged = false;
     qs('#revision-id').value = generatedRevisionID();
     updatePublishEnabled();
     await loadOverview();
@@ -2457,14 +2367,8 @@ function bindEvents() {
     }
   });
   nodes.stageButton.addEventListener('click', prepareAndStage);
-  nodes.downloadRequest.addEventListener('click', downloadSigningRequest);
-  nodes.showRequest.addEventListener('click', showSigningRequest);
-  nodes.signedEnvelope.addEventListener('change', function () {
-    readSignedEnvelope(nodes.signedEnvelope.files && nodes.signedEnvelope.files[0]);
-    nodes.signedEnvelope.value = '';
-  });
-  nodes.confirmDiff.addEventListener('change', updatePublishEnabled);
   nodes.publishButton.addEventListener('click', confirmPublication);
+  nodes.confirmDiff.addEventListener('change', updatePublishEnabled);
   qs('#check-service-update').addEventListener('click', checkServiceUpdate);
   qs('#apply-service-update').addEventListener('click', applyServiceUpdate);
   nodes.dialog.addEventListener('close', function () {
