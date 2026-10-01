@@ -45,6 +45,24 @@ ID, revision, sequence and digest, and requires typing the exact profile ID
 before signing. The output contains the signature and public identity, not the
 private key. Upload that signed envelope back into the same panel workflow.
 
+### Sign a request on Windows by dragging the JSON
+
+Keep `scripts/sign-profile-request.sh` beside
+`scripts/sign-profile-request.cmd` in a trusted checkout of this repository.
+Drag the request JSON downloaded from the panel onto `sign-profile-request.cmd`.
+A console opens and asks for the local Ed25519 private-key file on first use.
+The script remembers only that file path in Git Bash's user config directory;
+the private key itself stays in its secure folder. Later uses need only the
+profile-ID confirmation required by the signer.
+
+The signed envelope is created next to the original JSON with the suffix
+`.signed-envelope.json`; for example,
+`profile.signing-request.signed-envelope.json`. Existing output files are never
+overwritten. Remove `~/.config/bootoptim-distribution/release-key-path` to
+change the remembered key, or set `BOOTOPTIM_RELEASE_SIGNING_KEY` to override
+it. The script requires Git for Windows (Git Bash) and Go on `PATH`. Upload the
+signed file to the same panel workflow.
+
 ## Replace a lost workstation
 
 If the old private key has an encrypted backup, restore it on the replacement
