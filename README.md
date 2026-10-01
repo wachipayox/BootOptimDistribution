@@ -87,11 +87,10 @@ curl http://127.0.0.1:8088/v1/meta/version
 
 La lista de capacidades de `/v1/meta/version` indica si los endpoints de
 perfiles están habilitados. La publicación valida firmas Ed25519, manifiestos
-canónicos, objetos y reglas de secuencia/herencia. La herramienta local
-`bootoptim-release-signer` genera claves en un PC administrador y firma allí
-las solicitudes descargadas; su clave privada nunca va al servidor. Consulta
-`docs/RELEASE_SIGNER.md` para uso y recuperación, y
-`docs/PROFILE_PROTOCOL.md` para el contrato de rotación.
+canónicos, objetos y reglas de secuencia/herencia. El panel firma automáticamente
+las solicitudes mediante el servicio. La herramienta offline permanece como
+compatibilidad opcional para sobres externos, no como paso del flujo normal.
+Consulta `docs/GUIA_OPERADOR_ES.md` para copias y recuperación.
 
 ## Panel de administración en red local
 
@@ -107,13 +106,14 @@ lectura en una LAN de confianza. Para la frontera administrativa segura usa
 sesión segura y CSRF, y conserva el bind privado y el filtro CIDR como defensa
 adicional. Certificado, clave TLS, nombre de administrador y archivo de
 verificador de contraseña son explícitos; no existe una identidad admin
-predeterminada. `--release-public-keys-file` configura los verificadores
-Ed25519 confiables; sin ellos, el servicio rechaza toda publicación firmada.
+predeterminada. `--release-public-keys-file` conserva verificadores Ed25519
+anteriores; la identidad automática se genera en el directorio de datos.
 
 Consulta `docs/ADMIN_UI_LAN.md` para la configuración HTTPS, credenciales
 locales, firewall y ejemplo de `systemd`. No uses `0.0.0.0`, no permitas el
 puerto desde redes invitadas y no lo reenvíes desde el router a Internet. Las
-claves Ed25519 privadas de firma de releases permanecen fuera del servicio.
+claves privadas de publicación permanecen en el directorio privado de datos
+del servicio y no se exportan por HTTP.
 
 Para operar la instalación actual, cambiar la contraseña o recuperar/rotar las
 claves de firma, consulta la [guía del operador](docs/GUIA_OPERADOR_ES.md).

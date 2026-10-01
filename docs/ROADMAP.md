@@ -58,11 +58,11 @@ participates in the launch path.
 - Global revisions are immutable, signed, content-addressed, and may pin a
   parent profile revision. Clients can derive local profiles from a global
   profile without uploading those private changes.
-- Store only signing public keys on the server. A separate local signer holds
-  the private release key; neither the browser nor the service receives it.
-- Preserve all trusted public keys during signer rotation so old revisions
-  remain verifiable. A replacement PC creates its own new signer; Distribution
-  must never generate or retain release private keys.
+- Automatic server signing replaces mandatory workstation signing by explicit
+  user decision on 2026-10-01. Keep private identity only in persistent server
+  state, never the browser, launcher, repository or logs.
+- Preserve public identity history during regeneration so old revisions remain
+  verifiable. Replacing the administrator PC requires no key migration.
 - The first end-to-end publication uses a small synthetic pack, not real player
   data. The browser selects a source folder and previews the proposed changes.
 - A revision records its parent pin and its own changes/removals. Profile
