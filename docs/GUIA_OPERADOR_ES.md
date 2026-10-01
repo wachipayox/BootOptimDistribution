@@ -6,7 +6,7 @@ Guía práctica para administrar el servicio privado de distribución de perfile
 
 **Servidor conocido:** `wachilandserver` · Ubuntu/Debian · IP LAN `192.168.1.69`
 
-**Última versión publicada en esta guía:** `0.2.17`. Comprueba siempre la versión instalada con los comandos de esta guía.
+**Última versión publicada en esta guía:** `0.2.18`. Comprueba siempre la versión instalada con los comandos de esta guía.
 
 ## Índice
 
@@ -64,6 +64,19 @@ El instalador y el actualizador mantienen el binario del checkout y el binario r
 5. Comprueba el historial. No hay descarga de solicitudes ni subida de archivos firmados.
 
 Las revisiones publicadas son inmutables; una corrección del contenido crea una secuencia posterior. Nombre, descripción e icono se cambian con **Editar perfil**, sin crear una revisión del juego.
+
+### Borrar un perfil global
+
+En **Perfiles globales**, pulsa **Borrar perfil**. El diálogo muestra el nombre
+y el identificador del perfil. Escribe el identificador completo y confirma;
+si no coincide, el botón permanece desactivado. **Cancelar** no cambia nada.
+
+El perfil desaparece del catálogo de la web y el launcher. Las instancias ya
+instaladas y los perfiles derivados se conservan. El servidor guarda su
+historial firmado para no romper referencias heredadas, y reserva su ID para
+que no pueda reutilizarse accidentalmente. Este botón no borra mundos ni
+archivos locales. No hay un botón de restauración en esta versión; conserva
+las copias de seguridad completas del servicio.
 
 ### Comprobar servicio y catálogo
 

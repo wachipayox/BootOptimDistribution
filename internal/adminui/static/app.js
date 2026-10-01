@@ -394,6 +394,11 @@ function renderProfiles() {
     artworkButton.type = 'button';
     artworkButton.addEventListener('click', () => editProfilePresentation(profile));
     actionRow.appendChild(artworkButton);
+    const deleteButton = make('button', 'button button-danger', 'Borrar perfil');
+    deleteButton.type = 'button';
+    deleteButton.disabled = !id;
+    deleteButton.addEventListener('click', () => deleteGlobalProfile(profile));
+    actionRow.appendChild(deleteButton);
     card.appendChild(actionRow);
 
     const revisionContainer = make('div');
@@ -2483,4 +2488,44 @@ async function editProfilePresentation(profile) {
     finally { save.disabled=close.disabled=false; }
   });
   dialog.addEventListener('close',()=>{if(iconURL) URL.revokeObjectURL(iconURL);dialog.remove();});
+}
+
+
+function deleteGlobalProfile(profile) {
+  const id = profileId(profile);
+  const dialog = make('dialog', 'profile-presentation-dialog');
+  const form = make('form', 'panel');
+  const title = make('h3', '', 'Borrar perfil global');
+  title.id = 'delete-profile-title';
+  dialog.setAttribute('aria-labelledby', title.id);
+  const label = make('label');
+  const input = make('input');
+  input.type = 'text'; input.autocomplete = 'off'; input.spellcheck = false;
+  label.append(make('span', '', 'Escribe el identificador para confirmar'), make('code', '', id), input);
+  const status = make('p', 'inline-status'); status.setAttribute('role', 'status');
+  const cancel = make('button', 'button button-secondary', 'Cancelar'); cancel.type = 'button';
+  const remove = make('button', 'button button-danger', 'Borrar perfil'); remove.type = 'submit'; remove.disabled = true;
+  const actions = make('div', 'dialog-actions'); actions.append(cancel, remove);
+  form.append(title, make('p', '', profileName(profile)), make('p', 'microcopy', 'El perfil dejará de aparecer en el catálogo. Las instancias ya instaladas y los perfiles derivados se conservarán. Su identificador no podrá reutilizarse.'), label, status, actions);
+  dialog.append(form); document.body.append(dialog);
+  let busy = false;
+  input.addEventListener('input', () => { remove.disabled = busy || input.value !== id; });
+  cancel.addEventListener('click', () => dialog.close());
+  dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
+  dialog.addEventListener('close', () => dialog.remove());
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (busy || input.value !== id) return;
+    busy = true; remove.disabled = cancel.disabled = input.disabled = true;
+    status.textContent = 'Borrando perfil…';
+    try {
+      await request('/v1/admin/profiles/' + encodeURIComponent(id), {method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm_profile_id:input.value})});
+      const resetBase = nodes.parentProfile.value === id;
+      await loadProfiles(); await loadOverview();
+      if (resetBase) { nodes.parentProfile.value = ''; await handleParentProfileChange(); }
+      dialog.close();
+    } catch (error) { status.textContent = 'No se pudo borrar el perfil: ' + describeError(error); }
+    finally { busy = false; cancel.disabled = input.disabled = false; remove.disabled = input.value !== id; }
+  });
+  dialog.showModal(); input.focus();
 }
