@@ -29,6 +29,14 @@ func validateManifestValues(m Manifest) error {
 	if !validProfileID(m.Profile.ID) || len(m.Profile.Name) == 0 || len(m.Profile.Name) > 96 || !m.Profile.Official {
 		return errors.New("profile is invalid or not official")
 	}
+	if len(m.Profile.Description) > 8192 {
+		return errors.New("profile description exceeds 8192 bytes")
+	}
+	if icon := m.Profile.Icon; icon != nil {
+		if !validObjectRef(*icon) || icon.Size > 2*1024*1024 || icon.MediaType != "image/png" {
+			return errors.New("profile icon must be a PNG object of at most 2 MiB")
+		}
+	}
 	if len(m.Game.Minecraft) == 0 || len(m.Game.Minecraft) > 64 || len(m.Game.NeoForge) == 0 || len(m.Game.NeoForge) > 64 {
 		return errors.New("game versions must be non-empty and at most 64 bytes")
 	}

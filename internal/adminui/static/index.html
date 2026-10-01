@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Wachiland · Distribución</title>
-  <link rel="stylesheet" href="/admin/assets/style.css?v=22">
+  <link rel="stylesheet" href="/admin/assets/style.css?refresh=profile-presentation-0215">
 </head>
 <body>
   <a class="skip-link" href="#main">Ir al contenido</a>
@@ -103,6 +103,12 @@
               <label class="span-2">
                 <span>Nombre visible</span>
                 <input id="profile-name" autocomplete="off" placeholder="Wachiland Elite">
+              </label>
+              <label class="span-2 profile-icon-picker">
+                <span>Icono del perfil <small>(opcional)</small></span>
+                <div class="card-actions"><img id="profile-icon-preview" alt="" hidden width="64" height="64"><button type="button" id="pick-profile-icon" class="button button-secondary">Elegir imagen</button><button type="button" id="remove-profile-icon" class="button button-secondary" hidden>Quitar icono</button></div>
+                <input id="profile-icon-file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+                <small id="profile-icon-status">PNG, JPEG o WebP. Se adapta a 256 × 256 píxeles.</small>
               </label>
               <input id="profile-id" type="hidden">
               <input id="revision-id" type="hidden">
@@ -369,6 +375,6 @@
     </form>
   </dialog>
 
-  <script src="/admin/assets/app.js?v=23" defer></script>
+  <script src="/admin/assets/app.js?refresh=profile-presentation-0215" defer></script>
 </body>
 </html>

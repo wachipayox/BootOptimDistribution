@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image/png"
 	"io"
 	"net/http"
 	"strconv"
@@ -152,11 +153,16 @@ type channelView struct {
 }
 
 type profileView struct {
-	ProfileID      string        `json:"profile_id"`
-	Name           string        `json:"name"`
-	LatestRevision revisionRef   `json:"latest_revision"`
-	Channels       []channelView `json:"channels"`
-	PublishedCount int           `json:"published_revision_count,omitempty"`
+	Presentation   *profilePresentation `json:"presentation,omitempty"`
+	Description    string               `json:"description,omitempty"`
+	Minecraft      string               `json:"minecraft"`
+	NeoForge       string               `json:"neoforge"`
+	Icon           *revision.ObjectRef  `json:"icon,omitempty"`
+	ProfileID      string               `json:"profile_id"`
+	Name           string               `json:"name"`
+	LatestRevision revisionRef          `json:"latest_revision"`
+	Channels       []channelView        `json:"channels"`
+	PublishedCount int                  `json:"published_revision_count,omitempty"`
 }
 
 func (a *API) serveRead(w http.ResponseWriter, r *http.Request) {
@@ -206,6 +212,14 @@ func (a *API) serveAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := pathParts(r.URL.Path)
+	if len(parts) == 5 && parts[0] == "v1" && parts[1] == "admin" && parts[2] == "profiles" && parts[4] == "presentation" {
+		if r.Method != http.MethodPut {
+			a.methodNotAllowed(w, http.MethodPut)
+			return
+		}
+		a.handlePresentation(w, r, parts[3])
+		return
+	}
 	if len(parts) == 5 && parts[0] == "v1" && parts[1] == "admin" && parts[2] == "profiles" && parts[4] == "revisions" {
 		if r.Method != http.MethodGet {
 			a.methodNotAllowed(w, http.MethodGet)
@@ -344,6 +358,28 @@ func (a *API) handleObjectDownload(w http.ResponseWriter, r *http.Request, diges
 	}
 }
 
+func (a *API) validateProfileIcon(ctx context.Context, icon *revision.ObjectRef) error {
+	if icon == nil {
+		return nil
+	}
+	f, size, err := a.objects.Open(ctx, icon.SHA256)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if size != icon.Size || size > 2*1024*1024 {
+		return errors.New("invalid profile icon size")
+	}
+	config, err := png.DecodeConfig(io.LimitReader(f, 2*1024*1024+1))
+	if err != nil {
+		return errors.New("profile icon is not a valid PNG")
+	}
+	if config.Width < 1 || config.Height < 1 || config.Width > 1024 || config.Height > 1024 {
+		return errors.New("profile icon dimensions exceed 1024 by 1024 pixels")
+	}
+	return nil
+}
+
 func (a *API) handlePublishRevision(w http.ResponseWriter, r *http.Request) {
 	raw, err := a.readJSONBody(w, r)
 	if err != nil {
@@ -356,6 +392,10 @@ func (a *API) handlePublishRevision(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := a.validateProfileIcon(r.Context(), verified.Manifest().Profile.Icon); err != nil {
+		a.writeError(w, http.StatusUnprocessableEntity, "invalid_profile_icon", err.Error())
+		return
+	}
 	if existing, err := a.store.SignedRevision(r.Context(), verified.RevisionID()); err == nil {
 		if existing.ProfileID != verified.ProfileID() || existing.ManifestSHA256 != verified.ManifestSHA256() ||
 			!bytes.Equal(existing.Envelope, canonicalEnvelope) {
@@ -439,6 +479,11 @@ func (a *API) expectedObjects(manifest revision.Manifest) ([]storage.Object, err
 		}
 		byHash[ref.SHA256] = ref.Size
 		return nil
+	}
+	if manifest.Profile.Icon != nil {
+		if err := add(*manifest.Profile.Icon); err != nil {
+			return nil, err
+		}
 	}
 	for _, entry := range manifest.Mods {
 		if err := add(entry.Object); err != nil {
@@ -552,11 +597,31 @@ func (a *API) handleProfiles(w http.ResponseWriter, r *http.Request, admin bool)
 				profileChannels = []channelView{}
 			}
 			views = append(views, profileView{
-				ProfileID:      item.ProfileID,
-				Name:           manifest.Profile.Name,
+				ProfileID:   item.ProfileID,
+				Name:        manifest.Profile.Name,
+				Description: manifest.Profile.Description,
+				Minecraft:   manifest.Game.Minecraft, NeoForge: manifest.Game.NeoForge, Icon: manifest.Profile.Icon,
 				LatestRevision: revisionRef{RevisionID: item.RevisionID, Sequence: item.Sequence, ManifestSHA256: item.ManifestSHA256},
 				Channels:       profileChannels,
 			})
+		}
+		if store, ok := a.store.(presentationStore); ok && views[i].Presentation == nil {
+			raw, err := store.ProfilePresentation(r.Context(), item.ProfileID)
+			if err != nil {
+				a.writeError(w, 500, "storage_error", "profile presentation unavailable")
+				return
+			}
+			if len(raw) > 0 {
+				var p profilePresentation
+				if json.Unmarshal(raw, &p) != nil {
+					a.writeError(w, 500, "storage_error", "invalid stored presentation")
+					return
+				}
+				views[i].Presentation = &p
+				views[i].Name = p.Name
+				views[i].Description = p.Description
+				views[i].Icon = p.Icon
+			}
 		}
 		if admin {
 			views[i].PublishedCount++
@@ -919,4 +984,59 @@ func validDigest(value string) bool {
 		}
 	}
 	return true
+}
+
+type profilePresentation struct {
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
+	Icon        *revision.ObjectRef `json:"icon"`
+}
+type presentationStore interface {
+	ProfilePresentation(context.Context, string) ([]byte, error)
+	SetProfilePresentation(context.Context, string, []byte, string) error
+}
+
+func (a *API) handlePresentation(w http.ResponseWriter, r *http.Request, id string) {
+	store, ok := a.store.(presentationStore)
+	if !ok {
+		a.writeError(w, 503, "unavailable", "presentation storage unavailable")
+		return
+	}
+	if _, err := a.store.ProfileHead(r.Context(), id); err != nil {
+		a.writeError(w, 404, "profile_not_found", "profile not found")
+		return
+	}
+	var p profilePresentation
+	if err := a.decodeJSON(w, r, &p); err != nil {
+		a.writeError(w, 400, "invalid_request", err.Error())
+		return
+	}
+	p.Name = strings.TrimSpace(p.Name)
+	if p.Name == "" || len(p.Name) > 384 || len(p.Description) > 8192 {
+		a.writeError(w, 422, "invalid_presentation", "invalid name or description")
+		return
+	}
+	icon := ""
+	if p.Icon != nil {
+		if p.Icon.MediaType != "image/png" || p.Icon.Size < 1 || p.Icon.Size > 2*1024*1024 {
+			a.writeError(w, 422, "invalid_icon", "invalid icon")
+			return
+		}
+		if err := a.validateProfileIcon(r.Context(), p.Icon); err != nil {
+			a.writeError(w, 422, "invalid_icon", err.Error())
+			return
+		}
+		// CAS bytes must match the declared digest and length before publication.
+		if err := a.objects.Verify(r.Context(), storage.Object{SHA256: p.Icon.SHA256, Size: p.Icon.Size}); err != nil {
+			a.writeError(w, 422, "invalid_icon", "icon integrity check failed")
+			return
+		}
+		icon = p.Icon.SHA256
+	}
+	raw, _ := json.Marshal(p)
+	if err := store.SetProfilePresentation(r.Context(), id, raw, icon); err != nil {
+		a.writeError(w, 500, "storage_error", "could not save presentation")
+		return
+	}
+	a.writeJSON(w, 200, p)
 }

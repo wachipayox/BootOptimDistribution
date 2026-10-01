@@ -33,7 +33,7 @@ func validateManifestShape(raw []byte) error {
 			return err
 		}
 	}
-	profile, err := objectShape(root["profile"], []string{"id", "name", "official"}, nil)
+	profile, err := objectShape(root["profile"], []string{"id", "name", "official"}, []string{"description", "icon"})
 	if err != nil {
 		return fmt.Errorf("profile: %w", err)
 	}
@@ -45,6 +45,28 @@ func validateManifestShape(raw []byte) error {
 	}
 	if err := requireBool(profile["official"], "profile.official"); err != nil {
 		return err
+	}
+	if raw, ok := profile["description"]; ok {
+		if err := requireString(raw, "profile.description"); err != nil {
+			return err
+		}
+	}
+	if raw, ok := profile["icon"]; ok {
+		ref, err := objectShape(raw, []string{"sha256", "size"}, []string{"media_type"})
+		if err != nil {
+			return fmt.Errorf("profile.icon: %w", err)
+		}
+		if err := requireString(ref["sha256"], "profile.icon.sha256"); err != nil {
+			return err
+		}
+		if err := requireInteger(ref["size"], "profile.icon.size"); err != nil {
+			return err
+		}
+		if raw, ok := ref["media_type"]; ok {
+			if err := requireString(raw, "profile.icon.media_type"); err != nil {
+				return err
+			}
+		}
 	}
 	game, err := objectShape(root["game"], []string{"minecraft", "neoforge"}, nil)
 	if err != nil {

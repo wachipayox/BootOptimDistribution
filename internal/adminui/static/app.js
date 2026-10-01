@@ -3,6 +3,8 @@
 const MAX_INHERITANCE_LEVELS = 8;
 
 const state = {
+  icon: null,
+  iconURL: null,
   overview: null,
   build: {},
   profiles: [],
@@ -395,6 +397,10 @@ function renderProfiles() {
     historyButton.type = 'button';
     historyButton.disabled = !id;
     actionRow.appendChild(historyButton);
+    const artworkButton = make('button', 'button button-secondary', 'Editar perfil');
+    artworkButton.type = 'button';
+    artworkButton.addEventListener('click', () => editProfilePresentation(profile));
+    actionRow.appendChild(artworkButton);
     card.appendChild(actionRow);
 
     const revisionContainer = make('div');
@@ -1927,7 +1933,8 @@ function buildManifest() {
   };
 
   const notes = qs('#release-notes').value.trim();
-  if (notes) manifest.revision.release_notes = notes;
+  if (notes) manifest.profile.description = notes;
+  if (state.icon) manifest.profile.icon = { sha256: state.icon.sha256, size: state.icon.file.size, media_type: "image/png" };
 
   state.diff.forEach(function (entry) {
     if (entry.status === 'added' || entry.status === 'changed') {
@@ -2027,6 +2034,8 @@ async function prepareAndStage() {
     const uploads = state.diff.filter(function (entry) {
       return (entry.status === 'added' || entry.status === 'changed') && entry.local;
     });
+
+    if (state.icon) uploads.push({ local: { ...state.icon, mediaType: "image/png" } });
 
     state.manifest = manifest;
     state.canonicalManifest = canonical;
@@ -2495,3 +2504,77 @@ function generatedRevisionID() {
 }
 
 init();
+
+// Profile artwork is signed metadata, independent of the game's file tree.
+async function normalizedProfileIcon(file) {
+  if (file.size > 10 * 1024 * 1024 || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw new Error('Elige una imagen PNG, JPEG o WebP de hasta 10 MB.');
+  const bitmap = await createImageBitmap(file);
+  try {
+    const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
+    const context = canvas.getContext('2d');
+    const scale = Math.min(256 / bitmap.width, 256 / bitmap.height);
+    const w = bitmap.width * scale, h = bitmap.height * scale;
+    context.drawImage(bitmap, (256-w)/2, (256-h)/2, w, h);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error('No se pudo convertir la imagen.');
+    const image = new File([blob], 'profile-icon.png', {type:'image/png'});
+    return { file: image, sha256: await sha256Bytes(await image.arrayBuffer()) };
+  } finally { bitmap.close(); }
+}
+async function selectProfileIcon(file) {
+    if (!file) return;
+    state.icon = await normalizedProfileIcon(file);
+    const image = state.icon.file;
+    if (state.iconURL) URL.revokeObjectURL(state.iconURL);
+    state.iconURL = URL.createObjectURL(image);
+    qs('#profile-icon-preview').src = state.iconURL; qs('#profile-icon-preview').hidden = false;
+    qs('#remove-profile-icon').hidden = false;
+    qs('#profile-icon-status').textContent = 'Icono seleccionado'; invalidatePrepared();
+}
+qs('#pick-profile-icon').addEventListener('click', () => qs('#profile-icon-file').click());
+qs('#profile-icon-file').addEventListener('change', async event => {
+  try { await selectProfileIcon(event.target.files[0]); } catch(error) { qs('#profile-icon-status').textContent = describeError(error); }
+  event.target.value = '';
+});
+qs('#remove-profile-icon').addEventListener('click', () => {
+  state.icon = null; if (state.iconURL) URL.revokeObjectURL(state.iconURL); state.iconURL = null;
+  qs('#profile-icon-preview').hidden = true; qs('#remove-profile-icon').hidden = true;
+  qs('#profile-icon-status').textContent = 'Sin icono'; invalidatePrepared();
+});
+
+async function editProfilePresentation(profile) {
+  const dialog = make('dialog', 'profile-presentation-dialog');
+  const content = make('div', 'panel');
+  const name = make('input'); name.value = profileName(profile); name.maxLength = 96;
+  const description = make('textarea'); description.value = profile.description || ''; description.maxLength = 8192; description.rows = 4;
+  const picker = make('input'); picker.type = 'file'; picker.accept = 'image/png,image/jpeg,image/webp';
+  const preview = make('img'); preview.width = preview.height = 64; preview.hidden = true;
+  const remove = make('button', 'button button-secondary', 'Quitar icono'); remove.type='button';
+  const save = make('button', 'button button-primary', 'Guardar cambios'); save.type='button';
+  const close = make('button', 'button button-secondary', 'Cancelar'); close.type='button';
+  const status = make('p', 'inline-status'); status.setAttribute('role','status');
+  function field(text,input) { const label=make('label'); label.append(make('span','',text),input); return label; }
+  content.append(make('h3','','Editar perfil'),field('Nombre',name),field('Descripción',description),field('Icono',picker),preview,remove,status,save,close);
+  dialog.append(content); document.body.append(dialog); dialog.showModal();
+  let icon=null, iconURL=null, currentIcon=profile.icon || null;
+  picker.addEventListener('change',async()=>{
+    if(!picker.files.length) return;
+    save.disabled=true;
+    try { icon=await normalizedProfileIcon(picker.files[0]); if(iconURL) URL.revokeObjectURL(iconURL); iconURL=URL.createObjectURL(icon.file); preview.src=iconURL; preview.hidden=false; status.textContent=''; }
+    catch(error) { status.textContent=describeError(error); }
+    finally { save.disabled=false; }
+  });
+  remove.addEventListener('click',()=>{icon=null;currentIcon=null;picker.value='';preview.hidden=true;status.textContent='Sin icono';});
+  close.addEventListener('click',()=>dialog.close());
+  save.addEventListener('click',async()=>{
+    if(!name.value.trim()) { status.textContent='Escribe un nombre para el perfil.';name.focus();return; }
+    save.disabled=close.disabled=true;status.textContent='Guardando…';
+    try {
+      if(icon) { await uploadObject({local:{...icon,mediaType:'image/png'}}); currentIcon={sha256:icon.sha256,size:icon.file.size,media_type:'image/png'}; }
+      await request('/v1/admin/profiles/'+encodeURIComponent(profileId(profile))+'/presentation',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.value.trim(),description:description.value.trim(),icon:currentIcon})});
+      await loadProfiles();dialog.close();
+    } catch(error) { status.textContent=describeError(error); }
+    finally { save.disabled=close.disabled=false; }
+  });
+  dialog.addEventListener('close',()=>{if(iconURL) URL.revokeObjectURL(iconURL);dialog.remove();});
+}

@@ -1178,3 +1178,8 @@ footer {
   .explorer-actions .change-badge { margin-right: .2rem; }
   .callout-info { align-items: flex-start; }
 }
+
+.profile-presentation-dialog { width: min(580px, 90vw); max-height: 90vh; padding: 0; border: 1px solid #55445e; border-radius: 14px; background: #161418; color: #f1edf4; }
+.profile-presentation-dialog::backdrop { background: #0009; }
+.profile-presentation-dialog .panel { display: flex; flex-direction: column; gap: 12px; margin: 0; border: 0; }
+.profile-icon-picker img { object-fit: contain; background: #242027; border-radius: 8px; }

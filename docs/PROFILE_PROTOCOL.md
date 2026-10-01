@@ -145,3 +145,39 @@ compromised web service forge releases. If the workstation and all private-key
 backups are lost, the replacement PC can generate a new signer, but its public
 key must be explicitly trusted by both service and launcher before publishing.
 The TLS certificate and admin password do not recover a release signing key.
+
+## Profile presentation (2026-10-01)
+`profile.description` is optional UTF-8 text (maximum 8192 bytes). `profile.icon`
+is an optional signed CAS object reference `{sha256, size, media_type}`; only
+PNG up to 2 MiB and dimensions 1–1024 are accepted. The panel converts selected
+PNG/JPEG/WebP to a 256 × 256 transparent PNG. Icons are published objects but
+have no game-file destination. Clients verify the revision signature and object
+hash before decoding them. Old revisions without either field remain valid.
+The catalog includes description, Minecraft, NeoForge and icon metadata for UI
+presentation; installation authority remains the signed revision.
+
+Presentation edits publish a new monotonically increasing revision of the same
+profile, retaining its exact game identity, base pin, files and rules. They use
+the same offline signing workflow as modpack changes. Editing never rewrites an
+existing immutable revision. Channel promotion remains an explicit separate
+operation; a launcher following `stable` sees the edit after promotion.
+
+## Mutable profile presentation (2026-10-01)
+
+`PUT /v1/admin/profiles/{profile_id}/presentation` uses the existing authenticated
+admin session, LAN policy and CSRF protection. Body: `{name, description, icon}`;
+icon is null or a verified PNG CAS reference (2 MiB, at most 1024x1024).
+Name/description/icon are mutable catalog presentation, not game revisions.
+No sequence, channel, parent pin or signed game manifest is changed, and no
+release private key is required. `/v1/profiles` includes a `presentation` override.
+Older profiles fall back to signed metadata until first edit; later game updates
+do not replace the override. The launcher trusts HTTPS for cosmetic presentation,
+and still verifies signed revisions for installation/game content. Cosmetic
+icons are bounded and hash-verified before decoding. Removing an icon withdraws
+its public CAS availability unless a signed revision still references it.
+
+Panel: Perfiles globales -> Editar perfil -> Nombre, Descripción, Icono ->
+Guardar cambios. Initial creation includes an optional Elegir imagen control;
+subsequent edits do not require signing or publishing a new game revision.
+SQLite profile_presentation lives in the existing metadata database and must be
+included with its ordinary backup. Concurrent presentation edits are last-write-wins.

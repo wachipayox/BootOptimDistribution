@@ -172,3 +172,14 @@ server allowlist and Pandora's trusted signer set while retaining the original
 key, then publish the next revision of the same profile. Verify that the new
 revision is accepted, old revisions still verify, and an unknown signer is
 rejected. The server never receives either private key.
+
+## Presentation and launcher catalog — 2026-10-01
+Implemented on `codex/profile-icons`: signed optional profile description/icon,
+PNG validation and CAS publication, icon selection during creation, presentation
+editing through a separately signed next revision. Launcher work adds a main-page
+carousel and profile detail dialog with install action. Linux Go suite passes;
+live deployment and client artwork round-trip are pending.
+
+2026-10-01: presentation editing supersedes revision-based artwork editing.
+Name/description/icon now have a mutable catalog override; game revisions stay
+immutable. API regression test proves unchanged sequence and CAS icon lifecycle.
