@@ -181,3 +181,8 @@ Guardar cambios. Initial creation includes an optional Elegir imagen control;
 subsequent edits do not require signing or publishing a new game revision.
 SQLite profile_presentation lives in the existing metadata database and must be
 included with its ordinary backup. Concurrent presentation edits are last-write-wins.
+
+2026-10-01 follow-up: panel presentation editor initializes the form from the
+mutable presentation object (including its existing icon), falling back to
+signed profile metadata for never-edited profiles. Asset query is bumped to
+profile-presentation-0216.

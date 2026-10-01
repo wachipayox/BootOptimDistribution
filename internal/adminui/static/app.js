@@ -2545,8 +2545,9 @@ qs('#remove-profile-icon').addEventListener('click', () => {
 async function editProfilePresentation(profile) {
   const dialog = make('dialog', 'profile-presentation-dialog');
   const content = make('div', 'panel');
-  const name = make('input'); name.value = profileName(profile); name.maxLength = 96;
-  const description = make('textarea'); description.value = profile.description || ''; description.maxLength = 8192; description.rows = 4;
+  const current = profile.presentation || {};
+  const name = make('input'); name.value = current.name || profileName(profile); name.maxLength = 96;
+  const description = make('textarea'); description.value = current.description ?? profile.description ?? ''; description.maxLength = 8192; description.rows = 4;
   const picker = make('input'); picker.type = 'file'; picker.accept = 'image/png,image/jpeg,image/webp';
   const preview = make('img'); preview.width = preview.height = 64; preview.hidden = true;
   const remove = make('button', 'button button-secondary', 'Quitar icono'); remove.type='button';
@@ -2556,7 +2557,8 @@ async function editProfilePresentation(profile) {
   function field(text,input) { const label=make('label'); label.append(make('span','',text),input); return label; }
   content.append(make('h3','','Editar perfil'),field('Nombre',name),field('Descripción',description),field('Icono',picker),preview,remove,status,save,close);
   dialog.append(content); document.body.append(dialog); dialog.showModal();
-  let icon=null, iconURL=null, currentIcon=profile.icon || null;
+  let icon=null, iconURL=null, currentIcon=current.icon ?? profile.icon ?? null;
+  if(currentIcon?.sha256) { preview.src='/v1/objects/sha256/'+encodeURIComponent(currentIcon.sha256); preview.hidden=false; }
   picker.addEventListener('change',async()=>{
     if(!picker.files.length) return;
     save.disabled=true;

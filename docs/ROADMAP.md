@@ -183,3 +183,8 @@ live deployment and client artwork round-trip are pending.
 2026-10-01: presentation editing supersedes revision-based artwork editing.
 Name/description/icon now have a mutable catalog override; game revisions stay
 immutable. API regression test proves unchanged sequence and CAS icon lifecycle.
+
+2026-10-01 follow-up: panel presentation editor initializes the form from the
+mutable presentation object (including its existing icon), falling back to
+signed profile metadata for never-edited profiles. Asset query is bumped to
+profile-presentation-0216.
