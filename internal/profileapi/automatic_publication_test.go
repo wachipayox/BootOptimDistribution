@@ -68,11 +68,17 @@ func TestAutomaticPublicationKeepsLegacyHistory(t *testing.T) {
 			t.Fatal(rec.Body.String())
 		}
 		// Both publications pass exactly the same canonical signature verification.
-		var envelope revision.SignedRevisionEnvelope
-		if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		var response struct {
+			Envelope json.RawMessage `json:"envelope"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := revision.ParseAndVerifyRevisionEnvelope(rec.Body.Bytes(), keys[envelope.Signature.KeyID]); err != nil {
+		var envelope revision.SignedRevisionEnvelope
+		if err := json.Unmarshal(response.Envelope, &envelope); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := revision.ParseAndVerifyRevisionEnvelope(response.Envelope, keys[envelope.Signature.KeyID]); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -80,7 +86,7 @@ func TestAutomaticPublicationKeepsLegacyHistory(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), signer.KeyID()) || !strings.Contains(rec.Body.String(), "test-key") || strings.Contains(rec.Body.String(), "private") {
 		t.Fatalf("bad public catalogue: %s", rec.Body.String())
 	}
-	if rec := call("POST", "/v1/admin/publications", `{}`); rec.Code != http.StatusBadRequest {
+	if rec := call("POST", "/v1/admin/publications", `{}`); rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("invalid request accepted: %d", rec.Code)
 	}
 }
