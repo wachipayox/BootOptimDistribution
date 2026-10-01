@@ -195,6 +195,7 @@ func (a *API) serveRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := pathParts(r.URL.Path)
+
 	if len(parts) == 5 && parts[0] == "v1" && parts[1] == "profiles" && parts[3] == "revisions" {
 		if r.Method != http.MethodGet {
 			a.methodNotAllowed(w, http.MethodGet)
@@ -254,6 +255,14 @@ func (a *API) serveAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := pathParts(r.URL.Path)
+	if len(parts) == 4 && parts[0] == "v1" && parts[1] == "admin" && parts[2] == "profiles" {
+		if r.Method != http.MethodDelete {
+			a.methodNotAllowed(w, http.MethodDelete)
+			return
+		}
+		a.handleDeleteProfile(w, r, parts[3])
+		return
+	}
 	if len(parts) == 5 && parts[0] == "v1" && parts[1] == "admin" && parts[2] == "profiles" && parts[4] == "presentation" {
 		if r.Method != http.MethodPut {
 			a.methodNotAllowed(w, http.MethodPut)
@@ -1085,4 +1094,30 @@ func (a *API) handlePresentation(w http.ResponseWriter, r *http.Request, id stri
 		return
 	}
 	a.writeJSON(w, 200, p)
+}
+
+func (a *API) handleDeleteProfile(w http.ResponseWriter, r *http.Request, id string) {
+	store, ok := a.store.(interface {
+		DeleteProfile(context.Context, string) error
+	})
+	if !ok {
+		a.writeError(w, 503, "unavailable", "profile deletion unavailable")
+		return
+	}
+	var confirmation struct {
+		ProfileID string `json:"confirm_profile_id"`
+	}
+	if err := a.decodeJSON(w, r, &confirmation); err != nil || confirmation.ProfileID != id || !strings.HasPrefix(id, "profile_") {
+		a.writeError(w, 400, "confirmation_mismatch", "write the exact profile identifier to confirm deletion")
+		return
+	}
+	if err := store.DeleteProfile(r.Context(), id); err != nil {
+		if errors.Is(err, storage.ErrRevisionNotFound) {
+			a.writeError(w, 404, "profile_not_found", "profile not found")
+		} else {
+			a.writeError(w, 500, "storage_error", "profile could not be deleted")
+		}
+		return
+	}
+	a.writeJSON(w, 200, okBody{SchemaVersion: SchemaVersion, ProtocolVersion: ProtocolVersion, Status: "deleted"})
 }
