@@ -58,7 +58,7 @@ func TestPageSecurityPolicyAndNoCrossOriginAccess(t *testing.T) {
 func TestStaticAssetsAreRevalidatedAndVersioned(t *testing.T) {
 	handler := NewHandler(EmptyReadModel{}, BuildInfo{})
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/assets/app.js?refresh=profile-presentation-0215", nil))
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/assets/app.js?refresh=profile-presentation-0216", nil))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("asset status = %d, want %d", recorder.Code, http.StatusOK)
 	}
@@ -80,7 +80,7 @@ func TestStaticAssetsAreRevalidatedAndVersioned(t *testing.T) {
 
 	page := httptest.NewRecorder()
 	handler.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/admin/", nil))
-	if !strings.Contains(page.Body.String(), "/admin/assets/app.js?refresh=profile-presentation-0215") {
+	if !strings.Contains(page.Body.String(), "/admin/assets/app.js?refresh=profile-presentation-0216") {
 		t.Fatal("admin page does not reference the current versioned script")
 	}
 }
