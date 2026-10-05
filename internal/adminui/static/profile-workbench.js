@@ -28,6 +28,7 @@ function resetPublicationDraft() {
   qs('#create-title').textContent = 'Nuevo perfil global';
   qs('#create-lede').textContent = 'Crea un perfil global para Wachiland Launcher.';
   nodes.publishButton.textContent = 'Publicar versión';
+  nodes.stageButton.disabled = false;
   invalidatePrepared();
 }
 
