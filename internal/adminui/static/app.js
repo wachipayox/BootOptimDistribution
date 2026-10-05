@@ -734,7 +734,7 @@ async function scanRecords(records, label, mode) {
       });
       state.removedPaths.delete(targetPath);
       if (classifyPath(targetPath) === 'mod' && !state.modIds.has(targetPath)) {
-        state.modIds.set(targetPath, defaultModId(targetPath));
+        state.modIds.set(targetPath, (state.parentMap.get(targetPath) || {}).id || defaultModId(targetPath));
       }
       setStatus(nodes.folderStatus, 'Procesando ' + (index + 1) + ' de ' + records.length + ' archivos…');
     }

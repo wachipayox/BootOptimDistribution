@@ -255,7 +255,7 @@ function showProfileWorkbench(title, currentMap, choices, initialPath) {
       let prefix = ''; let host = tree; const parts = path.split('/');
       for (const part of parts.slice(0, -1)) {
         prefix = prefix ? prefix + '/' + part : part;
-        if (!folders.has(prefix)) { const folder = make('details', 'comparison-folder'); folder.open = Boolean(search.value || initialPath && initialPath.startsWith(prefix + '/')); const summary = make('summary', '', part); const body = make('div'); folder.append(summary, body); host.appendChild(folder); folders.set(prefix, body); }
+        if (!folders.has(prefix)) { const folder = make('details', 'comparison-folder'); folder.open = Boolean(search.value || selected && selected.startsWith(prefix + '/')); const summary = make('summary', '', part); const body = make('div'); folder.append(summary, body); host.appendChild(folder); folders.set(prefix, body); }
         host = folders.get(prefix);
       }
       const button = make('button', 'comparison-file change-' + change + (path === selected ? ' selected' : ''), parts[parts.length - 1]);
