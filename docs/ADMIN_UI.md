@@ -1,5 +1,49 @@
 # Administrative UI
 
+## Publicar una actualización (0.2.19)
+
+En **Perfiles globales**, pulsa **Publicar actualización** en el perfil existente.
+El panel carga su última revisión publicada, conserva su identificador, sus
+archivos, reglas y permisos, y calcula la siguiente secuencia automáticamente.
+La referencia a la madre global permanece fijada: actualizar no añade otro
+nivel de herencia ni crea otro perfil.
+
+1. Usa **Añadir archivos**, arrastra archivos, o edita los existentes para cambios
+   parciales. Los archivos no elegidos se conservan.
+2. Usa **Importar carpeta** para comparar un pack completo: los mods y configs
+   ausentes se proponen como eliminaciones. Los objetos propios de este perfil
+   también pueden retirarse; un objeto genérico heredado sigue sin poder
+   excluirse porque el protocolo no dispone de esa operación.
+3. Pulsa **Revisar archivos y cambios** o el botón ⇄ de un archivo de texto.
+4. **Preparar archivos** sube únicamente los nuevos o modificados. Revisa el
+   resumen, marca la confirmación y pulsa **Publicar actualización**.
+
+La casilla **Activar esta versión para los launchers al publicar** está marcada
+por defecto. La publicación y la activación del canal estable son operaciones
+separadas; si falla la segunda, el panel informa de que la revisión ya se publicó
+y permite activarla desde **Ver revisiones**, sin volver a publicar. Para otra
+actualización, abre nuevamente el flujo desde la lista. Las publicaciones
+concurrentes conservan la validación de secuencia y la protección del servidor.
+La presentación mutable (nombre, descripción e icono) sigue en **Editar perfil**.
+
+## Visor de archivos y cambios
+
+**Archivos y cambios** abre el último perfil publicado con su explorador de
+carpetas, búsqueda y filtro de diferencias. A la izquierda está el perfil o
+borrador; a la derecha se elige una madre/abuela hasta ocho niveles o una revisión
+anterior del mismo perfil. El borrador de actualización compara inicialmente
+con su versión anterior. Los archivos eliminados también aparecen.
+
+Los archivos de texto muestran líneas alineadas, números, colores y un mapa de
+cambios clicable. Las columnas se desplazan juntas verticalmente y por separado
+horizontalmente; el separador se arrastra o se ajusta con las flechas del teclado.
+Hay margen inferior para las barras horizontales. Los binarios se comparan por
+SHA-256. El visor limita texto a 1 MiB y muestra hasta 10.000 filas por archivo;
+el algoritmo usa LCS acotado y cede periódicamente al navegador. Los contenidos
+se descargan bajo demanda, verifican SHA-256 y tienen una caché temporal acotada.
+La comparación de texto muestra los bytes publicados; las reglas por parámetro
+se consultan y modifican en el editor de configuración del borrador.
+
 The admin UI is an operator panel, not a player or launcher UI. It can run in
 the loopback development mode, the legacy read-only direct-LAN HTTP mode, or
 the authenticated HTTPS mode. Profile publication and other state-changing
