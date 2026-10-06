@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Wachiland · Distribución</title>
-  <link rel="stylesheet" href="/admin/assets/style.css?refresh=delete-profile-0218">
+  <link rel="stylesheet" href="/admin/assets/style.css?refresh=profile-workbench-0219">
 </head>
 <body>
   <a class="skip-link" href="#main">Ir al contenido</a>
@@ -84,12 +84,18 @@
         <div>
           <p class="eyebrow">PUBLICACIÓN</p>
           <h2 id="create-title">Nuevo perfil global</h2>
-          <p class="lede">Crea un perfil global para Wachiland Launcher.</p>
+          <p id="create-lede" class="lede">Crea un perfil global para Wachiland Launcher.</p>
         </div>
       </div>
 
       <div class="workflow-layout">
         <div class="workflow-main">
+          <div id="update-context" class="panel update-context" hidden>
+            <strong id="update-context-title"></strong>
+            <p id="update-context-help" class="microcopy"></p>
+            <label class="check-row"><input id="activate-update" type="checkbox" checked><span>Activar esta versión para los launchers al publicar</span></label>
+            <div class="card-actions"><button id="review-update" type="button" class="button button-secondary">Revisar archivos y cambios</button><button id="cancel-update" type="button" class="button button-secondary">Salir de la actualización</button></div>
+          </div>
           <section class="panel step" aria-labelledby="identity-title">
             <div class="step-heading">
               <span class="step-number">1</span>
@@ -350,6 +356,7 @@
     </form>
   </dialog>
 
-  <script src="/admin/assets/app.js?refresh=delete-profile-0218" defer></script>
+  <script src="/admin/assets/app.js?refresh=profile-workbench-0219" defer></script>
+  <script src="/admin/assets/profile-workbench.js?refresh=profile-workbench-0219" defer></script>
 </body>
 </html>

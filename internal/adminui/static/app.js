@@ -3,6 +3,7 @@
 const MAX_INHERITANCE_LEVELS = 8;
 
 const state = {
+  updateProfile: null,
   icon: null,
   iconURL: null,
   overview: null,
@@ -386,6 +387,13 @@ function renderProfiles() {
     card.appendChild(top);
 
     const actionRow = make('div', 'card-actions');
+    const updateButton = make('button', 'button button-primary', 'Publicar actualización');
+    updateButton.type = 'button';
+    updateButton.addEventListener('click', () => startProfileUpdate(profile));
+    const compareButton = make('button', 'button button-secondary', 'Archivos y cambios');
+    compareButton.type = 'button';
+    compareButton.addEventListener('click', () => openPublishedWorkbench(profile));
+    actionRow.append(updateButton, compareButton);
     const historyButton = make('button', 'button button-secondary', 'Ver revisiones');
     historyButton.type = 'button';
     historyButton.disabled = !id;
@@ -726,7 +734,7 @@ async function scanRecords(records, label, mode) {
       });
       state.removedPaths.delete(targetPath);
       if (classifyPath(targetPath) === 'mod' && !state.modIds.has(targetPath)) {
-        state.modIds.set(targetPath, defaultModId(targetPath));
+        state.modIds.set(targetPath, (state.parentMap.get(targetPath) || {}).id || defaultModId(targetPath));
       }
       setStatus(nodes.folderStatus, 'Procesando ' + (index + 1) + ' de ' + records.length + ' archivos…');
     }
@@ -872,7 +880,7 @@ function renderExplorer() {
   const tree = qs('#explorer-tree');
   if (!rootLabel || !tree) return;
   const hasBase = Boolean(state.parentRef);
-  rootLabel.textContent = hasBase ? 'Rama de ' + state.parentRef.profile_id + ' / ' + state.parentRef.revision_id : 'Nuevo perfil · vacío';
+  rootLabel.textContent = state.updateProfile ? 'Archivos de la versi\u00f3n ' + state.updateProfile.resolved.sequence : hasBase ? 'Rama de ' + state.parentRef.profile_id + ' / ' + state.parentRef.revision_id : 'Nuevo perfil · vacío';
   const rows = mergedExplorerRows();
   const folderBlockers = directoryRemovalBlockers(rows);
   const query = (qs('#explorer-search').value || '').trim().toLocaleLowerCase();
@@ -921,6 +929,9 @@ function renderExplorer() {
     identity.append(path, make('span', 'explorer-file-meta', kindLabel((entry.local || entry.parent || {}).kind) + ' · ' + formatBytes(entry.local ? entry.local.size : Number((entry.parent && entry.parent.object && entry.parent.object.size) || 0))));
     const stateLabel = entry.status === 'inherited' ? 'Heredado' : entry.status === 'added' ? 'Añadido' : entry.status === 'changed' ? 'Modificado' : 'Excluido';
     const actions = make('div', 'explorer-actions');
+    if (isEditableText(entry.path, 'text/plain')) {
+      actions.appendChild(smallAction(entry, 'Comparar con versión anterior y madres', '⇄', function () { openDraftWorkbench(entry.path); }));
+    }
     actions.appendChild(make('span', 'change-badge change-' + (entry.status === 'inherited' ? 'unchanged' : entry.status), stateLabel));
     if (entry.status === 'removed') {
       actions.appendChild(smallAction(entry, 'Restaurar archivo', '↶', function () { restorePath(entry.path); }));
@@ -932,7 +943,7 @@ function renderExplorer() {
       } else if (entry.parent && isEditableText(entry.path, (entry.parent.object || {}).media_type)) {
         actions.appendChild(smallAction(entry, isConfigRuleFile(entry.path, entry.parent.kind) ? 'Editar archivo y reglas' : 'Editar archivo de texto', '✎', function () { editInheritedFile(entry.path, entry.parent); }));
       }
-      const canRemove = !hasBase || (entry.parent && (entry.parent.kind === 'mod' || entry.parent.kind === 'config')) || entry.local;
+      const canRemove = !hasBase || (entry.parent && (entry.parent.kind === 'mod' || entry.parent.kind === 'config')) || entry.local || updateOwnObject(entry.path);
       const remove = smallAction(entry, canRemove ? 'Quitar de esta rama' : 'No se puede quitar este tipo de archivo', '×', function () { removePath(entry.path); }, 'danger');
       remove.disabled = !canRemove;
       actions.appendChild(remove);
@@ -1056,7 +1067,7 @@ function isConfigRuleFile(path, kind) { return Boolean(configRuleFormat(path, ki
 
 function removePath(path) {
   const parent = state.parentMap.get(path);
-  if (state.parentRef && parent && parent.kind !== 'mod' && parent.kind !== 'config') return;
+  if (state.parentRef && parent && parent.kind !== 'mod' && parent.kind !== 'config' && !updateOwnObject(path)) return;
   state.selectedFiles.delete(path);
   if (state.parentRef && parent) state.removedPaths.add(path);
   else state.removedPaths.delete(path);
@@ -1071,6 +1082,7 @@ function directoryRemovalBlockers(rows) {
   rows.forEach(function (entry) {
     if (entry.status === 'removed') return;
     const parent = state.parentMap.get(entry.path);
+    if (updateOwnObject(entry.path)) return;
     if (!parent || parent.kind === 'mod' || parent.kind === 'config') return;
     let separator = entry.path.lastIndexOf('/');
     while (separator > 0) {
@@ -1327,6 +1339,7 @@ async function resolveEffective(profile, revision, depth, seen) {
   let map = new Map();
   let configSettings = new Map();
   let inheritanceDepth = 0;
+  let ancestors = [];
   if (manifest.base) {
     const base = manifest.base;
     const baseProfile = valueText(base.profile_id, '');
@@ -1341,6 +1354,7 @@ async function resolveEffective(profile, revision, depth, seen) {
     map = new Map(inherited.map);
     configSettings = new Map(inherited.configSettings);
     inheritanceDepth = inherited.inheritanceDepth + 1;
+    ancestors = [inherited].concat(inherited.ancestors || []);
   }
 
   applyManifest(map, manifest, configSettings);
@@ -1353,6 +1367,7 @@ async function resolveEffective(profile, revision, depth, seen) {
     configSettings: configSettings,
     manifest: manifest,
     inheritanceDepth: inheritanceDepth,
+    ancestors: ancestors,
     ref: {
       profile_id: manifestProfile,
       revision_id: manifestRevision,
@@ -1531,7 +1546,7 @@ async function recomputeDiff() {
 
   state.parentMap.forEach(function (parent, path) {
     if (state.selectedFiles.has(path) || (!state.snapshotMode && !state.removedPaths.has(path))) return;
-    if (parent.kind === 'mod' || parent.kind === 'config') {
+    if (parent.kind === 'mod' || parent.kind === 'config' || updateOwnObject(path)) {
       diff.push({
         status: 'removed',
         path: path,
@@ -1755,7 +1770,9 @@ function renderDiff() {
   qs('#diff-changed-card').hidden = !hasBase;
   qs('#diff-removed-card').hidden = !hasBase;
   qs('#diff-stats').classList.toggle('independent', !hasBase);
-  nodes.diffContext.textContent = hasBase
+  nodes.diffContext.textContent = state.updateProfile
+    ? 'Actualización del mismo perfil: comparación con su versión ' + state.updateProfile.resolved.sequence + '. Los archivos no modificados se conservan; la madre global sigue fijada a su revisión.'
+    : hasBase
     ? 'Las diferencias afectan solo al perfil derivado: los cambios reemplazan archivos heredados y las eliminaciones los excluyen. El perfil base permanece intacto.'
     : 'Perfil independiente: todos los archivos elegidos serán altas. No se cambiarán ni eliminarán archivos de otro perfil.';
 
@@ -1853,6 +1870,7 @@ function requiredValue(selector, label) {
 }
 
 function buildManifest() {
+  if (state.updateProfile) return buildProfileUpdateManifest();
   const unsupported = state.diff.filter(function (entry) { return entry.status === 'unsupported'; });
   if (unsupported.length) throw new Error('El diff contiene entradas no compatibles que deben corregirse antes de publicar.');
   if (!state.selectedFiles.size && !state.diff.some(function (entry) { return entry.status === 'removed'; }) && !state.parentRef) {
@@ -2080,7 +2098,7 @@ function summarizeDiff() {
     'Altas: ' + counts.added,
     'Cambios: ' + counts.changed,
     'Eliminaciones: ' + counts.removed,
-    'Perfil base: ' + (state.parentRef ? state.parentRef.profile_id + ' / ' + state.parentRef.revision_id : 'ninguno')
+    'Perfil base: ' + (state.manifest && state.manifest.base ? state.manifest.base.profile_id + ' / ' + state.manifest.base.revision_id : 'ninguno')
   ].join('\n');
 }
 
@@ -2110,10 +2128,26 @@ async function publishEnvelope() {
       body: signingRequestText()
     });
     const revision = state.manifest && state.manifest.revision ? state.manifest.revision.id : '';
+    let promotionError = '';
+    if (state.updateProfile && qs('#activate-update').checked) {
+      try {
+        await request('/v1/admin/profiles/' + encodeURIComponent(state.manifest.profile.id) + '/channels/stable/promote', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revision_id: revision })
+        });
+      } catch (error) { promotionError = describeError(error); }
+    }
     setStatus(nodes.publishStatus, 'Versión publicada' + (revision ? ': ' + revision : '') + '.', 'success');
     nodes.confirmDiff.checked = false;
     state.staged = false;
     qs('#revision-id').value = generatedRevisionID();
+    if (state.updateProfile) {
+      state.updateProfile.published = true;
+      qs('#revision-sequence').value = String(state.manifest.revision.sequence + 1);
+      nodes.stageButton.disabled = true;
+      qs('#update-context-help').textContent = 'Actualización publicada. Vuelve a abrir «Publicar actualización» desde la lista de perfiles para preparar la siguiente.';
+      if (promotionError) setStatus(nodes.publishStatus, 'Versión publicada, pero no activada: ' + promotionError + '. Puedes activarla desde «Ver revisiones».', 'warning');
+      else setStatus(nodes.publishStatus, 'Versión ' + state.manifest.revision.sequence + ' publicada' + (qs('#activate-update').checked ? ' y activada para los launchers.' : '. Puedes activarla desde «Ver revisiones».'), 'success');
+    }
     updatePublishEnabled();
     await loadOverview();
     await loadProfiles();
@@ -2153,6 +2187,7 @@ function bindInvalidation() {
     node.addEventListener('change', invalidatePrepared);
   });
   qs('#profile-name').addEventListener('input', function () {
+    if (state.updateProfile) return;
     qs('#profile-id').value = generatedProfileID(qs('#profile-name').value);
     invalidatePrepared();
   });
