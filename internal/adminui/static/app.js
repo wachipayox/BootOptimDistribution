@@ -1786,7 +1786,9 @@ function renderDiff() {
 
   if (!state.diff.length) {
     const row = document.createElement('tr');
-    const emptyMessage = !state.folderSelected
+    const emptyMessage = state.updateProfile && !state.snapshotMode
+      ? 'No hay cambios de archivos respecto a la versión publicada. Los archivos actuales se conservan.'
+      : !state.folderSelected
       ? 'Selecciona una carpeta para ver los cambios.'
       : (state.selectedFiles.size ? 'No hay cambios respecto al perfil base.' : 'La carpeta seleccionada está vacía; se excluirán los archivos heredados que permita quitar.');
     const cell = make('td', 'muted-cell', emptyMessage);
