@@ -206,8 +206,9 @@ async function workbenchLineDiff(left, right, isCurrent) {
   flush(); return rows;
 }
 
-function showProfileWorkbench(title, currentMap, choices, initialPath) {
-  const dialog = make('dialog', 'profile-comparison-dialog');
+function showProfileWorkbench(title, currentMap, choices, initialPath, inlineHost) {
+  const dialog = make(inlineHost ? 'section' : 'dialog', inlineHost ? 'profile-comparison-inline' : 'profile-comparison-dialog');
+  const isOpen = () => inlineHost ? dialog.isConnected : dialog.open;
   const heading = make('div', 'comparison-heading');
   const close = make('button', 'button button-secondary', 'Cerrar'); close.addEventListener('click', () => dialog.close());
   heading.append(make('h2', '', title), close);
@@ -232,7 +233,8 @@ function showProfileWorkbench(title, currentMap, choices, initialPath) {
   const overview = make('div', 'comparison-overview');
   columns.append(left, splitter, right, overview); detail.append(info, columns); workspace.append(sidebar, detail);
   dialog.append(heading, make('p', 'microcopy', 'Archivos publicados: verdes a la izquierda, rojos a la derecha. Las reglas por parámetro se gestionan en el editor de configuración.'), workspace);
-  document.body.appendChild(dialog); dialog.showModal();
+  if (inlineHost) { close.hidden = true; inlineHost.replaceChildren(dialog); }
+  else { document.body.appendChild(dialog); dialog.showModal(); }
   let baseline = new Map(), selected = initialPath || '', generation = 0, synchronizing = false;
   const cache = new Map();
   dialog.addEventListener('close', () => { generation++; cache.clear(); dialog.remove(); });
@@ -272,8 +274,8 @@ function showProfileWorkbench(title, currentMap, choices, initialPath) {
     if (!isEditableText(selected, '')) { info.textContent = selected + ' · ' + (status(selected) === 'unchanged' ? 'Sin cambios' : changeLabel(status(selected))) + '. Archivo binario; se compara por SHA-256.'; return; }
     try {
       const texts = await Promise.all([workbenchText(currentMap.get(selected), cache), workbenchText(baseline.get(selected), cache)]);
-      const rows = await workbenchLineDiff(texts[0], texts[1], () => generation === token && dialog.open);
-      if (generation !== token || !dialog.open) return;
+      const rows = await workbenchLineDiff(texts[0], texts[1], () => generation === token && isOpen());
+      if (generation !== token || !isOpen()) return;
       let changed = 0; const fragments = [document.createDocumentFragment(), document.createDocumentFragment()];
       const visibleRows = rows.slice(0, 10000);
       for (let index = 0; index < visibleRows.length; index++) {
@@ -291,7 +293,7 @@ function showProfileWorkbench(title, currentMap, choices, initialPath) {
     try {
       const choice = choices[Number(selector.value)];
       if (choice && !choice.resolved) choice.resolved = await resolveEffective(choice.profile, choice.revision, 0, new Set());
-      if (generation !== token || !dialog.open) return;
+      if (generation !== token || !isOpen()) return;
       baseline = choice ? choice.resolved.map : new Map(); renderTree(); renderFile();
     } catch (error) { if (generation === token) info.textContent = describeError(error); }
   }
