@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Wachiland · Distribución</title>
-  <link rel="stylesheet" href="/admin/assets/style.css?refresh=profile-workbench-0219">
+  <link rel="stylesheet" href="/admin/assets/style.css?refresh=admin-workspace-0221">
+  <link rel="stylesheet" href="/admin/assets/admin-workspace.css?refresh=admin-workspace-0221">
 </head>
 <body>
   <a class="skip-link" href="#main">Ir al contenido</a>
@@ -71,12 +72,17 @@
       <div class="page-heading">
         <div>
           <p class="eyebrow">BIBLIOTECA</p>
-          <h2 id="profiles-title">Perfiles globales</h2>
-          <p class="lede">Versiones oficiales disponibles en el servidor.</p>
+          <h2 id="profiles-title">Tu biblioteca</h2>
+          <p class="lede">Modpacks, ramas y versiones. Todo en un mismo lugar.</p>
         </div>
         <a class="button button-primary" href="#crear">＋ Nuevo perfil</a>
       </div>
-      <div id="profiles-list" class="profile-grid empty-state" role="status">Cargando perfiles…</div>
+      <div class="library-toolbar"><label class="library-search"><span class="visually-hidden">Buscar perfiles</span><input id="library-search" type="search" placeholder="Buscar un perfil o una rama…"></label><span id="library-count" class="microcopy"></span></div>
+      <div id="profiles-list" class="profile-grid empty-state" aria-live="polite">Cargando perfiles…</div>
+    </section>
+
+    <section class="view" data-view="perfil" aria-labelledby="profile-page-title" hidden>
+      <div id="profile-page"></div>
     </section>
 
     <section class="view" data-view="crear" aria-labelledby="create-title" hidden>
@@ -87,6 +93,13 @@
           <p id="create-lede" class="lede">Crea un perfil global para Wachiland Launcher.</p>
         </div>
       </div>
+
+      <nav id="publication-steps" class="publication-steps" aria-label="Pasos de publicación">
+        <button type="button" data-step="1"><span>1</span> Archivos</button>
+        <button type="button" data-step="2"><span>2</span> Revisar</button>
+        <button type="button" data-step="3"><span>3</span> Publicar</button>
+      </nav>
+      <div id="draft-summary" class="draft-summary" aria-live="polite"></div>
 
       <div class="workflow-layout">
         <div class="workflow-main">
@@ -255,6 +268,7 @@
           </section>
         </aside>
       </div>
+      <div class="wizard-navigation"><button id="wizard-back" type="button" class="button button-secondary">Anterior</button><p id="wizard-status" class="microcopy" role="status"></p><button id="wizard-next" type="button" class="button button-primary">Revisar cambios →</button></div>
     </section>
 
     <section class="view" data-view="servicio" aria-labelledby="service-title" hidden>
@@ -356,7 +370,8 @@
     </form>
   </dialog>
 
-  <script src="/admin/assets/app.js?refresh=profile-workbench-0219" defer></script>
-  <script src="/admin/assets/profile-workbench.js?refresh=profile-workbench-0219" defer></script>
+  <script src="/admin/assets/app.js?refresh=admin-workspace-0221" defer></script>
+  <script src="/admin/assets/profile-workbench.js?refresh=admin-workspace-0221" defer></script>
+  <script src="/admin/assets/admin-workspace.js?refresh=admin-workspace-0221" defer></script>
 </body>
 </html>

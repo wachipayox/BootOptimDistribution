@@ -1,5 +1,37 @@
 # Administrative UI
 
+## Espacio de trabajo del administrador (0.2.21)
+
+La **Biblioteca** organiza los perfiles raíz y sus ramas en tarjetas con icono,
+descripción, versión activa y búsqueda. Las familias se calculan a partir de las
+madres fijadas en las últimas publicaciones. Solo se leen manifiestos para esta
+vista (máximo cuatro peticiones simultáneas); los archivos del pack se descargan
+cuando se seleccionan en el visor. Una madre retirada no oculta sus hijas.
+
+**Abrir perfil** lleva a una página propia con enlaces navegables:
+
+- **Resumen**: última versión, versión activa y relaciones de familia.
+- **Archivos y cambios**: comparador integrado en la página, con explorador,
+  referencias seleccionables y columnas ajustables.
+- **Versiones**: historial y activación del canal estable, con identificadores
+  técnicos plegados para no distraer del número de versión.
+- **Ajustes**: edición de presentación sin publicación; eliminación en una zona
+  secundaria, manteniendo la confirmación escrita y la protección del servidor.
+
+**Publicar actualización** abre un único borrador precargado. La navegación es
+**Archivos → Revisar → Publicar**, y el nombre y la secuencia están visibles en
+todo el flujo. La revisión muestra cantidades, datos a subir, comparación
+detallada y permisos de herencia. El último paso conserva las acciones explícitas
+de preparar/subir, confirmar y publicar; la activación opcional está aquí.
+La validación de identidad y versiones del juego se realiza antes de avanzar.
+Volver al paso anterior conserva los archivos elegidos. Los archivos viven en
+esa pestaña, no en una nueva sesión tras recargar o reiniciar el servicio.
+
+El diseño adapta biblioteca, navegación y comparador a ventanas estrechas y
+respeta la preferencia de movimiento reducido. La organización visual no cambia
+el protocolo de publicación, la firma automática, la herencia fijada ni los
+archivos existentes.
+
 ## Publicar una actualización (0.2.19)
 
 En **Perfiles globales**, pulsa **Publicar actualización** en el perfil existente.

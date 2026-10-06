@@ -308,6 +308,7 @@ function renderOverview() {
 }
 
 function renderOverviewProfiles() {
+  if (typeof renderWorkspaceOverview === 'function') { renderWorkspaceOverview(); return; }
   if (!state.profiles.length) {
     nodes.overviewProfiles.className = 'empty-state';
     nodes.overviewProfiles.textContent = 'No hay perfiles globales publicados.';
@@ -367,6 +368,7 @@ function renderActivity() {
 }
 
 function renderProfiles() {
+  if (typeof renderLibraryProfiles === 'function') { renderLibraryProfiles(); return; }
   if (!state.profiles.length) {
     nodes.profilesList.className = 'profile-grid empty-state';
     nodes.profilesList.textContent = 'No hay perfiles globales publicados.';
@@ -453,21 +455,27 @@ function renderProfileRevisions(profileIdValue, container, revisions) {
   revisions.forEach(function (revision) {
     const card = make('article', 'revision-card');
     const seq = revisionSequence(revision);
-    const title = revisionId(revision) || 'Revisión';
+    const title = seq === null ? 'Versión publicada' : 'Versión ' + seq;
+    const currentProfile = state.profiles.find(profile => profileId(profile) === profileIdValue);
+    const active = (currentProfile && currentProfile.channels || []).some(channel => (channel.name || channel.channel) === 'stable' && revisionId(channel) === revisionId(revision));
     card.append(
       make('strong', '', title),
-      make('p', 'card-meta', seq === null ? 'Versión no disponible' : 'Versión ' + seq)
+      make('p', 'card-meta', active ? 'Activa para los launchers' : 'Publicada · no activa')
     );
+    const technical = make('details', 'revision-technical');
+    technical.append(make('summary', '', 'Identificadores de la versión'), make('p', 'card-meta', revisionId(revision)));
     const digest = revisionDigest(revision);
-    if (digest) card.appendChild(make('p', 'card-meta', 'Manifest SHA-256: ' + digest));
+    if (digest) technical.appendChild(make('p', 'card-meta', 'SHA-256: ' + digest));
     const when = revision.published_at || revision.created_at;
-    if (when) card.appendChild(make('p', 'card-meta', valueText(when)));
+    if (when) { const date = new Date(when); card.appendChild(make('p', 'card-meta', Number.isNaN(date.getTime()) ? valueText(when) : date.toLocaleString('es-ES'))); }
+    card.appendChild(technical);
 
     const revisionIdentifier = revisionId(revision);
     if (revisionIdentifier) {
       const promoteRow = make('div', 'card-actions');
-      const promoteButton = make('button', 'button button-secondary', 'Fijar en canal estable');
+      const promoteButton = make('button', 'button button-secondary', active ? 'Versión activa' : 'Activar para los launchers');
       promoteButton.type = 'button';
+      promoteButton.disabled = active;
       const promoteStatus = make('p', 'inline-status');
       promoteStatus.setAttribute('role', 'status');
       promoteButton.addEventListener('click', async function () {
@@ -490,10 +498,11 @@ function renderProfileRevisions(profileIdValue, container, revisions) {
             updatedProfile.channels = channels.filter(function (channel) {
               return valueText(channel && (channel.name || channel.channel), '') !== 'stable';
             });
-            updatedProfile.channels.push({ name: 'stable', revision_id: revisionIdentifier });
+            updatedProfile.channels.push({ name: 'stable', revision_id: revisionIdentifier, sequence: seq });
             renderOverview();
           }
           setStatus(promoteStatus, 'Canal estable actualizado a ' + revisionIdentifier + '.', 'success');
+          await loadProfiles();
         } catch (error) {
           setStatus(promoteStatus, describeError(error), 'error');
         } finally {
@@ -616,21 +625,23 @@ async function waitForServiceRestart(previousCommit, targetVersion) {
 }
 
 function route() {
-  const allowed = ['resumen', 'perfiles', 'crear', 'servicio'];
+  const allowed = ['resumen', 'perfiles', 'crear', 'servicio', 'perfil'];
   const requested = window.location.hash.replace(/^#/, '');
-  const target = allowed.includes(requested) ? requested : 'resumen';
+  const root = requested.split('/')[0];
+  const target = allowed.includes(root) ? root : 'resumen';
 
   document.querySelectorAll('[data-view]').forEach(function (view) {
     view.hidden = view.dataset.view !== target;
   });
   document.querySelectorAll('[data-nav]').forEach(function (link) {
-    if (link.dataset.nav === target) link.setAttribute('aria-current', 'page');
+    if (link.dataset.nav === (target === 'perfil' ? 'perfiles' : target)) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
 
-  if (!requested || requested !== target) {
+  if (!requested || !allowed.includes(root)) {
     history.replaceState(null, '', '#' + target);
   }
+  if (typeof workspaceRoute === 'function') workspaceRoute(target);
 }
 
 function validatePath(path) {
