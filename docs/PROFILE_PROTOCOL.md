@@ -120,27 +120,33 @@ where that distinction leaks private state.
 5. Publication becomes visible only after the existing atomic store succeeds.
    The legacy signed-envelope endpoint remains compatible.
 
-## Los hijos globales siguen siempre a su padre (0.2.22)
+## Global children always follow their parent (0.2.22)
 
-Decisión del usuario (2026-10-14), sin opción para desactivarlo: cuando se
-publica una revisión **nueva** de un perfil (respuesta `201`; un reenvío
-idéntico `200` no dispara nada), el servicio busca los perfiles globales cuya
-última revisión hereda de una revisión anterior de ese perfil y publica para
-cada uno una revisión nueva con el mismo contenido propio, `sequence + 1`, un
-`revision.id` aleatorio, las versiones de juego del padre y la base re-fijada
-a la tupla exacta `(profile_id, revision_id, manifest_sha256)` del padre
-nuevo. La nota es `auto: sigue a <perfil> rev <revision>`. Se repite en
-cascada para nietos, hasta `MaxInheritanceBases` (8).
+User decision (2026-10-14), with no opt-out: when a **new** revision of a
+profile is published (`201`; an identical replay `200` triggers nothing), the
+service finds every global profile whose latest revision inherits from an
+older revision of that profile and publishes for each one a new revision with
+the same own content, `sequence + 1`, a random `revision.id`, the parent's game
+versions and the base re-pinned to the parent's exact new
+`(profile_id, revision_id, manifest_sha256)` tuple. Its release note is
+`auto: sigue a <profile> rev <revision>`. This cascades to grandchildren up to
+`MaxInheritanceBases` (8).
 
-Cada revisión automática es una revisión firmada inmutable normal: pasa por
-las mismas comprobaciones de firma, objetos CAS, cadena de herencia y
-anti-rollback. Si un hijo no valida contra el padre nuevo (p. ej. un
-`config_settings` sobre un config que el padre ya no tiene), no se publica: la
-respuesta del padre incluye `auto_follow[]` con `status: "skipped"`, `code` y
-`message`, el panel lo muestra como aviso y se registra una línea
-`auto-follow: WARN`. La publicación del padre nunca falla por sus hijos. Los
-canales (`stable`) no se mueven solos: activar la revisión automática sigue
-siendo una promoción explícita.
+Each automatic revision is a normal immutable signed revision and passes the
+same signature, CAS object, inheritance chain and anti-rollback checks. If a
+child no longer validates against the new parent it is not published: the
+parent's response carries `auto_follow[]` with `status: "skipped"`, `code`
+(`auto_follow_conflict` when the child's own rules, e.g. `config_settings`, no
+longer fit) and `message`; the admin panel shows it as a warning and the log
+gets an `auto-follow: WARN` line. The parent publication never fails because
+of its children.
+
+Channels: if the child's `stable` channel pointed at the child's previous
+latest revision (it was tracking), it is promoted to the automatic revision
+through the same forward-promotion checks as a manual promote
+(`stable: "promoted"`). If it pointed at an older revision (deliberately held
+back) it is left alone (`stable: "stable_held"`). A failed promotion reports
+`stable: "promote_failed"` with `stable_message`.
 
 ## Release-key recovery and rotation
 

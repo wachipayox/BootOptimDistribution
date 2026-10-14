@@ -7,11 +7,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/wachipayox/BootOptimDistribution/internal/revision"
+	"github.com/wachipayox/BootOptimDistribution/internal/storage"
 )
 
 // followResult reports one automatic child re-pin performed after a parent
@@ -25,6 +27,11 @@ type followResult struct {
 	Revision        *revisionRef `json:"revision,omitempty"`
 	Code            string       `json:"code,omitempty"`
 	Message         string       `json:"message,omitempty"`
+	// Stable is "promoted" when the stable channel tracked the previous latest
+	// child revision, "stable_held" when the admin kept it on an older one, or
+	// "promote_failed" (see StableMessage).
+	Stable        string `json:"stable,omitempty"`
+	StableMessage string `json:"stable_message,omitempty"`
 }
 
 // followParent publishes, for every global profile whose latest revision
@@ -76,6 +83,7 @@ func (a *API) followParent(ctx context.Context, published *revision.VerifiedRevi
 			}
 			visited[childID] = true
 			result := followResult{ProfileID: childID, ParentProfileID: parentID, ParentRevision: current.parent.RevisionID()}
+			previousID := child.Revision.ID
 			verified, code, message := a.repinChild(ctx, child, current.parent)
 			if verified == nil {
 				result.Status, result.Code, result.Message = "skipped", code, message
@@ -83,6 +91,7 @@ func (a *API) followParent(ctx context.Context, published *revision.VerifiedRevi
 			} else {
 				result.Status = "published"
 				result.Revision = &revisionRef{RevisionID: verified.RevisionID(), Sequence: verified.Sequence(), ManifestSHA256: verified.ManifestSHA256()}
+				a.followStable(ctx, &result, previousID)
 				latest[childID] = verified.Manifest()
 				queue = append(queue, pending{verified, current.depth + 1})
 			}
@@ -90,6 +99,27 @@ func (a *API) followParent(ctx context.Context, published *revision.VerifiedRevi
 		}
 	}
 	return results
+}
+
+// followStable moves the child's stable channel to the auto revision only when
+// it was tracking the previous latest revision; a held-back channel stays.
+func (a *API) followStable(ctx context.Context, result *followResult, previousID string) {
+	record, err := a.store.Channel(ctx, result.ProfileID, "stable")
+	if errors.Is(err, storage.ErrRevisionNotFound) {
+		return
+	}
+	if err != nil {
+		result.Stable, result.StableMessage = "promote_failed", "channel state unavailable"
+	} else if record.RevisionID != previousID {
+		result.Stable = "stable_held"
+		return
+	} else if _, status, code, message := a.promoteChannel(ctx, result.ProfileID, "stable", result.Revision.RevisionID); status != 0 {
+		result.Stable, result.StableMessage = "promote_failed", code+": "+message
+	} else {
+		result.Stable = "promoted"
+		return
+	}
+	log.Printf("auto-follow: WARN stable of %s not promoted to %s: %s", result.ProfileID, result.Revision.RevisionID, result.StableMessage)
 }
 
 func (a *API) repinChild(ctx context.Context, child revision.Manifest, parent *revision.VerifiedRevision) (*revision.VerifiedRevision, string, string) {
@@ -132,6 +162,10 @@ func (a *API) repinChild(ctx context.Context, child revision.Manifest, parent *r
 		var body errorBody
 		if json.Unmarshal(capture.body.Bytes(), &body) != nil || body.Error.Code == "" {
 			return nil, "publish_failed", "re-pinned child was rejected"
+		}
+		if body.Error.Code == "parent_verification_failed" {
+			// The child's own rules (e.g. config_settings) no longer fit the new parent.
+			return nil, "auto_follow_conflict", "child content no longer validates against the new parent"
 		}
 		return nil, body.Error.Code, body.Error.Message
 	}

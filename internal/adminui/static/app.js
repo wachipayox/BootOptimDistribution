@@ -2177,10 +2177,11 @@ function appendAutoFollowSummary(results) {
   if (!Array.isArray(results) || results.length === 0) return;
   const done = results.filter(function (item) { return item.status === 'published'; });
   const skipped = results.filter(function (item) { return item.status !== 'published'; });
+  const warn = skipped.length || results.some(function (item) { return item.stable === 'promote_failed'; });
   let text = nodes.publishStatus.textContent;
-  if (done.length) text += ' Perfiles hijos actualizados automáticamente: ' + done.map(function (item) { return item.profile_id + ' (v' + (item.revision ? item.revision.sequence : '?') + ')'; }).join(', ') + '.';
+  if (done.length) text += ' Perfiles hijos actualizados automáticamente: ' + done.map(function (item) { return item.profile_id + ' (v' + (item.revision ? item.revision.sequence : '?') + (item.stable === 'promoted' ? ', activada' : item.stable === 'stable_held' ? ', canal estable retenido en una versión anterior' : item.stable === 'promote_failed' ? ', no activada: ' + (item.stable_message || 'error') : '') + ')'; }).join(', ') + '.';
   if (skipped.length) text += ' Atención, no se pudieron actualizar: ' + skipped.map(function (item) { return item.profile_id + ' (' + (item.message || item.code || 'error') + ')'; }).join('; ') + '. Revísalos a mano.';
-  setStatus(nodes.publishStatus, text, skipped.length ? 'warning' : nodes.publishStatus.dataset.tone);
+  setStatus(nodes.publishStatus, text, warn ? 'warning' : nodes.publishStatus.dataset.tone);
 }
 
 function setupPickerSupport() {

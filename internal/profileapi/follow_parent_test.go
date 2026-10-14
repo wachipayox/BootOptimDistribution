@@ -92,7 +92,17 @@ func TestPublishingParentAutoRepinsChildrenAndSkipsConflicts(t *testing.T) {
 		m.Configs = []revision.ConfigEntry{{Path: "config/own.toml", Object: revision.ObjectRef{SHA256: hashB, Size: int64(len(second))}, Policy: "enforced"}}
 	}))
 	pinChild := revision.ParentRef{ProfileID: "profile_child", RevisionID: c1.Revision.RevisionID, ManifestSHA256: c1.Revision.ManifestSHA256}
-	publish(child("profile_grandchild", "rev_00000000000000g1", pinChild, nil))
+	g1 := publish(child("profile_grandchild", "rev_00000000000000g1", pinChild, nil))
+	promote := func(profileID, revisionID string) {
+		t.Helper()
+		if rec := call("POST", "/v1/admin/profiles/"+profileID+"/channels/stable/promote", `{"revision_id":"`+revisionID+`"}`); rec.Code != http.StatusOK {
+			t.Fatal(rec.Body.String())
+		}
+	}
+	// child's stable tracks its latest; grandchild's stable is held on an older revision.
+	promote("profile_child", c1.Revision.RevisionID)
+	promote("profile_grandchild", g1.Revision.RevisionID)
+	publish(child("profile_grandchild", "rev_00000000000000g2", pinChild, func(m *revision.Manifest) { m.Revision.Sequence = 2 }))
 	publish(child("profile_conflict", "rev_00000000000000f1", pinRoot, func(m *revision.Manifest) {
 		m.SchemaVersion = 2
 		m.ConfigSettings = []revision.ConfigSetting{{Path: "config/shared.toml", Format: "toml", Key: "client.enabled", Value: true, Policy: "default_once"}}
@@ -110,13 +120,30 @@ func TestPublishingParentAutoRepinsChildrenAndSkipsConflicts(t *testing.T) {
 	if len(byProfile) != 3 {
 		t.Fatalf("unexpected follow results: %+v", r2.AutoFollow)
 	}
-	if f := byProfile["profile_conflict"]; f.Status != "skipped" || f.Code == "" {
+	if f := byProfile["profile_conflict"]; f.Status != "skipped" || f.Code != "auto_follow_conflict" {
 		t.Fatalf("conflicting child should be skipped with warning: %+v", f)
 	}
 	for _, id := range []string{"profile_child", "profile_grandchild"} {
-		if f := byProfile[id]; f.Status != "published" || f.Revision == nil || f.Revision.Sequence != 2 {
+		if f := byProfile[id]; f.Status != "published" || f.Revision == nil || f.Revision.Sequence < 2 {
 			t.Fatalf("%s not auto-published: %+v", id, f)
 		}
+	}
+
+	if f := byProfile["profile_child"]; f.Stable != "promoted" {
+		t.Fatalf("tracking stable not promoted: %+v", f)
+	}
+	if f := byProfile["profile_grandchild"]; f.Stable != "stable_held" {
+		t.Fatalf("held stable moved: %+v", f)
+	}
+	stableOf := func(profileID string) string {
+		record, err := store.Channel(t.Context(), profileID, "stable")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return record.RevisionID
+	}
+	if stableOf("profile_child") != byProfile["profile_child"].Revision.RevisionID || stableOf("profile_grandchild") != g1.Revision.RevisionID {
+		t.Fatal("stable channels not as expected")
 	}
 
 	manifestOf := func(profileID, revisionID string) revision.Manifest {

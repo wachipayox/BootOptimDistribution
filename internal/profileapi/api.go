@@ -721,34 +721,45 @@ func (a *API) handlePromote(w http.ResponseWriter, r *http.Request, profileID, c
 		a.writeBodyReadError(w, err)
 		return
 	}
-	target, err := a.loadCandidate(r.Context(), profileID, channel, req.RevisionID)
-	if err != nil {
-		a.writeCandidateError(w, err)
-		return
-	}
-	knownRecord, knownState, err := a.loadChannel(r.Context(), profileID, channel)
-	if err != nil {
-		a.writeError(w, http.StatusInternalServerError, "storage_error", "channel state unavailable")
-		return
-	}
-	if err := revision.DecideChannelTransition(knownState, target, nil); err != nil {
-		if errors.Is(err, revision.ErrRollbackRequired) {
-			a.writeError(w, http.StatusConflict, "rollback_required", "downgrade requires a valid signed rollback event")
-		} else {
-			a.writeError(w, http.StatusConflict, "channel_conflict", "channel transition is ambiguous")
-		}
-		return
-	}
-	candidate := channelRecord(target)
-	if err := a.store.CompareAndSetChannel(r.Context(), knownRecord, candidate); err != nil {
-		if errors.Is(err, storage.ErrChannelConflict) {
-			a.writeError(w, http.StatusConflict, "channel_conflict", "channel state changed concurrently")
-			return
-		}
-		a.writeError(w, http.StatusInternalServerError, "storage_error", "channel could not be updated")
+	candidate, status, code, message := a.promoteChannel(r.Context(), profileID, channel, req.RevisionID)
+	if status != 0 {
+		a.writeError(w, status, code, message)
 		return
 	}
 	a.writeChannel(w, candidate)
+}
+
+// promoteChannel is the single forward-promotion path shared by the admin
+// route and automatic parent following. A non-zero status reports the error.
+func (a *API) promoteChannel(ctx context.Context, profileID, channel, revisionID string) (storage.ChannelRecord, int, string, string) {
+	target, err := a.loadCandidate(ctx, profileID, channel, revisionID)
+	if err != nil {
+		switch {
+		case errors.Is(err, storage.ErrRevisionNotFound):
+			return storage.ChannelRecord{}, http.StatusNotFound, "not_found", "target revision not found"
+		case errors.Is(err, ErrStoredRevisionCorrupt):
+			return storage.ChannelRecord{}, http.StatusInternalServerError, "revision_corrupt", "stored target revision failed integrity verification"
+		}
+		return storage.ChannelRecord{}, http.StatusInternalServerError, "storage_error", "target revision unavailable"
+	}
+	knownRecord, knownState, err := a.loadChannel(ctx, profileID, channel)
+	if err != nil {
+		return storage.ChannelRecord{}, http.StatusInternalServerError, "storage_error", "channel state unavailable"
+	}
+	if err := revision.DecideChannelTransition(knownState, target, nil); err != nil {
+		if errors.Is(err, revision.ErrRollbackRequired) {
+			return storage.ChannelRecord{}, http.StatusConflict, "rollback_required", "downgrade requires a valid signed rollback event"
+		}
+		return storage.ChannelRecord{}, http.StatusConflict, "channel_conflict", "channel transition is ambiguous"
+	}
+	candidate := channelRecord(target)
+	if err := a.store.CompareAndSetChannel(ctx, knownRecord, candidate); err != nil {
+		if errors.Is(err, storage.ErrChannelConflict) {
+			return storage.ChannelRecord{}, http.StatusConflict, "channel_conflict", "channel state changed concurrently"
+		}
+		return storage.ChannelRecord{}, http.StatusInternalServerError, "storage_error", "channel could not be updated"
+	}
+	return candidate, 0, "", ""
 }
 
 func (a *API) handleRollback(w http.ResponseWriter, r *http.Request, profileID, channel string) {
