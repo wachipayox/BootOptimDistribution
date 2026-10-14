@@ -1,5 +1,12 @@
 # Distribution service operating guide
 
+Este servicio forma parte de **wbombo**, el repositorio central privado de los
+proyectos de arranque/optimización de Wachiland Elite:
+https://github.com/wachipayox/wbombo (en local: `wbombo/repos/BootOptimDistribution`,
+el centro está en `../../`). Lee primero su `AGENTS.md`, `PROJECTS.md` y
+`proyectos/distribution.md`. La coordinación de subagentes vive en
+`coordination/` de wbombo.
+
 This repository is the Linux-side distribution service for the private
 Wachiland Elite modpack. Read `README.md` before changing code.
 
