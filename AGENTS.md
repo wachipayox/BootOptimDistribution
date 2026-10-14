@@ -12,9 +12,11 @@ Wachiland Elite modpack. Read `README.md` before changing code.
 
 - `main` is the only deployable branch. `agent/integration-current` is the
   integration authority for service development; work branches start from it
-  and target it with a PR. Do not add a workflow that connects from GitHub into
-  the home server; the server pulls only after an explicit administrator
-  request.
+  and target it with a PR. Service updates stay pull-based (the server installs
+  `origin/main` when the administrator asks). GitHub workflows may call the
+  service (e.g. the read API to build CI fixtures, or an authenticated endpoint
+  with a dedicated key): the URL and any key live only in GitHub Actions
+  secrets, never in the repository or logs (user decision 2026-10-14).
 - Never store a release signing private key, GitHub token, deploy private key,
   player inventory or Microsoft token in the repository, service config or
   logs. Release signing is the explicit 2026-10-01 product-policy exception:
