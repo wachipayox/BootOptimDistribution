@@ -1,4 +1,4 @@
-# Private profile protocol contract (v1/v2)
+# Private profile protocol contract (v1/v2/v3)
 
 This is the shared boundary for Distribution admin/publishing and Pandora
 profile discovery/update. It is the product contract for the first service
@@ -193,3 +193,129 @@ remain readable so local installations and derived profiles keep their valid
 ancestry. Deleted identifiers cannot receive publications or channel changes
 and cannot be reused for a different profile. It is idempotent. No filesystem
 or player-world deletion is performed.
+
+## Parámetros JVM del perfil (esquema 3, 2026-10-14)
+
+`schema_version: 3` es el esquema 2 más dos campos obligatorios:
+`jvm_options` (lista, puede ir vacía) y `remove_jvm_options` (lista de ids).
+`config_settings` sigue siendo obligatorio desde el esquema 2. Los esquemas 1 y 2
+no pueden llevar parámetros JVM. **Los launchers que solo aceptan 1–2 rechazan
+una revisión 3** (comportamiento previsto: fallan en cerrado). Antes de publicar
+una revisión 3 en un perfil real, Pandora y el launcher Android deben aceptar el
+esquema 3.
+
+### Forma
+
+```json
+{
+  "id": "jit-compiler-threads",
+  "label": "Hilos del compilador JIT",
+  "template": "-XX:CICompilerCount={value}",
+  "type": "int", "min": 2, "max": 4,
+  "help": "Qué hace exactamente el parámetro (tooltip).",
+  "java": { "min": 21 },
+  "vm": ["hotspot"],
+  "platforms": {
+    "pc": {
+      "default_enabled": false,
+      "default_value": 2,
+      "auto": {
+        "rules": [ { "when": { "logical_cpus": { "max": 4 } }, "enabled": true, "value": 2 } ],
+        "otherwise": { "enabled": false }
+      },
+      "evidence": { "url": "https://…", "summary": "Origen y resultado de la medición" }
+    }
+  }
+}
+```
+
+| Campo | Regla |
+|---|---|
+| `id` | `^[a-z0-9][a-z0-9-]{0,63}$`, único en el manifiesto. Es la clave con la que el launcher guarda la elección del usuario. |
+| `label` | 1–64 bytes, una línea. |
+| `template` | Produce **un solo argumento**. `bool`: sin `{value}`. `int`/`enum`: exactamente un `{value}`. No admite otras llaves. |
+| `type` | `bool`, `int` (`min`/`max` obligatorios, 32 bits) o `enum` (`values`: 1–16, `[A-Za-z0-9._+-]`, sin repetir). |
+| `help` | 1–1024 bytes. |
+| `java` | `min` ≥ 8; `max` opcional (inclusivo). Versión de Java por número de *feature release*. |
+| `vm` | Subconjunto de `hotspot`, `openj9`. Obligatorio si la plantilla es `-XX:`. Si falta, vale cualquier VM. |
+| `platforms` | Claves `pc` y/o `android`. Cada plataforma lleva **sus propios** valores y su evidencia; nunca se comparten. Un launcher ignora las plataformas que no son la suya. |
+| `default_enabled` | Obligatorio. |
+| `default_value` | Obligatorio para `int`/`enum`, prohibido para `bool`. |
+| `auto` | Opcional. "Decidir según el equipo": gana la primera regla cuyo `when` se cumpla entero; si ninguna, `otherwise`. 1–16 reglas. Datos admitidos: `logical_cpus`, `memory_mib` (RAM física total), cada uno con `min` y/o `max` inclusivos. Si una decisión activa una opción `int`/`enum`, lleva `value`. |
+| `evidence.url` | `https`, ≤ 512 bytes. `summary` opcional, ≤ 512 bytes. |
+
+No se admite `null` dentro de `jvm_options`. Como máximo 64 opciones y 64 ids
+eliminados por manifiesto.
+
+### Lista blanca de argumentos
+
+Se comprueba al publicar (Distribution) **y otra vez en cada launcher antes de
+lanzar**, aunque la revisión esté firmada, sobre el argumento ya renderizado con
+cada valor posible:
+
+- `-XX:+Nombre`, `-XX:-Nombre`, `-XX:Nombre=<entero | decimal | tamaño k/m/g/t>`.
+  Nunca valores de texto (así no caben rutas ni comandos: `OnError`,
+  `OnOutOfMemoryError`, `ErrorFile`, `HeapDumpPath`…). Nombres prohibidos
+  aunque tengan valor numérico o booleano: `Flags`, `VMOptionsFile`,
+  `IgnoreUnrecognizedVMOptions`, `EnableJVMCI`, `EnableJVMCIProduct`,
+  `UseJVMCICompiler`, `UseJVMCINativeLibrary`, `LogVMOutput`,
+  `ShowMessageBoxOnError`, `PauseAtStartup`, `PauseAtExit`, `ManagementServer`.
+- `-Xss<tamaño>`, `-Xms<tamaño>`, `-Xmx<tamaño>`.
+- `-Dclave=valor` solo si la clave está en la lista de propiedades permitidas,
+  que hoy está **vacía**.
+- Todo lo demás se rechaza: `-javaagent`, `-agentpath`, `-agentlib`, `-cp`,
+  `-classpath`, `--class-path`, `--add-opens`, `--add-exports`,
+  `--patch-module`, `--module-path`, `@archivos`, `-jar`, `-Xbootclasspath`,
+  `-Xlog`, `-verbose`…
+- ASCII imprimible, sin espacios, ≤ 256 bytes.
+
+Los casos de prueba compartidos están en
+[`jvm-options-vectors.json`](jvm-options-vectors.json). Cada cliente copia ese
+archivo tal cual y sus tests deben aceptar y rechazar exactamente lo mismo,
+incluida la clave de flag (`flag_key`).
+
+**Añadir una clave `-D`**: añadirla a `AllowedJVMSystemProperties`
+(`internal/revision/jvm_options.go`), a la constante equivalente de cada
+launcher y a `allowed_system_properties` del archivo de casos, con un caso
+aceptado. Un launcher que no la conozca omite la opción con aviso.
+
+### Clave de flag y colisiones
+
+La clave identifica qué ajuste de la JVM toca un argumento: `XX:<Nombre>` para
+`-XX:` (con o sin `+`/`-`/`=`), `Xss`/`Xms`/`Xmx`, `D:<clave>`. En el conjunto
+efectivo de un perfil no puede haber dos opciones con la misma clave en la misma
+plataforma. Todos los valores de una opción deben dar la misma clave.
+
+### Herencia
+
+Igual que `config_settings`, del ancestro más antiguo al descendiente: una
+revisión hija sustituye la opción con el mismo `id` y la retira con
+`remove_jvm_options` (que debe nombrar una opción heredada; una raíz no puede
+retirar nada). No hace falta un permiso del padre: solo publica el admin.
+
+### Contrato para los launchers (PC y Android)
+
+1. Aceptar `schema_version` 3, resolver la cadena como arriba y guardar el
+   conjunto efectivo en el estado persistente de la instancia: lanzar nunca
+   necesita contactar con el servidor.
+2. Volver a validar cada opción con la lista blanca. Ignorar las plataformas que
+   no son la propia.
+3. Elección del usuario guardada **por instancia y por `id`**, y solo con lo que
+   haya tocado (modo `auto`/activado/desactivado y valor). Si no ha tocado nada,
+   se sigue el valor por defecto de la revisión vigente (o `auto`, si existe).
+   Un valor guardado que ya no encaje en el tipo o rango nuevo se descarta y se
+   usa el del perfil. Las opciones que desaparecen del perfil dejan de aplicarse.
+4. Si la plataforma, la versión de Java real o la VM real no encajan, o `auto`
+   usa un dato que el launcher no conoce, **no se pasa la opción** y se registra
+   `[WBOMBO-COMPAT] FALLBACK project=<launcher> mechanism=jvm-option/<id> mod=java@<versión>-<vm> reason=<motivo>`
+   (WARN). Al aplicarla, `[WBOMBO-COMPAT] ACTIVE …` (INFO). Una opción `-XX`
+   desconocida impide arrancar la JVM, por eso no se arriesga.
+5. Orden: argumentos de la versión → opciones del perfil → memoria del usuario
+   (`-Xms`/`-Xmx`) → parámetros JVM personales del usuario. En HotSpot gana la
+   última aparición, así que lo del usuario manda. Si sus parámetros o su
+   configuración de memoria ya tienen la misma clave de flag, la opción del
+   perfil no se pasa y la UI la marca como "anulada por tus parámetros". Los
+   parámetros personales nunca se modifican.
+6. Traza en cada lanzamiento: ids y valores aplicados, desactivados, anulados y
+   omitidos (con motivo y, si es automático, los datos usados). Sin rutas ni
+   datos personales.

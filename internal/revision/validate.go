@@ -11,11 +11,17 @@ import (
 )
 
 func validateManifestValues(m Manifest) error {
-	if m.SchemaVersion != 1 && m.SchemaVersion != 2 {
-		return errors.New("schema_version must equal 1 or 2")
+	if m.SchemaVersion < 1 || m.SchemaVersion > 3 {
+		return errors.New("schema_version must equal 1, 2 or 3")
 	}
 	if m.SchemaVersion == 1 && len(m.ConfigSettings) != 0 {
-		return errors.New("config_settings require schema_version 2")
+		return errors.New("config_settings require schema_version 2 or later")
+	}
+	if m.SchemaVersion < 3 && (len(m.JVMOptions) != 0 || len(m.RemoveJVMOptions) != 0) {
+		return errors.New("jvm_options require schema_version 3")
+	}
+	if err := validateJVMOptions(m); err != nil {
+		return err
 	}
 	if !validRevisionID(m.Revision.ID) || m.Revision.Sequence < 1 {
 		return errors.New("revision id or sequence is invalid")

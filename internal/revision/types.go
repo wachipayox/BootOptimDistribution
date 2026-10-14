@@ -20,7 +20,10 @@ type Manifest struct {
 	Configs        []ConfigEntry   `json:"configs"`
 	RemoveConfigs  []RemoveConfig  `json:"remove_configs"`
 	ConfigSettings []ConfigSetting `json:"config_settings,omitempty"`
-	Objects        []ObjectEntry   `json:"objects"`
+	// JVMOptions and RemoveJVMOptions are schema_version 3 launcher JVM parameters.
+	JVMOptions       []JVMOption   `json:"jvm_options,omitempty"`
+	RemoveJVMOptions []string      `json:"remove_jvm_options,omitempty"`
+	Objects          []ObjectEntry `json:"objects"`
 }
 
 type Revision struct {
@@ -206,6 +209,14 @@ func cloneManifest(m Manifest) Manifest {
 	for i := range out.ConfigSettings {
 		out.ConfigSettings[i].Value = cloneJSONValue(out.ConfigSettings[i].Value)
 	}
+	out.JVMOptions = make([]JVMOption, len(m.JVMOptions))
+	for i := range m.JVMOptions {
+		out.JVMOptions[i] = cloneJVMOption(m.JVMOptions[i])
+	}
+	if m.JVMOptions == nil {
+		out.JVMOptions = nil
+	}
+	out.RemoveJVMOptions = append([]string(nil), m.RemoveJVMOptions...)
 	out.Objects = append([]ObjectEntry(nil), m.Objects...)
 	for i := range out.Mods {
 		out.Mods[i].ExpectBaseObjectSHA256 = cloneStringPtr(out.Mods[i].ExpectBaseObjectSHA256)
