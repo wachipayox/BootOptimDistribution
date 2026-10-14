@@ -10,6 +10,7 @@ function resetPublicationDraft() {
   state.updateProfile = null;
   state.selectedFiles.clear(); state.removedPaths.clear(); state.createdDirs.clear();
   state.policies.clear(); state.modIds.clear(); state.localConfigSettings.clear();
+  state.parentJvmOptions = []; state.localJvmOptions.clear(); state.removedJvmOptions.clear();
   state.pathProblems = []; state.folderSelected = false; state.snapshotMode = false;
   state.icon = null;
   if (state.iconURL) URL.revokeObjectURL(state.iconURL);
@@ -30,6 +31,7 @@ function resetPublicationDraft() {
   nodes.publishButton.textContent = 'Publicar versión';
   nodes.stageButton.disabled = false;
   invalidatePrepared();
+  refreshJvmOptionsPanel();
 }
 
 async function startProfileUpdate(profile) {
@@ -48,6 +50,9 @@ async function startProfileUpdate(profile) {
     state.parentMap = new Map(resolved.map);
     state.parentConfigSettings = new Map(base ? base.configSettings : []);
     state.localConfigSettings = new Map((resolved.manifest.config_settings || []).map(rule => [configRuleID(rule.path, rule.key), { ...rule }]));
+    state.parentJvmOptions = base ? base.jvmOptions : [];
+    state.localJvmOptions = new Map((resolved.manifest.jvm_options || []).map(option => [option.id, JSON.parse(JSON.stringify(option))]));
+    state.removedJvmOptions = new Set(resolved.manifest.remove_jvm_options || []);
     state.parentRef = resolved.ref;
     state.parentManifest = base ? base.manifest : null;
     state.parentDepth = resolved.inheritanceDepth;
@@ -73,6 +78,7 @@ async function startProfileUpdate(profile) {
     qs('#update-context-title').textContent = profileName(profile) + ' · versión ' + resolved.sequence + ' → ' + qs('#revision-sequence').value;
     qs('#update-context-help').textContent = 'Los archivos actuales ya están cargados. «Añadir archivos» modifica solo lo elegido; «Importar carpeta» compara un pack completo. La madre global y las versiones anteriores se conservan.';
     nodes.publishButton.textContent = 'Publicar actualización';
+    refreshJvmOptionsPanel();
     setStatus(nodes.parentStatus, resolved.manifest.base ? 'Madre conservada: ' + resolved.manifest.base.profile_id + ' / ' + resolved.manifest.base.revision_id : 'Perfil raíz: la nueva versión seguirá siendo independiente.');
     setStatus(nodes.folderStatus, resolved.map.size + ' archivos publicados cargados. Puedes editar, reemplazar, añadir o quitar archivos.');
     await recomputeDiff();
@@ -122,6 +128,7 @@ function buildProfileUpdateManifest() {
   manifest.config_settings = Array.from(state.localConfigSettings.values()).filter(rule => effective.has(rule.path));
   for (const rule of manifest.config_settings) if ((effective.get(rule.path) || {}).kind !== 'config') throw new Error('La regla ' + rule.key + ' debe apuntar a una configuración presente en el pack.');
   manifest.schema_version = manifest.config_settings.length ? 2 : 1;
+  applyDraftJvmOptions(manifest);
   return manifest;
 }
 

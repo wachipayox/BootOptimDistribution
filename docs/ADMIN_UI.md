@@ -1,5 +1,24 @@
 # Administrative UI
 
+## Parámetros JVM del perfil (0.2.22)
+
+En **Publicación → Revisar** hay una sección *Parámetros JVM del perfil*. Lista
+las opciones heredadas de la madre, las propias de esta versión y las retiradas.
+Con **＋ Parámetro JVM** (o **Editar**) se abre un editor con id estable, nombre,
+tipo (`bool`, `int` con mínimo/máximo, `enum` con valores), plantilla con
+`{value}`, ayuda para el «?» del launcher, rango de Java, VM y, por plataforma
+(PC y/o Android), activado por defecto, valor por defecto, evidencia y un bloque
+opcional «Automático» en JSON (`logical_cpus`, `memory_mib`). El editor aplica las
+mismas reglas que el servidor (`jvm-options-rules.js`, probado con
+`docs/jvm-options-vectors.json`) y muestra el argumento resultante.
+
+Una opción heredada se puede **sustituir** (editar crea una versión propia con el
+mismo id), **retirar** o **restaurar**. Si la versión publica o retira parámetros
+JVM, el manifiesto pasa a `schema_version: 3` y el panel avisa de que los
+launchers sin soporte no podrán instalar ni actualizar ese perfil. Si no los
+toca, la versión sigue en el esquema 1 o 2. El contrato completo está en
+[`PROFILE_PROTOCOL.md`](PROFILE_PROTOCOL.md#parámetros-jvm-del-perfil-esquema-3-2026-10-14).
+
 ## Espacio de trabajo del administrador (0.2.21)
 
 La **Biblioteca** organiza los perfiles raíz y sus ramas en tarjetas con icono,
