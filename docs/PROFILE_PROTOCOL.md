@@ -120,6 +120,28 @@ where that distinction leaks private state.
 5. Publication becomes visible only after the existing atomic store succeeds.
    The legacy signed-envelope endpoint remains compatible.
 
+## Los hijos globales siguen siempre a su padre (0.2.22)
+
+Decisión del usuario (2026-10-14), sin opción para desactivarlo: cuando se
+publica una revisión **nueva** de un perfil (respuesta `201`; un reenvío
+idéntico `200` no dispara nada), el servicio busca los perfiles globales cuya
+última revisión hereda de una revisión anterior de ese perfil y publica para
+cada uno una revisión nueva con el mismo contenido propio, `sequence + 1`, un
+`revision.id` aleatorio, las versiones de juego del padre y la base re-fijada
+a la tupla exacta `(profile_id, revision_id, manifest_sha256)` del padre
+nuevo. La nota es `auto: sigue a <perfil> rev <revision>`. Se repite en
+cascada para nietos, hasta `MaxInheritanceBases` (8).
+
+Cada revisión automática es una revisión firmada inmutable normal: pasa por
+las mismas comprobaciones de firma, objetos CAS, cadena de herencia y
+anti-rollback. Si un hijo no valida contra el padre nuevo (p. ej. un
+`config_settings` sobre un config que el padre ya no tiene), no se publica: la
+respuesta del padre incluye `auto_follow[]` con `status: "skipped"`, `code` y
+`message`, el panel lo muestra como aviso y se registra una línea
+`auto-follow: WARN`. La publicación del padre nunca falla por sus hijos. Los
+canales (`stable`) no se mueven solos: activar la revisión automática sigue
+siendo una promoción explícita.
+
 ## Release-key recovery and rotation
 
 The service creates `signing/server-release-key.json` in its data directory
