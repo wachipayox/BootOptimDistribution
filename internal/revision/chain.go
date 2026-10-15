@@ -64,6 +64,9 @@ func ValidateInheritanceChain(target *VerifiedRevision, parents map[RevisionKey]
 	if err := validateConfigSettingChain(chain); err != nil {
 		return nil, err
 	}
+	if _, err := EffectiveJVMOptions(chain); err != nil {
+		return nil, err
+	}
 	return chain, nil
 }
 

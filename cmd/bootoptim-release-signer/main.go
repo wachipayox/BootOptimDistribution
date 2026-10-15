@@ -211,6 +211,7 @@ func runSign(args []string, input io.Reader, diagnostics io.Writer) error {
 		Configs        []json.RawMessage `json:"configs"`
 		RemoveConfigs  []json.RawMessage `json:"remove_configs"`
 		ConfigSettings []json.RawMessage `json:"config_settings"`
+		JVMOptions     []json.RawMessage `json:"jvm_options"`
 		Objects        []json.RawMessage `json:"objects"`
 	}
 	if err := json.Unmarshal(request.Manifest, &identity); err != nil {
@@ -224,10 +225,10 @@ func runSign(args []string, input io.Reader, diagnostics io.Writer) error {
 		parent = fmt.Sprintf("%s@%s (%s)", identity.Base.ProfileID, identity.Base.RevisionID, identity.Base.ManifestSHA256)
 	}
 	fmt.Fprintf(diagnostics,
-		"About to sign profile %q (%s), revision %s sequence %d, parent %s, Minecraft %s / NeoForge %s; files: %d mods, %d removed mods, %d configs, %d removed configs, %d setting rules, %d other objects; digest %s.\nType the profile ID to confirm: ",
+		"About to sign profile %q (%s), revision %s sequence %d, parent %s, Minecraft %s / NeoForge %s; files: %d mods, %d removed mods, %d configs, %d removed configs, %d setting rules, %d JVM options, %d other objects; digest %s.\nType the profile ID to confirm: ",
 		identity.Profile.Name, identity.Profile.ID, identity.Revision.ID, identity.Revision.Sequence, parent,
 		identity.Game.Minecraft, identity.Game.NeoForge,
-		len(identity.Mods), len(identity.RemoveMods), len(identity.Configs), len(identity.RemoveConfigs), len(identity.ConfigSettings), len(identity.Objects), digestHex,
+		len(identity.Mods), len(identity.RemoveMods), len(identity.Configs), len(identity.RemoveConfigs), len(identity.ConfigSettings), len(identity.JVMOptions), len(identity.Objects), digestHex,
 	)
 	line, err := bufio.NewReader(input).ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {

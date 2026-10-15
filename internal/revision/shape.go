@@ -11,7 +11,7 @@ import (
 func validateManifestShape(raw []byte) error {
 	root, err := objectShape(raw,
 		[]string{"schema_version", "revision", "profile", "game", "base", "permissions", "mods", "remove_mods", "configs", "remove_configs", "objects"},
-		[]string{"config_settings"})
+		[]string{"config_settings", "jvm_options", "remove_jvm_options"})
 	if err != nil {
 		return err
 	}
@@ -126,14 +126,39 @@ func validateManifestShape(raw []byte) error {
 	if err := json.Unmarshal(root["schema_version"], &schemaVersion); err != nil {
 		return err
 	}
-	if schemaVersion == 2 {
+	if schemaVersion >= 2 {
 		if _, ok := root["config_settings"]; !ok {
-			return errors.New("schema_version 2 requires config_settings")
+			return fmt.Errorf("schema_version %d requires config_settings", schemaVersion)
 		}
 	}
-	if raw, ok := root["config_settings"]; ok {
-		if err := requireArray(raw, "config_settings"); err != nil {
+	if schemaVersion == 3 {
+		for _, key := range []string{"jvm_options", "remove_jvm_options"} {
+			if _, ok := root[key]; !ok {
+				return fmt.Errorf("schema_version 3 requires %s", key)
+			}
+		}
+	}
+	for _, key := range []string{"config_settings", "jvm_options", "remove_jvm_options"} {
+		if raw, ok := root[key]; ok {
+			if err := requireArray(raw, key); err != nil {
+				return err
+			}
+		}
+	}
+	if raw, ok := root["jvm_options"]; ok {
+		if err := validateJVMOptionsShape(raw); err != nil {
+			return fmt.Errorf("jvm_options: %w", err)
+		}
+	}
+	if raw, ok := root["remove_jvm_options"]; ok {
+		var ids []json.RawMessage
+		if err := decodeRaw(raw, &ids); err != nil {
 			return err
+		}
+		for index, id := range ids {
+			if err := requireString(id, fmt.Sprintf("remove_jvm_options[%d]", index)); err != nil {
+				return err
+			}
 		}
 	}
 	for _, key := range []string{"mods", "remove_mods", "configs", "remove_configs", "objects"} {
@@ -176,6 +201,108 @@ func validateManifestShape(raw []byte) error {
 }
 
 const objectRefField = "object"
+
+// validateJVMOptionsShape enforces required keys and rejects null anywhere inside
+// jvm_options, so an omitted or null field can never decode to a silent Go zero value.
+func validateJVMOptionsShape(raw []byte) error {
+	if bytes.Contains(raw, []byte("null")) {
+		var probe any
+		if err := decodeRaw(raw, &probe); err != nil {
+			return err
+		}
+		if containsJSONNull(probe) {
+			return errors.New("null values are not allowed")
+		}
+	}
+	var options []json.RawMessage
+	if err := decodeRaw(raw, &options); err != nil {
+		return err
+	}
+	for i, item := range options {
+		option, err := objectShape(item,
+			[]string{"id", "label", "template", "type", "help", "java", "platforms"},
+			[]string{"min", "max", "values", "vm"})
+		if err != nil {
+			return fmt.Errorf("item %d: %w", i, err)
+		}
+		if _, err := objectShape(option["java"], []string{"min"}, []string{"max"}); err != nil {
+			return fmt.Errorf("item %d.java: %w", i, err)
+		}
+		var platforms map[string]json.RawMessage
+		if err := decodeRaw(option["platforms"], &platforms); err != nil {
+			return fmt.Errorf("item %d.platforms: %w", i, err)
+		}
+		for name, rawPlatform := range platforms {
+			platform, err := objectShape(rawPlatform, []string{"default_enabled"}, []string{"default_value", "auto"})
+			if err != nil {
+				return fmt.Errorf("item %d.platforms.%s: %w", i, name, err)
+			}
+			if err := requireBool(platform["default_enabled"], "default_enabled"); err != nil {
+				return fmt.Errorf("item %d.platforms.%s: %w", i, name, err)
+			}
+			if rawAuto, ok := platform["auto"]; ok {
+				if err := validateJVMAutoShape(rawAuto); err != nil {
+					return fmt.Errorf("item %d.platforms.%s.auto: %w", i, name, err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func validateJVMAutoShape(raw []byte) error {
+	auto, err := objectShape(raw, []string{"rules", "otherwise"}, nil)
+	if err != nil {
+		return err
+	}
+	var rules []json.RawMessage
+	if err := decodeRaw(auto["rules"], &rules); err != nil {
+		return err
+	}
+	for i, rawRule := range rules {
+		rule, err := objectShape(rawRule, []string{"when", "enabled"}, []string{"value"})
+		if err != nil {
+			return fmt.Errorf("rules[%d]: %w", i, err)
+		}
+		if err := requireBool(rule["enabled"], "enabled"); err != nil {
+			return fmt.Errorf("rules[%d]: %w", i, err)
+		}
+		var facts map[string]json.RawMessage
+		if err := decodeRaw(rule["when"], &facts); err != nil {
+			return fmt.Errorf("rules[%d].when: %w", i, err)
+		}
+		for fact, rawRange := range facts {
+			if _, err := objectShape(rawRange, nil, []string{"min", "max"}); err != nil {
+				return fmt.Errorf("rules[%d].when.%s: %w", i, fact, err)
+			}
+		}
+	}
+	otherwise, err := objectShape(auto["otherwise"], []string{"enabled"}, []string{"value"})
+	if err != nil {
+		return fmt.Errorf("otherwise: %w", err)
+	}
+	return requireBool(otherwise["enabled"], "otherwise.enabled")
+}
+
+func containsJSONNull(value any) bool {
+	switch typed := value.(type) {
+	case nil:
+		return true
+	case map[string]any:
+		for _, item := range typed {
+			if containsJSONNull(item) {
+				return true
+			}
+		}
+	case []any:
+		for _, item := range typed {
+			if containsJSONNull(item) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 func arrayObjectShapes(raw []byte, required, optional []string, nestedObjectRef string) error {
 	var items []json.RawMessage
