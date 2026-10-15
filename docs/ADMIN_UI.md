@@ -1,5 +1,18 @@
 # Administrative UI
 
+## Reemplazar y renombrar archivos
+
+- **Reemplazar archivo (↻):** el archivo nuevo toma **su propio nombre** dentro de
+  la misma carpeta (p. ej. `mods/sodium-1.0.jar` + `sodium-1.1.jar` →
+  `mods/sodium-1.1.jar`). El nombre anterior se retira (si era heredado, queda
+  como retirado en esta rama). Si el nombre coincide, solo cambia el contenido.
+- **Renombrar archivo (✐):** cambia solo el nombre, sin tocar el contenido (si es
+  heredado se descarga del servicio). Es una operación aparte del reemplazo.
+- En ambos casos el nombre no puede chocar con otro archivo ni cambiar el tipo
+  (un mod debe seguir terminando en `.jar`); las reglas por ajuste propias de la
+  rama acompañan a un archivo de configuración renombrado. En el manifiesto es un
+  retiro más un alta, así que no hay cambio de esquema.
+
 ## Modloader del perfil (esquema 4)
 
 El paso 1 de «Nuevo perfil global» permite elegir NeoForge, Fabric o Forge. La

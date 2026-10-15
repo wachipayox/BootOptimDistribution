@@ -814,6 +814,11 @@ function addFiles(fileList, replacePath, folderPath) {
     setStatus(nodes.folderStatus, 'Para reemplazar un archivo, selecciona solo un archivo.', 'warning');
     return;
   }
+  if (replacePath && files[0].name !== pathBasename(replacePath)) {
+    // The replacement keeps its own name instead of the old file's.
+    replaceDraftFileWithNewName(replacePath, files[0]);
+    return;
+  }
   state.pendingReplacePath = replacePath || '';
   const prefix = replacePath ? '' : (folderPath === undefined ? state.pendingFolderPath : folderPath);
   const records = files.map(function (file) {
@@ -955,7 +960,8 @@ function renderExplorer() {
       actions.appendChild(smallAction(entry, 'Restaurar archivo', '↶', function () { restorePath(entry.path); }));
     } else {
       actions.appendChild(smallAction(entry, 'Descargar archivo', '↓', function () { downloadExplorerFile(entry); }));
-      actions.appendChild(smallAction(entry, 'Reemplazar archivo', '↻', function () { state.pendingReplacePath = entry.path; state.pendingFolderPath = ''; nodes.filePicker.click(); }));
+      actions.appendChild(smallAction(entry, 'Reemplazar archivo (toma el nombre del nuevo)', '↻', function () { state.pendingReplacePath = entry.path; state.pendingFolderPath = ''; nodes.filePicker.click(); }));
+      actions.appendChild(smallAction(entry, 'Renombrar archivo', '✐', function () { openRenameFile(entry.path); }));
       if (entry.local && entry.local.file && isEditableText(entry.path, entry.local.mediaType)) {
         actions.appendChild(smallAction(entry, isConfigRuleFile(entry.path, entry.local.kind) ? 'Editar archivo y reglas' : 'Editar archivo de texto', '✎', function () { editLocalFile(entry.path); }));
       } else if (entry.parent && isEditableText(entry.path, (entry.parent.object || {}).media_type)) {

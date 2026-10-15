@@ -379,11 +379,25 @@
     </form>
   </dialog>
 
+  <dialog id="rename-file-dialog" class="compact-dialog" aria-labelledby="rename-file-title">
+    <form method="dialog" id="rename-file-form">
+      <h2 id="rename-file-title">Renombrar archivo</h2>
+      <p id="rename-file-current" class="microcopy"></p>
+      <label><span>Nuevo nombre</span><input id="rename-file-name" autocomplete="off" required></label>
+      <p class="microcopy">Solo cambia el nombre; el archivo sigue en la misma carpeta. Si es heredado, el original se retira de esta rama.</p>
+      <div class="dialog-actions">
+        <button class="button button-secondary" value="cancel">Cancelar</button>
+        <button id="rename-file-save" class="button button-primary" value="save">Renombrar</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="/admin/assets/jvm-options-rules.js?refresh=admin-jvm-options-0223" defer></script>
   <script src="/admin/assets/loaders.js?refresh=admin-loaders-0224" defer></script>
   <script src="/admin/assets/app.js?refresh=admin-jvm-options-0223" defer></script>
   <script src="/admin/assets/profile-workbench.js?refresh=admin-jvm-options-0223" defer></script>
   <script src="/admin/assets/admin-workspace.js?refresh=admin-jvm-options-0223" defer></script>
   <script src="/admin/assets/jvm-options.js?refresh=admin-jvm-options-0223" defer></script>
+  <script src="/admin/assets/file-rename.js?refresh=admin-rename-0224" defer></script>
 </body>
 </html>
