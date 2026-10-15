@@ -7,7 +7,7 @@ las opciones heredadas de la madre, las propias de esta versión y las retiradas
 Con **＋ Parámetro JVM** (o **Editar**) se abre un editor con id estable, nombre,
 tipo (`bool`, `int` con mínimo/máximo, `enum` con valores), plantilla con
 `{value}`, ayuda para el «?» del launcher, rango de Java, VM y, por plataforma
-(PC y/o Android), activado por defecto, valor por defecto, evidencia y un bloque
+(PC y/o Android), activado por defecto, valor por defecto y un bloque
 opcional «Automático» en JSON (`logical_cpus`, `memory_mib`). El editor aplica las
 mismas reglas que el servidor (`jvm-options-rules.js`, probado con
 `docs/jvm-options-vectors.json`) y muestra el argumento resultante.

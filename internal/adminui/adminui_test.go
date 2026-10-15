@@ -58,7 +58,7 @@ func TestPageSecurityPolicyAndNoCrossOriginAccess(t *testing.T) {
 func TestStaticAssetsAreRevalidatedAndVersioned(t *testing.T) {
 	handler := NewHandler(EmptyReadModel{}, BuildInfo{})
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/assets/app.js?refresh=admin-jvm-options-0222b", nil))
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/assets/app.js?refresh=admin-jvm-options-0222c", nil))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("asset status = %d, want %d", recorder.Code, http.StatusOK)
 	}
@@ -80,11 +80,11 @@ func TestStaticAssetsAreRevalidatedAndVersioned(t *testing.T) {
 
 	page := httptest.NewRecorder()
 	handler.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/admin/", nil))
-	if !strings.Contains(page.Body.String(), "/admin/assets/app.js?refresh=admin-jvm-options-0222b") {
+	if !strings.Contains(page.Body.String(), "/admin/assets/app.js?refresh=admin-jvm-options-0222c") {
 		t.Fatal("admin page does not reference the current versioned script")
 	}
 	for _, script := range []string{"jvm-options-rules.js", "jvm-options.js"} {
-		if !strings.Contains(page.Body.String(), "/admin/assets/"+script+"?refresh=admin-jvm-options-0222b") {
+		if !strings.Contains(page.Body.String(), "/admin/assets/"+script+"?refresh=admin-jvm-options-0222c") {
 			t.Errorf("admin page does not load %s", script)
 		}
 	}

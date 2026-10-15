@@ -21,7 +21,7 @@ test('shared allowlist vectors', () => {
 const jit = () => ({
   id: 'jit-compiler-threads', label: 'Hilos del compilador JIT', template: '-XX:CICompilerCount={value}',
   type: 'int', min: 2, max: 4, help: 'Limita los hilos del compilador JIT.', java: { min: 21 }, vm: ['hotspot'],
-  platforms: { pc: { default_enabled: false, default_value: 2, evidence: { url: 'https://github.com/wachipayox/BootOptim/pull/354' } } }
+  platforms: { pc: { default_enabled: false, default_value: 2 } }
 });
 
 test('option validation', () => {
@@ -35,7 +35,6 @@ test('option validation', () => {
     o => { o.template = '-javaagent:{value}.jar'; },
     o => { o.vm = []; },
     o => { o.platforms.pc.default_value = 9; },
-    o => { o.platforms.pc.evidence.url = 'http://example.com'; },
     o => { o.platforms.ios = o.platforms.pc; },
     o => { o.platforms.pc.auto = { rules: [{ when: { gpu: { min: 1 } }, enabled: true, value: 2 }], otherwise: { enabled: false } }; },
     o => { o.type = 'bool'; delete o.min; delete o.max; }

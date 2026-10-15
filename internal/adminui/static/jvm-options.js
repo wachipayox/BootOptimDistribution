@@ -137,13 +137,11 @@ function buildJvmEditor() {
     const available = jvmCheck('Disponible en ' + JVM_PLATFORM_LABELS[name]);
     const enabled = jvmCheck('Activado por defecto');
     const value = jvmInput('text', 'valor por defecto');
-    const url = jvmInput('url', 'https://github.com/…');
-    const summary = jvmInput('text', 'origen y resultado de la medición');
     const auto = jvmInput('textarea', '{"rules":[{"when":{"logical_cpus":{"max":4}},"enabled":true,"value":2}],"otherwise":{"enabled":false}}');
     auto.rows = 3; auto.spellcheck = false;
     const legend = make('legend'); legend.appendChild(available.wrapper);
-    box.append(legend, enabled.wrapper, jvmField('Valor por defecto', value), jvmField('Evidencia (URL)', url), jvmField('Resumen de la evidencia', summary), jvmField('Automático (JSON, opcional)', auto, 'datos: logical_cpus, memory_mib'));
-    platforms[name] = { box: box, available: available.input, enabled: enabled.input, value: value, url: url, summary: summary, auto: auto };
+    box.append(legend, enabled.wrapper, jvmField('Valor por defecto', value), jvmField('Automático (JSON, opcional)', auto, 'datos: logical_cpus, memory_mib'));
+    platforms[name] = { box: box, available: available.input, enabled: enabled.input, value: value, auto: auto };
     platformGrid.appendChild(box);
   });
   const preview = make('pre', 'jvm-option-preview');
@@ -152,7 +150,7 @@ function buildJvmEditor() {
   const cancel = make('button', 'button button-secondary', 'Cancelar'); cancel.value = 'cancel';
   const save = make('button', 'button button-primary', 'Guardar parámetro'); save.value = 'save';
   actions.append(cancel, save);
-  form.append(title, make('p', 'microcopy', 'Solo se aceptan -XX: (booleano o numérico), -Xss, -Xms, -Xmx y -D de claves permitidas. Android nunca hereda los valores de PC: cada plataforma lleva sus valores y su evidencia.'),
+  form.append(title, make('p', 'microcopy', 'Solo se aceptan -XX: (booleano o numérico), -Xss, -Xms, -Xmx y -D de claves permitidas. Android nunca hereda los valores de PC: cada plataforma lleva sus propios valores.'),
     grid, jvmField('Ayuda (tooltip «?»)', fields.help), vmRow, platformGrid, preview, errors, actions);
   dialog.appendChild(form);
   document.body.appendChild(dialog);
@@ -197,10 +195,9 @@ function readJvmEditor() {
   Object.keys(jvmEditor.platforms).forEach(name => {
     const p = jvmEditor.platforms[name];
     if (!p.available.checked) return;
-    const platform = { default_enabled: p.enabled.checked, evidence: { url: p.url.value.trim() } };
+    const platform = { default_enabled: p.enabled.checked };
     const value = jvmTypedValue(type, p.value.value);
     if (value !== undefined) platform.default_value = value;
-    if (p.summary.value.trim()) platform.evidence.summary = p.summary.value.trim();
     if (p.auto.value.trim()) {
       try { platform.auto = JSON.parse(p.auto.value); } catch (error) { platform.auto = { invalidJSON: true }; }
     }
@@ -237,7 +234,7 @@ function updateJvmEditorPreview() {
   f.values.disabled = type !== 'enum';
   Object.values(jvmEditor.platforms).forEach(p => {
     p.value.disabled = type === 'bool' || !p.available.checked;
-    [p.enabled, p.url, p.summary, p.auto].forEach(input => { input.disabled = !p.available.checked; });
+    [p.enabled, p.auto].forEach(input => { input.disabled = !p.available.checked; });
   });
   const option = readJvmEditor();
   const lines = Object.keys(option.platforms).map(name => {
@@ -254,7 +251,7 @@ function updateJvmEditorPreview() {
 function openJvmOptionEditor(option, origin) {
   if (!jvmEditor) buildJvmEditor();
   const f = jvmEditor.fields;
-  const source = option || { id: '', label: '', template: '', type: 'int', help: '', java: { min: 21 }, vm: ['hotspot'], platforms: { pc: { default_enabled: false, evidence: { url: '' } } } };
+  const source = option || { id: '', label: '', template: '', type: 'int', help: '', java: { min: 21 }, vm: ['hotspot'], platforms: { pc: { default_enabled: false } } };
   jvmEditor.origin = origin || 'new';
   jvmEditor.originalId = origin === 'own' || origin === 'override' ? source.id : '';
   f.id.value = source.id; f.id.readOnly = origin === 'inherited' || origin === 'override';
@@ -271,8 +268,6 @@ function openJvmOptionEditor(option, origin) {
     p.available.checked = Boolean(platform);
     p.enabled.checked = Boolean(platform && platform.default_enabled);
     p.value.value = platform && platform.default_value !== undefined ? String(platform.default_value) : '';
-    p.url.value = platform && platform.evidence ? platform.evidence.url || '' : '';
-    p.summary.value = platform && platform.evidence ? platform.evidence.summary || '' : '';
     p.auto.value = platform && platform.auto ? JSON.stringify(platform.auto) : '';
   });
   updateJvmEditorPreview();

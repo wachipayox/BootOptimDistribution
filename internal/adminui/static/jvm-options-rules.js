@@ -93,16 +93,6 @@ function jvmDecisionError(option, value, required) {
   return jvmValueText(option, value) === null ? 'El valor no encaja en el tipo o el rango.' : '';
 }
 
-function jvmEvidenceError(evidence) {
-  if (!evidence || typeof evidence.url !== 'string' || !evidence.url || evidence.url.length > 512 || /\s/.test(evidence.url)) return 'La evidencia necesita una URL https sin espacios.';
-  try {
-    const parsed = new URL(evidence.url);
-    if (parsed.protocol !== 'https:' || !parsed.host || parsed.username || parsed.password) return 'La evidencia necesita una URL https.';
-  } catch (error) { return 'La URL de la evidencia no es válida.'; }
-  if (evidence.summary !== undefined && (typeof evidence.summary !== 'string' || evidence.summary.length > 512)) return 'El resumen de la evidencia supera 512 bytes.';
-  return '';
-}
-
 function jvmAutoErrors(option, auto) {
   const errors = [];
   if (!auto || !Array.isArray(auto.rules) || !auto.rules.length || auto.rules.length > 16) return ['«auto» necesita entre 1 y 16 reglas.'];
@@ -167,8 +157,6 @@ function jvmOptionErrors(option) {
     if (typeof platform.default_enabled !== 'boolean') errors.push(label + ': falta «activado por defecto».');
     const decision = jvmDecisionError(option, platform.default_value, true);
     if (decision) errors.push(label + ', valor por defecto: ' + decision);
-    const evidence = jvmEvidenceError(platform.evidence);
-    if (evidence) errors.push(label + ': ' + evidence);
     if (platform.auto !== undefined) jvmAutoErrors(option, platform.auto).forEach(problem => errors.push(label + ', auto: ' + problem));
   });
   return errors;
