@@ -441,54 +441,67 @@ func (a *API) handlePublishRevision(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) publishEnvelope(w http.ResponseWriter, r *http.Request, raw []byte) {
-	verified, canonicalEnvelope, err := a.verifyRevisionEnvelope(r.Context(), raw)
+	verified, status := a.publishCore(w, r.Context(), raw)
+	if verified == nil {
+		return
+	}
+	var followers []followResult
+	if status == http.StatusCreated {
+		followers = a.followParent(r.Context(), verified)
+	}
+	a.writePublished(w, status, verified, followers)
+}
+
+// publishCore verifies and stores one signed envelope. On failure it writes the
+// error response and returns nil; on success it writes nothing.
+func (a *API) publishCore(w http.ResponseWriter, ctx context.Context, raw []byte) (*revision.VerifiedRevision, int) {
+	verified, canonicalEnvelope, err := a.verifyRevisionEnvelope(ctx, raw)
 	if err != nil {
 		a.writeRevisionVerifyError(w, err)
-		return
+		return nil, 0
 	}
 
-	if err := a.validateProfileIcon(r.Context(), verified.Manifest().Profile.Icon); err != nil {
+	if err := a.validateProfileIcon(ctx, verified.Manifest().Profile.Icon); err != nil {
 		a.writeError(w, http.StatusUnprocessableEntity, "invalid_profile_icon", err.Error())
-		return
+		return nil, 0
 	}
-	if existing, err := a.store.SignedRevision(r.Context(), verified.RevisionID()); err == nil {
+	if existing, err := a.store.SignedRevision(ctx, verified.RevisionID()); err == nil {
 		if existing.ProfileID != verified.ProfileID() || existing.ManifestSHA256 != verified.ManifestSHA256() ||
 			!bytes.Equal(existing.Envelope, canonicalEnvelope) {
 			a.writeError(w, http.StatusConflict, "immutable_conflict", "revision id already identifies different immutable content")
-			return
+			return nil, 0
 		}
 		objects, collectErr := a.expectedObjects(verified.Manifest())
 		if collectErr != nil {
 			a.writeError(w, http.StatusUnprocessableEntity, "invalid_object_set", collectErr.Error())
-			return
+			return nil, 0
 		}
 		pub := storage.RevisionPublication{
 			RevisionID: verified.RevisionID(), ProfileID: verified.ProfileID(), Sequence: verified.Sequence(),
 			Manifest:        storage.ValidatedManifest{Bytes: verified.CanonicalManifest(), SHA256: verified.ManifestSHA256()},
 			ExpectedObjects: objects,
 		}
-		if err := a.store.PublishSignedRevision(r.Context(), pub, canonicalEnvelope); err != nil {
+		if err := a.store.PublishSignedRevision(ctx, pub, canonicalEnvelope); err != nil {
 			a.writeStoragePublishError(w, err)
-			return
+			return nil, 0
 		}
-		a.writePublished(w, http.StatusOK, verified)
-		return
+		return verified, http.StatusOK
 	} else if !errors.Is(err, storage.ErrRevisionNotFound) {
 		a.writeError(w, http.StatusInternalServerError, "storage_error", "revision lookup failed")
-		return
+		return nil, 0
 	}
 
-	if head, err := a.store.ProfileHead(r.Context(), verified.ProfileID()); err == nil {
+	if head, err := a.store.ProfileHead(ctx, verified.ProfileID()); err == nil {
 		if verified.Sequence() <= head.Sequence {
 			a.writeError(w, http.StatusConflict, "sequence_conflict", "revision sequence must advance the profile sequence")
-			return
+			return nil, 0
 		}
 	} else if !errors.Is(err, storage.ErrRevisionNotFound) {
 		a.writeError(w, http.StatusInternalServerError, "storage_error", "profile sequence lookup failed")
-		return
+		return nil, 0
 	}
 
-	if err := a.validateParentChain(r.Context(), verified); err != nil {
+	if err := a.validateParentChain(ctx, verified); err != nil {
 		switch {
 		case errors.Is(err, revision.ErrParentMissing), errors.Is(err, storage.ErrRevisionNotFound):
 			a.writeError(w, http.StatusConflict, "parent_not_found", "pinned parent revision is unavailable")
@@ -503,24 +516,24 @@ func (a *API) publishEnvelope(w http.ResponseWriter, r *http.Request, raw []byte
 		default:
 			a.writeError(w, http.StatusInternalServerError, "parent_verification_failed", "stored parent could not be verified")
 		}
-		return
+		return nil, 0
 	}
 
 	objects, err := a.expectedObjects(verified.Manifest())
 	if err != nil {
 		a.writeError(w, http.StatusUnprocessableEntity, "invalid_object_set", err.Error())
-		return
+		return nil, 0
 	}
 	pub := storage.RevisionPublication{
 		RevisionID: verified.RevisionID(), ProfileID: verified.ProfileID(), Sequence: verified.Sequence(),
 		Manifest:        storage.ValidatedManifest{Bytes: verified.CanonicalManifest(), SHA256: verified.ManifestSHA256()},
 		ExpectedObjects: objects,
 	}
-	if err := a.store.PublishSignedRevision(r.Context(), pub, canonicalEnvelope); err != nil {
+	if err := a.store.PublishSignedRevision(ctx, pub, canonicalEnvelope); err != nil {
 		a.writeStoragePublishError(w, err)
-		return
+		return nil, 0
 	}
-	a.writePublished(w, http.StatusCreated, verified)
+	return verified, http.StatusCreated
 }
 
 func (a *API) expectedObjects(manifest revision.Manifest) ([]storage.Object, error) {
@@ -708,34 +721,45 @@ func (a *API) handlePromote(w http.ResponseWriter, r *http.Request, profileID, c
 		a.writeBodyReadError(w, err)
 		return
 	}
-	target, err := a.loadCandidate(r.Context(), profileID, channel, req.RevisionID)
-	if err != nil {
-		a.writeCandidateError(w, err)
-		return
-	}
-	knownRecord, knownState, err := a.loadChannel(r.Context(), profileID, channel)
-	if err != nil {
-		a.writeError(w, http.StatusInternalServerError, "storage_error", "channel state unavailable")
-		return
-	}
-	if err := revision.DecideChannelTransition(knownState, target, nil); err != nil {
-		if errors.Is(err, revision.ErrRollbackRequired) {
-			a.writeError(w, http.StatusConflict, "rollback_required", "downgrade requires a valid signed rollback event")
-		} else {
-			a.writeError(w, http.StatusConflict, "channel_conflict", "channel transition is ambiguous")
-		}
-		return
-	}
-	candidate := channelRecord(target)
-	if err := a.store.CompareAndSetChannel(r.Context(), knownRecord, candidate); err != nil {
-		if errors.Is(err, storage.ErrChannelConflict) {
-			a.writeError(w, http.StatusConflict, "channel_conflict", "channel state changed concurrently")
-			return
-		}
-		a.writeError(w, http.StatusInternalServerError, "storage_error", "channel could not be updated")
+	candidate, status, code, message := a.promoteChannel(r.Context(), profileID, channel, req.RevisionID)
+	if status != 0 {
+		a.writeError(w, status, code, message)
 		return
 	}
 	a.writeChannel(w, candidate)
+}
+
+// promoteChannel is the single forward-promotion path shared by the admin
+// route and automatic parent following. A non-zero status reports the error.
+func (a *API) promoteChannel(ctx context.Context, profileID, channel, revisionID string) (storage.ChannelRecord, int, string, string) {
+	target, err := a.loadCandidate(ctx, profileID, channel, revisionID)
+	if err != nil {
+		switch {
+		case errors.Is(err, storage.ErrRevisionNotFound):
+			return storage.ChannelRecord{}, http.StatusNotFound, "not_found", "target revision not found"
+		case errors.Is(err, ErrStoredRevisionCorrupt):
+			return storage.ChannelRecord{}, http.StatusInternalServerError, "revision_corrupt", "stored target revision failed integrity verification"
+		}
+		return storage.ChannelRecord{}, http.StatusInternalServerError, "storage_error", "target revision unavailable"
+	}
+	knownRecord, knownState, err := a.loadChannel(ctx, profileID, channel)
+	if err != nil {
+		return storage.ChannelRecord{}, http.StatusInternalServerError, "storage_error", "channel state unavailable"
+	}
+	if err := revision.DecideChannelTransition(knownState, target, nil); err != nil {
+		if errors.Is(err, revision.ErrRollbackRequired) {
+			return storage.ChannelRecord{}, http.StatusConflict, "rollback_required", "downgrade requires a valid signed rollback event"
+		}
+		return storage.ChannelRecord{}, http.StatusConflict, "channel_conflict", "channel transition is ambiguous"
+	}
+	candidate := channelRecord(target)
+	if err := a.store.CompareAndSetChannel(ctx, knownRecord, candidate); err != nil {
+		if errors.Is(err, storage.ErrChannelConflict) {
+			return storage.ChannelRecord{}, http.StatusConflict, "channel_conflict", "channel state changed concurrently"
+		}
+		return storage.ChannelRecord{}, http.StatusInternalServerError, "storage_error", "channel could not be updated"
+	}
+	return candidate, 0, "", ""
 }
 
 func (a *API) handleRollback(w http.ResponseWriter, r *http.Request, profileID, channel string) {
@@ -934,14 +958,16 @@ func (a *API) writeCandidateError(w http.ResponseWriter, err error) {
 	a.writeError(w, http.StatusInternalServerError, "storage_error", "target revision unavailable")
 }
 
-func (a *API) writePublished(w http.ResponseWriter, status int, verified *revision.VerifiedRevision) {
+func (a *API) writePublished(w http.ResponseWriter, status int, verified *revision.VerifiedRevision, followers []followResult) {
 	a.writeJSON(w, status, struct {
-		SchemaVersion   int         `json:"schema_version"`
-		ProtocolVersion int         `json:"protocol_version"`
-		Revision        revisionRef `json:"revision"`
+		SchemaVersion   int            `json:"schema_version"`
+		ProtocolVersion int            `json:"protocol_version"`
+		Revision        revisionRef    `json:"revision"`
+		AutoFollow      []followResult `json:"auto_follow,omitempty"`
 	}{
 		SchemaVersion: SchemaVersion, ProtocolVersion: ProtocolVersion,
-		Revision: revisionRef{RevisionID: verified.RevisionID(), Sequence: verified.Sequence(), ManifestSHA256: verified.ManifestSHA256()},
+		Revision:   revisionRef{RevisionID: verified.RevisionID(), Sequence: verified.Sequence(), ManifestSHA256: verified.ManifestSHA256()},
+		AutoFollow: followers,
 	})
 }
 

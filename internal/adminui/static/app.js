@@ -2157,7 +2157,7 @@ async function publishEnvelope() {
   setStatus(nodes.publishStatus, 'Publicando versión…');
 
   try {
-    await request('/v1/admin/publications', {
+    const published = await request('/v1/admin/publications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: signingRequestText()
@@ -2183,6 +2183,7 @@ async function publishEnvelope() {
       if (promotionError) setStatus(nodes.publishStatus, 'Versión publicada, pero no activada: ' + promotionError + '. Puedes activarla desde «Ver revisiones».', 'warning');
       else setStatus(nodes.publishStatus, 'Versión ' + state.manifest.revision.sequence + ' publicada' + (qs('#activate-update').checked ? ' y activada para los launchers.' : '. Puedes activarla desde «Ver revisiones».'), 'success');
     }
+    appendAutoFollowSummary(published && published.auto_follow);
     updatePublishEnabled();
     await loadOverview();
     await loadProfiles();
@@ -2190,6 +2191,19 @@ async function publishEnvelope() {
     setStatus(nodes.publishStatus, 'La publicación no fue aceptada: ' + describeError(error), 'error');
     updatePublishEnabled();
   }
+}
+
+// Child profiles always follow their parent: the server re-pins them on publish
+// and reports which were published and which were skipped with a warning.
+function appendAutoFollowSummary(results) {
+  if (!Array.isArray(results) || results.length === 0) return;
+  const done = results.filter(function (item) { return item.status === 'published'; });
+  const skipped = results.filter(function (item) { return item.status !== 'published'; });
+  const warn = skipped.length || results.some(function (item) { return item.stable === 'promote_failed'; });
+  let text = nodes.publishStatus.textContent;
+  if (done.length) text += ' Perfiles hijos actualizados automáticamente: ' + done.map(function (item) { return item.profile_id + ' (v' + (item.revision ? item.revision.sequence : '?') + (item.stable === 'promoted' ? ', activada' : item.stable === 'stable_held' ? ', canal estable retenido en una versión anterior' : item.stable === 'promote_failed' ? ', no activada: ' + (item.stable_message || 'error') : '') + ')'; }).join(', ') + '.';
+  if (skipped.length) text += ' Atención, no se pudieron actualizar: ' + skipped.map(function (item) { return item.profile_id + ' (' + (item.message || item.code || 'error') + ')'; }).join('; ') + '. Revísalos a mano.';
+  setStatus(nodes.publishStatus, text, warn ? 'warning' : nodes.publishStatus.dataset.tone);
 }
 
 function setupPickerSupport() {

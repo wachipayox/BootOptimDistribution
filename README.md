@@ -17,7 +17,7 @@ El launcher obtiene las claves públicas por el mismo HTTPS verificado. Consulta
 
 ## Actualización del servicio
 
-El servidor **no** recibe conexiones de GitHub. Tras instalar una vez el
+La actualización del servicio no la empuja GitHub: la pide el administrador. Tras instalar una vez el
 ejecutor restringido, el administrador puede buscar, instalar y reiniciar
 desde **Servicio → Actualización del servicio** en el panel autenticado. El
 servidor consulta el tip público de `main`; el ejecutor root descarga ese tip,

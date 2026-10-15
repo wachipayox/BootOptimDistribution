@@ -120,6 +120,34 @@ where that distinction leaks private state.
 5. Publication becomes visible only after the existing atomic store succeeds.
    The legacy signed-envelope endpoint remains compatible.
 
+## Global children always follow their parent (0.2.22)
+
+User decision (2026-10-14), with no opt-out: when a **new** revision of a
+profile is published (`201`; an identical replay `200` triggers nothing), the
+service finds every global profile whose latest revision inherits from an
+older revision of that profile and publishes for each one a new revision with
+the same own content, `sequence + 1`, a random `revision.id`, the parent's game
+versions and the base re-pinned to the parent's exact new
+`(profile_id, revision_id, manifest_sha256)` tuple. Its release note is
+`auto: sigue a <profile> rev <revision>`. This cascades to grandchildren up to
+`MaxInheritanceBases` (8).
+
+Each automatic revision is a normal immutable signed revision and passes the
+same signature, CAS object, inheritance chain and anti-rollback checks. If a
+child no longer validates against the new parent it is not published: the
+parent's response carries `auto_follow[]` with `status: "skipped"`, `code`
+(`auto_follow_conflict` when the child's own rules, e.g. `config_settings`, no
+longer fit) and `message`; the admin panel shows it as a warning and the log
+gets an `auto-follow: WARN` line. The parent publication never fails because
+of its children.
+
+Channels: if the child's `stable` channel pointed at the child's previous
+latest revision (it was tracking), it is promoted to the automatic revision
+through the same forward-promotion checks as a manual promote
+(`stable: "promoted"`). If it pointed at an older revision (deliberately held
+back) it is left alone (`stable: "stable_held"`). A failed promotion reports
+`stable: "promote_failed"` with `stable_message`.
+
 ## Release-key recovery and rotation
 
 The service creates `signing/server-release-key.json` in its data directory

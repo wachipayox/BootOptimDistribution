@@ -1,6 +1,6 @@
 # Administrative UI
 
-## Parámetros JVM del perfil (0.2.22)
+## Parámetros JVM del perfil (0.2.23)
 
 En **Publicación → Revisar** hay una sección *Parámetros JVM del perfil*. Lista
 las opciones heredadas de la madre, las propias de esta versión y las retiradas.
