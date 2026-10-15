@@ -20,8 +20,7 @@ const jitOptionJSON = `{
   "platforms": {
     "pc": {
       "default_enabled": false,
-      "default_value": 2,
-      "evidence": {"url": "https://github.com/wachipayox/BootOptim/pull/354", "summary": "CI hospedado, 4 procesadores"}
+      "default_value": 2
     }
   }
 }`
@@ -146,25 +145,20 @@ func TestJVMOptionValueRules(t *testing.T) {
 	}
 	int64p := func(v int64) *int64 { return &v }
 	cases := map[string]func(*JVMOption){
-		"uppercase id":          func(o *JVMOption) { o.ID = "JIT" },
-		"agent template":        func(o *JVMOption) { o.Template = "-javaagent:{value}.jar" },
-		"two placeholders":      func(o *JVMOption) { o.Template = "-XX:CICompilerCount={value}{value}" },
-		"int without max":       func(o *JVMOption) { o.Max = nil },
-		"inverted range":        func(o *JVMOption) { o.Min, o.Max = int64p(4), int64p(2) },
-		"bool with placeholder": func(o *JVMOption) { o.Type = JVMOptionTypeBool; o.Min, o.Max = nil, nil },
-		"XX without vm":         func(o *JVMOption) { o.VM = nil },
-		"unknown vm":            func(o *JVMOption) { o.VM = []string{"graal"} },
-		"java before 8":         func(o *JVMOption) { o.Java.Min = 7 },
-		"no platforms":          func(o *JVMOption) { o.Platforms = map[string]JVMOptionPlatform{} },
-		"unknown platform":      func(o *JVMOption) { o.Platforms["ios"] = o.Platforms["pc"] },
-		"default above max":     func(o *JVMOption) { p := o.Platforms["pc"]; p.DefaultValue = float64(9); o.Platforms["pc"] = p },
-		"fractional default":    func(o *JVMOption) { p := o.Platforms["pc"]; p.DefaultValue = 2.5; o.Platforms["pc"] = p },
-		"missing default":       func(o *JVMOption) { p := o.Platforms["pc"]; p.DefaultValue = nil; o.Platforms["pc"] = p },
-		"http evidence": func(o *JVMOption) {
-			p := o.Platforms["pc"]
-			p.Evidence.URL = "http://example.com"
-			o.Platforms["pc"] = p
-		},
+		"uppercase id":            func(o *JVMOption) { o.ID = "JIT" },
+		"agent template":          func(o *JVMOption) { o.Template = "-javaagent:{value}.jar" },
+		"two placeholders":        func(o *JVMOption) { o.Template = "-XX:CICompilerCount={value}{value}" },
+		"int without max":         func(o *JVMOption) { o.Max = nil },
+		"inverted range":          func(o *JVMOption) { o.Min, o.Max = int64p(4), int64p(2) },
+		"bool with placeholder":   func(o *JVMOption) { o.Type = JVMOptionTypeBool; o.Min, o.Max = nil, nil },
+		"XX without vm":           func(o *JVMOption) { o.VM = nil },
+		"unknown vm":              func(o *JVMOption) { o.VM = []string{"graal"} },
+		"java before 8":           func(o *JVMOption) { o.Java.Min = 7 },
+		"no platforms":            func(o *JVMOption) { o.Platforms = map[string]JVMOptionPlatform{} },
+		"unknown platform":        func(o *JVMOption) { o.Platforms["ios"] = o.Platforms["pc"] },
+		"default above max":       func(o *JVMOption) { p := o.Platforms["pc"]; p.DefaultValue = float64(9); o.Platforms["pc"] = p },
+		"fractional default":      func(o *JVMOption) { p := o.Platforms["pc"]; p.DefaultValue = 2.5; o.Platforms["pc"] = p },
+		"missing default":         func(o *JVMOption) { p := o.Platforms["pc"]; p.DefaultValue = nil; o.Platforms["pc"] = p },
 		"empty help":              func(o *JVMOption) { o.Help = "" },
 		"multi-line label":        func(o *JVMOption) { o.Label = "a\nb" },
 		"enum with range":         func(o *JVMOption) { o.Type = JVMOptionTypeEnum; o.Values = []string{"2"} },
@@ -191,14 +185,14 @@ func TestJVMOptionValueRules(t *testing.T) {
 		ID: "string-dedup", Label: "Deduplicación", Template: "-XX:+UseStringDeduplication", Type: JVMOptionTypeBool,
 		Help: "Activa la deduplicación.", Java: JavaRange{Min: 18}, VM: []string{"hotspot"},
 		Platforms: map[string]JVMOptionPlatform{
-			"pc":      {DefaultEnabled: false, Evidence: JVMEvidence{URL: "https://example.com/pc"}},
-			"android": {DefaultEnabled: true, Evidence: JVMEvidence{URL: "https://example.com/android"}},
+			"pc":      {DefaultEnabled: false},
+			"android": {DefaultEnabled: true},
 		},
 	}
 	if err := validateJVMOption(flag); err != nil {
 		t.Fatalf("valid two-platform bool rejected: %v", err)
 	}
-	flag.Platforms["pc"] = JVMOptionPlatform{DefaultValue: true, Evidence: JVMEvidence{URL: "https://example.com/pc"}}
+	flag.Platforms["pc"] = JVMOptionPlatform{DefaultValue: true}
 	if err := validateJVMOption(flag); err == nil {
 		t.Fatal("bool option accepted a default value")
 	}

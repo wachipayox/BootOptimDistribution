@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"net/url"
 	"sort"
 	"strings"
 )
@@ -33,17 +32,11 @@ type JavaRange struct {
 }
 
 // JVMOptionPlatform holds the defaults for one platform. Platforms never share values: an
-// option valid on PC and Android declares both entries, each with its own evidence.
+// option valid on PC and Android declares both entries, each with its own defaults.
 type JVMOptionPlatform struct {
 	DefaultEnabled bool           `json:"default_enabled"`
 	DefaultValue   any            `json:"default_value,omitempty"`
 	Auto           *JVMOptionAuto `json:"auto,omitempty"`
-	Evidence       JVMEvidence    `json:"evidence"`
-}
-
-type JVMEvidence struct {
-	URL     string `json:"url"`
-	Summary string `json:"summary,omitempty"`
 }
 
 // JVMOptionAuto lets the launcher decide from machine facts. The first matching rule wins;
@@ -408,9 +401,6 @@ func validateJVMOptionPlatform(option JVMOption, platform JVMOptionPlatform) err
 	if err := validateJVMDecisionValue(option, platform.DefaultValue, true); err != nil {
 		return fmt.Errorf("default_value: %w", err)
 	}
-	if err := validateEvidence(platform.Evidence); err != nil {
-		return err
-	}
 	if platform.Auto == nil {
 		return nil
 	}
@@ -460,20 +450,6 @@ func validateJVMDecisionValue(option JVMOption, value any, required bool) error 
 	}
 	if _, ok := jvmValueText(option, value); !ok {
 		return errors.New("value is outside the option's type or range")
-	}
-	return nil
-}
-
-func validateEvidence(evidence JVMEvidence) error {
-	if len(evidence.URL) == 0 || len(evidence.URL) > 512 || strings.ContainsAny(evidence.URL, " \t\r\n") {
-		return errors.New("evidence.url must be 1..512 bytes without spaces")
-	}
-	parsed, err := url.Parse(evidence.URL)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
-		return errors.New("evidence.url must be an https URL")
-	}
-	if len(evidence.Summary) > 512 {
-		return errors.New("evidence.summary exceeds 512 bytes")
 	}
 	return nil
 }

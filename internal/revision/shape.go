@@ -233,15 +233,12 @@ func validateJVMOptionsShape(raw []byte) error {
 			return fmt.Errorf("item %d.platforms: %w", i, err)
 		}
 		for name, rawPlatform := range platforms {
-			platform, err := objectShape(rawPlatform, []string{"default_enabled", "evidence"}, []string{"default_value", "auto"})
+			platform, err := objectShape(rawPlatform, []string{"default_enabled"}, []string{"default_value", "auto"})
 			if err != nil {
 				return fmt.Errorf("item %d.platforms.%s: %w", i, name, err)
 			}
 			if err := requireBool(platform["default_enabled"], "default_enabled"); err != nil {
 				return fmt.Errorf("item %d.platforms.%s: %w", i, name, err)
-			}
-			if _, err := objectShape(platform["evidence"], []string{"url"}, []string{"summary"}); err != nil {
-				return fmt.Errorf("item %d.platforms.%s.evidence: %w", i, name, err)
 			}
 			if rawAuto, ok := platform["auto"]; ok {
 				if err := validateJVMAutoShape(rawAuto); err != nil {
