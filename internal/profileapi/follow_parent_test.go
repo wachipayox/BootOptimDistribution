@@ -1,6 +1,7 @@
 package profileapi
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -136,7 +137,7 @@ func TestPublishingParentAutoRepinsChildrenAndSkipsConflicts(t *testing.T) {
 		t.Fatalf("held stable moved: %+v", f)
 	}
 	stableOf := func(profileID string) string {
-		record, err := store.Channel(t.Context(), profileID, "stable")
+		record, err := store.Channel(context.Background(), profileID, "stable")
 		if err != nil {
 			t.Fatal(err)
 		}
