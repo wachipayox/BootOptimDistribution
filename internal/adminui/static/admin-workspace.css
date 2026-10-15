@@ -155,8 +155,8 @@ footer { color: #757b8d; font-size: 12px; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
 
 /* Profile JVM parameters (publication step 2). */
-.publication-jvm { margin-top: 1rem; display: grid; gap: .7rem; }
-.publication-jvm > summary { font-weight: 800; cursor: pointer; }
+.publication-jvm { display: grid; gap: .7rem; }
+.publication-jvm > summary { padding: 14px 0; color: #beb3d2; font-size: 13px; cursor: pointer; }
 .jvm-option-list { display: grid; gap: .6rem; }
 .jvm-option-row { display: grid; gap: .35rem; padding: .8rem; border: 1px solid var(--line); border-radius: .7rem; background: var(--surface-muted); }
 .jvm-option-row.jvm-option-removed { opacity: .65; }

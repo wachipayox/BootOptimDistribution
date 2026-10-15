@@ -1,6 +1,6 @@
 'use strict';
 
-// Publication step 2: the profile's JVM parameters (schema_version 3). The
+// Publication step 1: the profile's JVM parameters (schema_version 3). The
 // launcher shows each one as a checkbox with a "?" tooltip and applies it only
 // when the platform, Java version and VM match. Rules live in jvm-options-rules.js.
 
@@ -280,10 +280,11 @@ function openJvmOptionEditor(option, origin) {
 }
 
 (function mountJvmOptionsPanel() {
-  const review = document.querySelector('.publication-review');
-  if (!review) return;
+  // Step 1, right after the profile information, next to the other things the
+  // administrator edits; step 2 only reviews the result.
+  const identity = document.querySelector('.publication-identity');
+  if (!identity) return;
   const section = make('details', 'publication-jvm');
-  section.open = true;
   section.appendChild(make('summary', '', 'Parámetros JVM del perfil'));
   section.appendChild(make('p', 'microcopy', 'Opciones que el launcher muestra como casillas en los ajustes de la instancia, separadas de los parámetros JVM personales del jugador (que siempre ganan). Solo se aplican si la plataforma, la versión de Java y la VM encajan.'));
   const warning = make('div', 'alert alert-warning', 'Esta versión publicará parámetros JVM (esquema 3). Los launchers que todavía no lo soportan no podrán instalar ni actualizar este perfil.');
@@ -294,7 +295,6 @@ function openJvmOptionEditor(option, origin) {
   add.addEventListener('click', () => openJvmOptionEditor(null, 'new'));
   actions.appendChild(add);
   section.append(warning, list, actions);
-  const reviewActions = review.querySelector(':scope > .card-actions');
-  if (reviewActions) reviewActions.before(section); else review.appendChild(section);
+  identity.after(section);
   renderJvmOptionsPanel();
 })();

@@ -1493,6 +1493,7 @@ async function handleParentRevisionChange() {
     state.parentRef = resolved.ref;
     state.parentDepth = resolved.inheritanceDepth;
     state.parentManifest = resolved.manifest;
+    copyParentGameVersions(resolved.manifest);
     setStatus(nodes.folderStatus, resolved.map.size + (resolved.map.size === 1
       ? ' archivo heredado listo para esta rama.'
       : ' archivos heredados listos para esta rama.'));
@@ -2336,6 +2337,18 @@ function searchableCombobox(input, toggle, list, getOptions, onSelect) {
     refresh: function () { render(input.value, !list.hidden); },
     close: close
   };
+}
+
+// Choosing a base copies its Minecraft and NeoForge versions once; they can be
+// changed afterwards like any other field.
+function copyParentGameVersions(manifest) {
+  const game = manifest && manifest.game;
+  if (!game) return;
+  qs('#minecraft-version').value = game.minecraft || '';
+  if (minecraftCombobox) minecraftCombobox.refresh();
+  qs('#neoforge-version').value = game.neoforge || '';
+  if (neoForgeCombobox) neoForgeCombobox.refresh();
+  invalidatePrepared();
 }
 
 function neoforgeFamily(minecraftVersion) {

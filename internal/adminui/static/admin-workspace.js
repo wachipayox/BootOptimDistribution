@@ -204,6 +204,7 @@ function syncPublicationWizard() {
   const step = workspaceState.step;
   identityDetails.hidden = filesPanel.hidden = step !== 1;
   identityDetails.open = !state.updateProfile;
+  const jvmDetails = qs('.publication-jvm'); if (jvmDetails) jvmDetails.hidden = step !== 1;
   reviewPanel.hidden = step !== 2; publishPanel.hidden = step !== 3;
   activationLabel.hidden = !state.updateProfile;
   qs('#wizard-back').hidden = step === 1; qs('#wizard-next').hidden = step === 3;
