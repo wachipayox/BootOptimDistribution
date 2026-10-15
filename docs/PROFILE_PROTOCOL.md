@@ -1,4 +1,4 @@
-# Private profile protocol contract (v1/v2/v3)
+# Private profile protocol contract (v1/v2/v3/v4)
 
 This is the shared boundary for Distribution admin/publishing and Pandora
 profile discovery/update. It is the product contract for the first service
@@ -345,3 +345,33 @@ retirar nada). No hace falta un permiso del padre: solo publica el admin.
 6. Traza en cada lanzamiento: ids y valores aplicados, desactivados, anulados y
    omitidos (con motivo y, si es automático, los datos usados). Sin rutas ni
    datos personales.
+
+## Modloader del perfil (esquema 4, 2026-10-15)
+
+Hasta el esquema 3, `game` es `{minecraft, neoforge}`. El esquema 4 admite
+Fabric y Forge además de NeoForge:
+
+```json
+"game": { "minecraft": "1.20.1", "loader": { "kind": "forge", "version": "1.20.1-47.3.0" } }
+```
+
+- `kind` ∈ `neoforge`, `fabric`, `forge` (lista cerrada; otro valor se rechaza).
+  `version` es la versión del loader tal como la usa el launcher para instalarlo:
+  NeoForge `21.1.1`, Fabric `0.16.9` y Forge la versión **completa de Maven**
+  (`1.20.1-47.3.0`; en Minecraft antiguo `1.7.10-10.13.4.1614-1.7.10`), de modo
+  que Pandora la pasa tal cual como versión preferida. Solo `[A-Za-z0-9._+-]`,
+  1–64 bytes, sin empezar por signo.
+- En el esquema 4 `game` lleva solo `minecraft` y `loader` (sin `neoforge`); en
+  los esquemas 1–3 `game.loader` está prohibido. El esquema 4 incluye todo lo
+  del 3 (`config_settings`, `jvm_options`, `remove_jvm_options` presentes).
+- **Esquema mínimo:** el panel emite el 4 solo si el loader es Fabric o Forge.
+  Un perfil NeoForge sigue saliendo con 1, 2 o 3, de modo que los launchers que
+  aún no aceptan el 4 (Android) lo siguen leyendo.
+- Herencia: un hijo debe tener el mismo Minecraft y el mismo loader (`kind` y
+  `version`) que su madre. Un NeoForge del esquema 3 y uno del 4 se consideran
+  el mismo juego si coinciden `kind` y versión.
+- Catálogo (`GET /v1/profiles`): cada perfil añade `loader: {kind, version}`
+  (siempre presente); `neoforge` se mantiene y va vacío si el loader no es NeoForge.
+- Contrato para los launchers: aceptar el 4; si no pueden instalar el `kind`,
+  rechazar la revisión con un mensaje claro (no instalar otro loader). Un
+  launcher que no conozca el esquema 4 rechaza la revisión como hoy.

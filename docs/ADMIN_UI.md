@@ -1,5 +1,15 @@
 # Administrative UI
 
+## Modloader del perfil (esquema 4)
+
+El paso 1 de «Nuevo perfil global» permite elegir NeoForge, Fabric o Forge. La
+versión del loader se filtra según la de Minecraft (Fabric: juegos soportados por
+Fabric; Forge: versiones de Maven que empiezan por la de Minecraft, incluidas las
+antiguas) y la lista de Minecraft se acota a lo que soporta el loader elegido.
+Fabric y Forge publican `schema_version 4`; NeoForge conserva su esquema. Ver
+`PROFILE_PROTOCOL.md`. Los catálogos de Fabric y Forge son opcionales: si su
+servidor upstream falla, NeoForge sigue disponible y se conserva la última lista.
+
 ## Parámetros JVM del perfil (0.2.23)
 
 En **Publicación → Revisar** hay una sección *Parámetros JVM del perfil*. Lista
@@ -162,10 +172,12 @@ session in HTTPS mode. `GET /admin/api/session` returns the authenticated
 principal and that session's CSRF token for same-origin browser code. Logout is
 `POST /admin/logout` and also requires the session CSRF token.
 
-The profile form's Minecraft and NeoForge selectors read
+The profile form's Minecraft and modloader selectors read
 `GET /admin/api/game-versions`, which requires the same administrator session.
 Distribution filters Minecraft to official releases from Mojang's version
-manifest and reads NeoForge release versions from NeoForged Maven metadata.
+manifest, reads NeoForge release versions from NeoForged Maven metadata, Fabric
+game/loader versions from meta.fabricmc.net and Forge versions from Minecraft
+Forge's Maven metadata.
 The service caches a complete catalog in memory for six hours and continues to
 serve its last complete copy during a temporary upstream outage. Catalog
 responses are bounded and never accept client-selected upstream URLs.

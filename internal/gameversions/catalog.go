@@ -19,6 +19,9 @@ import (
 const (
 	defaultMinecraftURL = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
 	defaultNeoForgeURL  = "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml"
+	defaultFabricGame   = "https://meta.fabricmc.net/v2/versions/game"
+	defaultFabricLoader = "https://meta.fabricmc.net/v2/versions/loader"
+	defaultForgeURL     = "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml"
 	maxMetadataBytes    = 8 << 20
 	maxCatalogEntries   = 5000
 	fetchTimeout        = 20 * time.Second
@@ -28,10 +31,25 @@ var neoForgeVersionDirectory = regexp.MustCompile(`href="\./([0-9]+(?:\.[0-9]+)+
 
 // Catalog is the official release list consumed by the administrator's
 // searchable version pickers. NeoForge versions are ordered newest first.
+//
+// Fabric loaders work with every Minecraft version Fabric supports, so Fabric is
+// two lists: the supported Minecraft releases and the stable loader versions.
+// Forge entries are full Maven versions ("1.21.1-52.0.30", "1.7.10-10.13.4.1614-1.7.10"):
+// the Minecraft version is the text before the first dash, and the whole string
+// is what the manifest and launchers use as game.loader.version.
 type Catalog struct {
-	Minecraft []string  `json:"minecraft"`
-	NeoForge  []string  `json:"neoforge"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Minecraft  []string  `json:"minecraft"`
+	NeoForge   []string  `json:"neoforge"`
+	Fabric     []string  `json:"fabric"`
+	FabricGame []string  `json:"fabric_game"`
+	Forge      []string  `json:"forge"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+// Sources are the upstream metadata URLs. NewProvider leaves Fabric and Forge
+// disabled (used by tests); NewProviderFromSources fills every empty one in.
+type Sources struct {
+	Minecraft, NeoForge, FabricGame, FabricLoader, Forge string
 }
 
 // Provider fetches official metadata and keeps a short in-memory cache so
@@ -40,6 +58,7 @@ type Provider struct {
 	client       *http.Client
 	minecraftURL string
 	neoForgeURL  string
+	sources      Sources
 	ttl          time.Duration
 
 	mu      sync.Mutex
@@ -63,6 +82,23 @@ func NewProvider(client *http.Client, minecraftURL, neoForgeURL string, ttl time
 	return &Provider{client: client, minecraftURL: minecraftURL, neoForgeURL: neoForgeURL, ttl: ttl}
 }
 
+// NewProviderFromSources is NewProvider with Fabric and Forge enabled; empty
+// fields take the official default URL.
+func NewProviderFromSources(client *http.Client, sources Sources, ttl time.Duration) *Provider {
+	p := NewProvider(client, sources.Minecraft, sources.NeoForge, ttl)
+	p.sources = Sources{FabricGame: sources.FabricGame, FabricLoader: sources.FabricLoader, Forge: sources.Forge}
+	if p.sources.FabricGame == "" {
+		p.sources.FabricGame = defaultFabricGame
+	}
+	if p.sources.FabricLoader == "" {
+		p.sources.FabricLoader = defaultFabricLoader
+	}
+	if p.sources.Forge == "" {
+		p.sources.Forge = defaultForgeURL
+	}
+	return p
+}
+
 func (p *Provider) Get(ctx context.Context) (Catalog, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -78,9 +114,9 @@ func (p *Provider) Get(ctx context.Context) (Catalog, error) {
 			p.expires = time.Now().Add(time.Minute)
 			return stale, nil
 		}
-		p.cached = fresh
+		p.cached = keepLastGoodLoaders(fresh, p.cached)
 		p.expires = time.Now().Add(p.ttl)
-		return clone(fresh), nil
+		return clone(p.cached), nil
 	}
 	fresh, err := p.fetch(ctx)
 	if err != nil {
@@ -141,6 +177,18 @@ func (p *Provider) fetch(ctx context.Context) (Catalog, error) {
 	}
 	if len(catalog.Minecraft) == 0 || len(catalog.NeoForge) == 0 {
 		return Catalog{}, errors.New("upstream returned an empty game version catalog")
+	}
+	// Fabric and Forge are best effort: an outage there must not hide NeoForge,
+	// and Get keeps the last good list for a loader whose refresh failed.
+	if p.sources.FabricGame != "" && p.sources.FabricLoader != "" {
+		if game, loaders, err := p.fetchFabric(ctx); err == nil {
+			catalog.FabricGame, catalog.Fabric = game, loaders
+		}
+	}
+	if p.sources.Forge != "" {
+		if versions, err := p.fetchForge(ctx); err == nil {
+			catalog.Forge = versions
+		}
 	}
 	catalog.UpdatedAt = time.Now().UTC()
 	return catalog, nil
@@ -320,10 +368,127 @@ func compareVersions(left, right string) int {
 	return 0
 }
 
+func keepLastGoodLoaders(fresh, previous Catalog) Catalog {
+	if len(fresh.Fabric) == 0 || len(fresh.FabricGame) == 0 {
+		fresh.Fabric, fresh.FabricGame = previous.Fabric, previous.FabricGame
+	}
+	if len(fresh.Forge) == 0 {
+		fresh.Forge = previous.Forge
+	}
+	return fresh
+}
+
 func clone(source Catalog) Catalog {
 	return Catalog{
-		Minecraft: append([]string(nil), source.Minecraft...),
-		NeoForge:  append([]string(nil), source.NeoForge...),
-		UpdatedAt: source.UpdatedAt,
+		Minecraft:  append([]string{}, source.Minecraft...),
+		NeoForge:   append([]string{}, source.NeoForge...),
+		Fabric:     append([]string{}, source.Fabric...),
+		FabricGame: append([]string{}, source.FabricGame...),
+		Forge:      append([]string{}, source.Forge...),
+		UpdatedAt:  source.UpdatedAt,
 	}
+}
+
+func (p *Provider) fetchFabric(ctx context.Context) (game, loaders []string, err error) {
+	var gameList, loaderList []struct {
+		Version string `json:"version"`
+		Stable  bool   `json:"stable"`
+	}
+	if err := p.getJSON(ctx, p.sources.FabricGame, &gameList); err != nil {
+		return nil, nil, fmt.Errorf("read Fabric game versions: %w", err)
+	}
+	if err := p.getJSON(ctx, p.sources.FabricLoader, &loaderList); err != nil {
+		return nil, nil, fmt.Errorf("read Fabric loader versions: %w", err)
+	}
+	for _, item := range gameList {
+		if item.Stable && validDottedVersion(item.Version) {
+			game = append(game, item.Version)
+		}
+	}
+	for _, item := range loaderList {
+		if item.Stable && validLoaderVersion(item.Version) {
+			loaders = append(loaders, item.Version)
+		}
+	}
+	if len(game) == 0 || len(loaders) == 0 || len(game) > maxCatalogEntries || len(loaders) > maxCatalogEntries {
+		return nil, nil, errors.New("Fabric metadata is empty or exceeds entry limit")
+	}
+	return game, loaders, nil
+}
+
+func (p *Provider) fetchForge(ctx context.Context) ([]string, error) {
+	var metadata struct {
+		Versioning struct {
+			Versions []string `xml:"versions>version"`
+		} `xml:"versioning"`
+	}
+	if err := p.getXML(ctx, p.sources.Forge, &metadata); err != nil {
+		return nil, fmt.Errorf("read Forge Maven metadata: %w", err)
+	}
+	seen := make(map[string]struct{}, len(metadata.Versioning.Versions))
+	var versions []string
+	for _, version := range metadata.Versioning.Versions {
+		// Keep entries shaped "<minecraft>-<forge>[-<minecraft>]" with a dotted
+		// Minecraft part; branch and pre-release strings are not selectable builds.
+		minecraft, _, ok := strings.Cut(version, "-")
+		if !ok || !validDottedVersion(minecraft) || !validLoaderVersion(version) {
+			continue
+		}
+		if _, dup := seen[version]; dup {
+			continue
+		}
+		seen[version] = struct{}{}
+		versions = append(versions, version)
+	}
+	if len(versions) == 0 || len(versions) > 4*maxCatalogEntries {
+		return nil, errors.New("Forge Maven metadata is empty or exceeds entry limit")
+	}
+	sort.SliceStable(versions, func(i, j int) bool { return compareLoose(versions[i], versions[j]) > 0 })
+	return versions, nil
+}
+
+// validLoaderVersion mirrors the manifest rule for game.loader.version.
+func validLoaderVersion(value string) bool {
+	if value == "" || len(value) > 64 {
+		return false
+	}
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		alnum := c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+		if !alnum && (i == 0 || !strings.ContainsRune("._+-", rune(c))) {
+			return false
+		}
+	}
+	return true
+}
+
+// compareLoose orders dotted/dashed versions numerically part by part; non-numeric
+// parts sort below numbers and between themselves lexically.
+func compareLoose(left, right string) int {
+	split := func(v string) []string {
+		return strings.FieldsFunc(v, func(r rune) bool { return r == '.' || r == '-' || r == '+' })
+	}
+	a, b := split(left), split(right)
+	for i := 0; i < len(a) && i < len(b); i++ {
+		an, aErr := strconv.ParseUint(a[i], 10, 64)
+		bn, bErr := strconv.ParseUint(b[i], 10, 64)
+		switch {
+		case aErr == nil && bErr == nil:
+			if an != bn {
+				if an < bn {
+					return -1
+				}
+				return 1
+			}
+		case aErr == nil:
+			return 1
+		case bErr == nil:
+			return -1
+		default:
+			if c := strings.Compare(a[i], b[i]); c != 0 {
+				return c
+			}
+		}
+	}
+	return len(a) - len(b)
 }

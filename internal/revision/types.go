@@ -41,9 +41,37 @@ type Profile struct {
 	Official    bool       `json:"official"`
 }
 
+// Game pins the Minecraft version and its mod loader. Schema 1-3 manifests carry
+// the NeoForge version in NeoForge; schema 4 carries Loader instead.
 type Game struct {
-	Minecraft string `json:"minecraft"`
-	NeoForge  string `json:"neoforge"`
+	Minecraft string      `json:"minecraft"`
+	NeoForge  string      `json:"neoforge,omitempty"`
+	Loader    *GameLoader `json:"loader,omitempty"`
+}
+
+type GameLoader struct {
+	Kind    string `json:"kind"`
+	Version string `json:"version"`
+}
+
+const (
+	LoaderNeoForge = "neoforge"
+	LoaderFabric   = "fabric"
+	LoaderForge    = "forge"
+)
+
+// ResolvedLoader returns the loader kind and version for any schema version.
+func (g Game) ResolvedLoader() GameLoader {
+	if g.Loader != nil {
+		return *g.Loader
+	}
+	return GameLoader{Kind: LoaderNeoForge, Version: g.NeoForge}
+}
+
+// SameGame reports whether two manifests pin the same Minecraft and loader,
+// regardless of which schema version spelled them.
+func SameGame(a, b Game) bool {
+	return a.Minecraft == b.Minecraft && a.ResolvedLoader() == b.ResolvedLoader()
 }
 
 type ParentRef struct {

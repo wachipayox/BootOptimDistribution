@@ -162,6 +162,7 @@ type profileView struct {
 	Description    string               `json:"description,omitempty"`
 	Minecraft      string               `json:"minecraft"`
 	NeoForge       string               `json:"neoforge"`
+	Loader         revision.GameLoader  `json:"loader"`
 	Icon           *revision.ObjectRef  `json:"icon,omitempty"`
 	ProfileID      string               `json:"profile_id"`
 	Name           string               `json:"name"`
@@ -668,7 +669,7 @@ func (a *API) handleProfiles(w http.ResponseWriter, r *http.Request, admin bool)
 				ProfileID:   item.ProfileID,
 				Name:        manifest.Profile.Name,
 				Description: manifest.Profile.Description,
-				Minecraft:   manifest.Game.Minecraft, NeoForge: manifest.Game.NeoForge, Icon: manifest.Profile.Icon,
+				Minecraft:   manifest.Game.Minecraft, NeoForge: manifest.Game.NeoForge, Loader: manifest.Game.ResolvedLoader(), Icon: manifest.Profile.Icon,
 				LatestRevision: revisionRef{RevisionID: item.RevisionID, Sequence: item.Sequence, ManifestSHA256: item.ManifestSHA256},
 				Channels:       profileChannels,
 			})

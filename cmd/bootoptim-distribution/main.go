@@ -95,7 +95,7 @@ func main() {
 	var gameVersionsHandler http.Handler
 	var serviceUpdateHandler http.Handler
 	if adminUIEnabled {
-		gameVersionsHandler = gameversions.NewProvider(nil, "", "", 0)
+		gameVersionsHandler = gameversions.NewProviderFromSources(nil, gameversions.Sources{}, 0)
 		cas, err := storage.OpenCAS(*dataDir, storage.DefaultMaxObjectBytes)
 		if err != nil {
 			log.Fatalf("open content store: %v", err)
