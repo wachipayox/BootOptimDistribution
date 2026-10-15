@@ -29,6 +29,10 @@ const state = {
   policies: new Map(),
   parentConfigSettings: new Map(),
   localConfigSettings: new Map(),
+  // Profile JVM options: inherited effective list, this revision's own options and removals.
+  parentJvmOptions: [],
+  localJvmOptions: new Map(),
+  removedJvmOptions: new Set(),
   modIds: new Map(),
   manifest: null,
   canonicalManifest: '',
@@ -1349,6 +1353,7 @@ async function resolveEffective(profile, revision, depth, seen) {
 
   let map = new Map();
   let configSettings = new Map();
+  let jvmOptions = [];
   let inheritanceDepth = 0;
   let ancestors = [];
   if (manifest.base) {
@@ -1364,11 +1369,13 @@ async function resolveEffective(profile, revision, depth, seen) {
     }
     map = new Map(inherited.map);
     configSettings = new Map(inherited.configSettings);
+    jvmOptions = inherited.jvmOptions;
     inheritanceDepth = inherited.inheritanceDepth + 1;
     ancestors = [inherited].concat(inherited.ancestors || []);
   }
 
   applyManifest(map, manifest, configSettings);
+  jvmOptions = applyJvmManifest(jvmOptions, manifest);
   seen.delete(key);
 
   const manifestProfile = manifest.profile && valueText(manifest.profile.id, profile);
@@ -1376,6 +1383,7 @@ async function resolveEffective(profile, revision, depth, seen) {
   return {
     map: map,
     configSettings: configSettings,
+    jvmOptions: jvmOptions,
     manifest: manifest,
     inheritanceDepth: inheritanceDepth,
     ancestors: ancestors,
@@ -1393,6 +1401,10 @@ async function handleParentProfileChange() {
   state.parentMap = new Map();
   state.parentConfigSettings = new Map();
   state.localConfigSettings.clear();
+  state.parentJvmOptions = [];
+  state.localJvmOptions.clear();
+  state.removedJvmOptions.clear();
+  refreshJvmOptionsPanel();
   state.parentRef = null;
   state.parentDepth = 0;
   state.parentManifest = null;
@@ -1476,9 +1488,12 @@ async function handleParentRevisionChange() {
     const resolved = await resolveEffective(profile, revision, 0, new Set());
     state.parentMap = resolved.map;
     state.parentConfigSettings = resolved.configSettings;
+    state.parentJvmOptions = resolved.jvmOptions;
+    refreshJvmOptionsPanel();
     state.parentRef = resolved.ref;
     state.parentDepth = resolved.inheritanceDepth;
     state.parentManifest = resolved.manifest;
+    copyParentGameVersions(resolved.manifest);
     setStatus(nodes.folderStatus, resolved.map.size + (resolved.map.size === 1
       ? ' archivo heredado listo para esta rama.'
       : ' archivos heredados listos para esta rama.'));
@@ -1498,6 +1513,11 @@ async function handleParentRevisionChange() {
     setStatus(nodes.parentStatus, 'No se pudo cargar la versión base: ' + describeError(error), 'error');
   }
   await recomputeDiff();
+}
+
+// jvm-options.js loads after this script; early calls are harmless no-ops.
+function refreshJvmOptionsPanel() {
+  if (typeof renderJvmOptionsPanel === 'function') renderJvmOptionsPanel();
 }
 
 function invalidatePrepared() {
@@ -1954,6 +1974,7 @@ function buildManifest() {
     config_settings: Array.from(state.localConfigSettings.values()),
     objects: []
   };
+  applyDraftJvmOptions(manifest);
 
   const notes = qs('#release-notes').value.trim();
   if (notes) manifest.profile.description = notes;
@@ -2111,7 +2132,8 @@ function summarizeDiff() {
     'Altas: ' + counts.added,
     'Cambios: ' + counts.changed,
     'Eliminaciones: ' + counts.removed,
-    'Perfil base: ' + (state.manifest && state.manifest.base ? state.manifest.base.profile_id + ' / ' + state.manifest.base.revision_id : 'ninguno')
+    'Perfil base: ' + (state.manifest && state.manifest.base ? state.manifest.base.profile_id + ' / ' + state.manifest.base.revision_id : 'ninguno'),
+    'Parámetros JVM: ' + jvmDraftSummary(state.manifest)
   ].join('\n');
 }
 
@@ -2329,6 +2351,18 @@ function searchableCombobox(input, toggle, list, getOptions, onSelect) {
     refresh: function () { render(input.value, !list.hidden); },
     close: close
   };
+}
+
+// Choosing a base copies its Minecraft and NeoForge versions once; they can be
+// changed afterwards like any other field.
+function copyParentGameVersions(manifest) {
+  const game = manifest && manifest.game;
+  if (!game) return;
+  qs('#minecraft-version').value = game.minecraft || '';
+  if (minecraftCombobox) minecraftCombobox.refresh();
+  qs('#neoforge-version').value = game.neoforge || '';
+  if (neoForgeCombobox) neoForgeCombobox.refresh();
+  invalidatePrepared();
 }
 
 function neoforgeFamily(minecraftVersion) {
