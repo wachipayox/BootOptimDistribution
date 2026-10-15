@@ -43,7 +43,10 @@ const state = {
   overviewSource: '',
   apiErrors: [],
   minecraftVersions: [],
-  neoForgeVersions: []
+  neoForgeVersions: [],
+  fabricVersions: [],
+  fabricGameVersions: [],
+  forgeVersions: []
 };
 
 const nodes = {
@@ -811,6 +814,11 @@ function addFiles(fileList, replacePath, folderPath) {
     setStatus(nodes.folderStatus, 'Para reemplazar un archivo, selecciona solo un archivo.', 'warning');
     return;
   }
+  if (replacePath && files[0].name !== pathBasename(replacePath)) {
+    // The replacement keeps its own name instead of the old file's.
+    replaceDraftFileWithNewName(replacePath, files[0]);
+    return;
+  }
   state.pendingReplacePath = replacePath || '';
   const prefix = replacePath ? '' : (folderPath === undefined ? state.pendingFolderPath : folderPath);
   const records = files.map(function (file) {
@@ -952,7 +960,8 @@ function renderExplorer() {
       actions.appendChild(smallAction(entry, 'Restaurar archivo', '↶', function () { restorePath(entry.path); }));
     } else {
       actions.appendChild(smallAction(entry, 'Descargar archivo', '↓', function () { downloadExplorerFile(entry); }));
-      actions.appendChild(smallAction(entry, 'Reemplazar archivo', '↻', function () { state.pendingReplacePath = entry.path; state.pendingFolderPath = ''; nodes.filePicker.click(); }));
+      actions.appendChild(smallAction(entry, 'Reemplazar archivo (toma el nombre del nuevo)', '↻', function () { state.pendingReplacePath = entry.path; state.pendingFolderPath = ''; nodes.filePicker.click(); }));
+      actions.appendChild(smallAction(entry, 'Renombrar archivo', '✐', function () { openRenameFile(entry.path); }));
       if (entry.local && entry.local.file && isEditableText(entry.path, entry.local.mediaType)) {
         actions.appendChild(smallAction(entry, isConfigRuleFile(entry.path, entry.local.kind) ? 'Editar archivo y reglas' : 'Editar archivo de texto', '✎', function () { editLocalFile(entry.path); }));
       } else if (entry.parent && isEditableText(entry.path, (entry.parent.object || {}).media_type)) {
@@ -1914,9 +1923,10 @@ function buildManifest() {
   const name = requiredValue('#profile-name', 'el nombre del perfil');
   const revision = requiredValue('#revision-id', 'el ID de revisión');
   const minecraft = requiredValue('#minecraft-version', 'la versión de Minecraft');
-  const neoforge = requiredValue('#neoforge-version', 'la versión de NeoForge');
+  const loaderKind = qs('#loader-kind').value;
+  const loaderVersion = requiredValue('#loader-version', 'la versión de ' + LOADER_LABELS[loaderKind]);
   if (!state.minecraftVersions.includes(minecraft)) throw new Error('Selecciona una versión de Minecraft del catálogo.');
-  if (!allowedNeoForgeVersions().includes(neoforge)) throw new Error('Selecciona una versión de NeoForge compatible con Minecraft ' + minecraft + '.');
+  if (!allowedLoaderVersions().includes(loaderVersion)) throw new Error('Selecciona una versión de ' + LOADER_LABELS[loaderKind] + ' compatible con Minecraft ' + minecraft + '.');
   const sequence = Number(qs('#revision-sequence').value);
   if (!Number.isSafeInteger(sequence) || sequence < 1) throw new Error('La secuencia debe ser un entero positivo.');
 
@@ -1944,10 +1954,7 @@ function buildManifest() {
       name: name,
       official: true
     },
-    game: {
-      minecraft: minecraft,
-      neoforge: neoforge
-    },
+    game: { minecraft: minecraft },
     base: state.parentRef ? {
       profile_id: state.parentRef.profile_id,
       revision_id: state.parentRef.revision_id,
@@ -1975,6 +1982,7 @@ function buildManifest() {
     objects: []
   };
   applyDraftJvmOptions(manifest);
+  applyDraftLoader(manifest, minecraft, loaderKind, loaderVersion);
 
   const notes = qs('#release-notes').value.trim();
   if (notes) manifest.profile.description = notes;
@@ -2222,7 +2230,8 @@ function bindInvalidation() {
     '#revision-id',
     '#revision-sequence',
     '#minecraft-version',
-    '#neoforge-version',
+    '#loader-kind',
+    '#loader-version',
     '#release-notes',
     '#derive-local',
     '#mods-add',
@@ -2353,49 +2362,48 @@ function searchableCombobox(input, toggle, list, getOptions, onSelect) {
   };
 }
 
-// Choosing a base copies its Minecraft and NeoForge versions once; they can be
+// Choosing a base copies its Minecraft version and modloader once; they can be
 // changed afterwards like any other field.
 function copyParentGameVersions(manifest) {
   const game = manifest && manifest.game;
   if (!game) return;
+  const loader = gameLoaderOf(game);
+  qs('#loader-kind').value = loader.kind;
   qs('#minecraft-version').value = game.minecraft || '';
+  qs('#loader-version').value = loader.version || '';
+  refreshLoaderLabels();
   if (minecraftCombobox) minecraftCombobox.refresh();
-  qs('#neoforge-version').value = game.neoforge || '';
-  if (neoForgeCombobox) neoForgeCombobox.refresh();
+  if (loaderCombobox) loaderCombobox.refresh();
   invalidatePrepared();
 }
 
-function neoforgeFamily(minecraftVersion) {
-  if (!state.minecraftVersions.includes(minecraftVersion)) return '';
-  const parts = minecraftVersion.split('.');
-  if (parts[0] === '1') return (parts[1] || '') + '.' + (parts[2] || '0') + '.';
-  return (parts[0] || '') + '.' + (parts[1] || '0') + '.';
-}
-
-function allowedNeoForgeVersions() {
-  const prefix = neoforgeFamily(qs('#minecraft-version').value);
-  return prefix ? state.neoForgeVersions.filter(function (version) { return version.startsWith(prefix); }) : [];
-}
-
-function updateNeoForgeOptions() {
-  const neoForgeInput = qs('#neoforge-version');
-  if (neoForgeInput.value && !allowedNeoForgeVersions().includes(neoForgeInput.value)) {
-    neoForgeInput.value = '';
-  }
-  if (neoForgeCombobox) neoForgeCombobox.refresh();
+function updateLoaderOptions() {
+  const input = qs('#loader-version');
+  if (input.value && !allowedLoaderVersions().includes(input.value)) input.value = '';
+  if (loaderCombobox) loaderCombobox.refresh();
+  if (minecraftCombobox) minecraftCombobox.refresh();
   invalidatePrepared();
+}
+
+function handleLoaderKindChange() {
+  qs('#loader-version').value = '';
+  refreshLoaderLabels();
+  updateLoaderOptions();
 }
 
 let minecraftCombobox;
-let neoForgeCombobox;
+let loaderCombobox;
 
 async function loadGameVersions() {
   try {
     const catalog = await request('/admin/api/game-versions');
     state.minecraftVersions = Array.isArray(catalog.minecraft) ? catalog.minecraft : [];
     state.neoForgeVersions = Array.isArray(catalog.neoforge) ? catalog.neoforge : [];
+    state.fabricVersions = Array.isArray(catalog.fabric) ? catalog.fabric : [];
+    state.fabricGameVersions = Array.isArray(catalog.fabric_game) ? catalog.fabric_game : [];
+    state.forgeVersions = Array.isArray(catalog.forge) ? catalog.forge : [];
     minecraftCombobox.refresh();
-    neoForgeCombobox.refresh();
+    loaderCombobox.refresh();
   } catch (error) {
     setStatus(nodes.parentStatus, 'No se pudo cargar el catálogo de versiones oficiales: ' + describeError(error), 'error');
   }
@@ -2407,13 +2415,14 @@ function bindEvents() {
   nodes.parentRevision.addEventListener('change', handleParentRevisionChange);
   minecraftCombobox = searchableCombobox(
     qs('#minecraft-version'), qs('#minecraft-combobox .combobox-toggle'), qs('#minecraft-options'),
-    function () { return state.minecraftVersions; }, updateNeoForgeOptions
+    allowedMinecraftVersions, updateLoaderOptions
   );
-  neoForgeCombobox = searchableCombobox(
-    qs('#neoforge-version'), qs('#neoforge-combobox .combobox-toggle'), qs('#neoforge-options'),
-    allowedNeoForgeVersions, invalidatePrepared
+  loaderCombobox = searchableCombobox(
+    qs('#loader-version'), qs('#loader-combobox .combobox-toggle'), qs('#loader-options'),
+    allowedLoaderVersions, invalidatePrepared
   );
-  qs('#minecraft-version').addEventListener('change', updateNeoForgeOptions);
+  qs('#minecraft-version').addEventListener('change', updateLoaderOptions);
+  qs('#loader-kind').addEventListener('change', handleLoaderKindChange);
   nodes.pickDirectory.addEventListener('click', chooseDirectory);
   nodes.addFiles.addEventListener('click', function () { state.pendingReplacePath = ''; state.pendingFolderPath = ''; nodes.filePicker.click(); });
   nodes.createFolder.addEventListener('click', function () { openCreateFolder(''); });

@@ -200,6 +200,10 @@ func runSign(args []string, input io.Reader, diagnostics io.Writer) error {
 		Game struct {
 			Minecraft string `json:"minecraft"`
 			NeoForge  string `json:"neoforge"`
+			Loader    *struct {
+				Kind    string `json:"kind"`
+				Version string `json:"version"`
+			} `json:"loader"`
 		} `json:"game"`
 		Base *struct {
 			ProfileID      string `json:"profile_id"`
@@ -220,14 +224,18 @@ func runSign(args []string, input io.Reader, diagnostics io.Writer) error {
 	if identity.Profile.ID == "" || identity.Revision.ID == "" || identity.Revision.Sequence < 1 {
 		return errors.New("manifest identity is incomplete")
 	}
+	loaderLabel := "NeoForge " + identity.Game.NeoForge
+	if identity.Game.Loader != nil {
+		loaderLabel = identity.Game.Loader.Kind + " " + identity.Game.Loader.Version
+	}
 	parent := "none (root profile)"
 	if identity.Base != nil {
 		parent = fmt.Sprintf("%s@%s (%s)", identity.Base.ProfileID, identity.Base.RevisionID, identity.Base.ManifestSHA256)
 	}
 	fmt.Fprintf(diagnostics,
-		"About to sign profile %q (%s), revision %s sequence %d, parent %s, Minecraft %s / NeoForge %s; files: %d mods, %d removed mods, %d configs, %d removed configs, %d setting rules, %d JVM options, %d other objects; digest %s.\nType the profile ID to confirm: ",
+		"About to sign profile %q (%s), revision %s sequence %d, parent %s, Minecraft %s / %s; files: %d mods, %d removed mods, %d configs, %d removed configs, %d setting rules, %d JVM options, %d other objects; digest %s.\nType the profile ID to confirm: ",
 		identity.Profile.Name, identity.Profile.ID, identity.Revision.ID, identity.Revision.Sequence, parent,
-		identity.Game.Minecraft, identity.Game.NeoForge,
+		identity.Game.Minecraft, loaderLabel,
 		len(identity.Mods), len(identity.RemoveMods), len(identity.Configs), len(identity.RemoveConfigs), len(identity.ConfigSettings), len(identity.JVMOptions), len(identity.Objects), digestHex,
 	)
 	line, err := bufio.NewReader(input).ReadString('\n')

@@ -68,14 +68,31 @@ func validateManifestShape(raw []byte) error {
 			}
 		}
 	}
-	game, err := objectShape(root["game"], []string{"minecraft", "neoforge"}, nil)
+	if err := requireInteger(root["schema_version"], "schema_version"); err != nil {
+		return err
+	}
+	var schemaVersion int
+	if err := json.Unmarshal(root["schema_version"], &schemaVersion); err != nil {
+		return err
+	}
+	game, err := objectShape(root["game"], gameShapeKeys(schemaVersion), nil)
 	if err != nil {
 		return fmt.Errorf("game: %w", err)
 	}
 	if err := requireString(game["minecraft"], "game.minecraft"); err != nil {
 		return err
 	}
-	if err := requireString(game["neoforge"], "game.neoforge"); err != nil {
+	if schemaVersion >= 4 {
+		loader, err := objectShape(game["loader"], []string{"kind", "version"}, nil)
+		if err != nil {
+			return fmt.Errorf("game.loader: %w", err)
+		}
+		for _, key := range []string{"kind", "version"} {
+			if err := requireString(loader[key], "game.loader."+key); err != nil {
+				return err
+			}
+		}
+	} else if err := requireString(game["neoforge"], "game.neoforge"); err != nil {
 		return err
 	}
 	if !bytes.Equal(bytes.TrimSpace(root["base"]), []byte("null")) {
@@ -119,22 +136,15 @@ func validateManifestShape(raw []byte) error {
 	if err := requireBool(configsPerm["override_default_once"], "permissions.configs.override_default_once"); err != nil {
 		return err
 	}
-	if err := requireInteger(root["schema_version"], "schema_version"); err != nil {
-		return err
-	}
-	var schemaVersion int
-	if err := json.Unmarshal(root["schema_version"], &schemaVersion); err != nil {
-		return err
-	}
 	if schemaVersion >= 2 {
 		if _, ok := root["config_settings"]; !ok {
 			return fmt.Errorf("schema_version %d requires config_settings", schemaVersion)
 		}
 	}
-	if schemaVersion == 3 {
+	if schemaVersion >= 3 {
 		for _, key := range []string{"jvm_options", "remove_jvm_options"} {
 			if _, ok := root[key]; !ok {
-				return fmt.Errorf("schema_version 3 requires %s", key)
+				return fmt.Errorf("schema_version %d requires %s", schemaVersion, key)
 			}
 		}
 	}
@@ -424,4 +434,13 @@ func requireArray(raw []byte, name string) error {
 		return fmt.Errorf("%s must be an array", name)
 	}
 	return nil
+}
+
+// gameShapeKeys lists the required game keys: schema 4 replaces the NeoForge-only
+// field with a loader object so older manifests keep their exact signed shape.
+func gameShapeKeys(schemaVersion int) []string {
+	if schemaVersion >= 4 {
+		return []string{"minecraft", "loader"}
+	}
+	return []string{"minecraft", "neoforge"}
 }

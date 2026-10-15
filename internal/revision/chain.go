@@ -54,7 +54,7 @@ func ValidateInheritanceChain(target *VerifiedRevision, parents map[RevisionKey]
 		if parent.ProfileID() != pin.ProfileID || parent.RevisionID() != pin.RevisionID || parent.ManifestSHA256() != pin.ManifestSHA256 {
 			return nil, ErrParentPinMismatch
 		}
-		if parent.manifest.Game != current.manifest.Game {
+		if !SameGame(parent.manifest.Game, current.manifest.Game) {
 			return nil, fmt.Errorf("%w: %s/%s", ErrGameMismatch, pin.ProfileID, pin.RevisionID)
 		}
 		seen[key] = struct{}{}
