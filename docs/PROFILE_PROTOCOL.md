@@ -222,8 +222,7 @@ esquema 3.
       "auto": {
         "rules": [ { "when": { "logical_cpus": { "max": 4 } }, "enabled": true, "value": 2 } ],
         "otherwise": { "enabled": false }
-      },
-      "evidence": { "url": "https://…", "summary": "Origen y resultado de la medición" }
+      }
     }
   }
 }
@@ -238,11 +237,10 @@ esquema 3.
 | `help` | 1–1024 bytes. |
 | `java` | `min` ≥ 8; `max` opcional (inclusivo). Versión de Java por número de *feature release*. |
 | `vm` | Subconjunto de `hotspot`, `openj9`. Obligatorio si la plantilla es `-XX:`. Si falta, vale cualquier VM. |
-| `platforms` | Claves `pc` y/o `android`. Cada plataforma lleva **sus propios** valores y su evidencia; nunca se comparten. Un launcher ignora las plataformas que no son la suya. |
+| `platforms` | Claves `pc` y/o `android`. Cada plataforma lleva **sus propios** valores; nunca se comparten. Un launcher ignora las plataformas que no son la suya. |
 | `default_enabled` | Obligatorio. |
 | `default_value` | Obligatorio para `int`/`enum`, prohibido para `bool`. |
 | `auto` | Opcional. "Decidir según el equipo": gana la primera regla cuyo `when` se cumpla entero; si ninguna, `otherwise`. 1–16 reglas. Datos admitidos: `logical_cpus`, `memory_mib` (RAM física total), cada uno con `min` y/o `max` inclusivos. Si una decisión activa una opción `int`/`enum`, lleva `value`. |
-| `evidence.url` | `https`, ≤ 512 bytes. `summary` opcional, ≤ 512 bytes. |
 
 No se admite `null` dentro de `jvm_options`. Como máximo 64 opciones y 64 ids
 eliminados por manifiesto.

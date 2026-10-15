@@ -64,7 +64,6 @@ func TestAutomaticPublicationValidatesJVMOptions(t *testing.T) {
 			"java": map[string]any{"min": 21}, "vm": []any{"hotspot"},
 			"platforms": map[string]any{"pc": map[string]any{
 				"default_enabled": false, "default_value": 2,
-				"evidence": map[string]any{"url": "https://github.com/wachipayox/BootOptim/pull/354"},
 			}},
 		}}
 		raw, err := json.Marshal(manifest)
