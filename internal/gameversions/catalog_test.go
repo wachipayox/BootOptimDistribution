@@ -118,3 +118,68 @@ func TestProviderUsesNeoForgeVersionDirectoryIndexWhenMetadataIsIncomplete(t *te
 		t.Fatalf("NeoForge = %#v, want %#v", catalog.NeoForge, want)
 	}
 }
+
+func TestProviderFabricAndForgeIncludingOldReleases(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/minecraft":
+			_, _ = w.Write([]byte(`{"versions":[{"id":"1.21.1","type":"release"},{"id":"1.7.10","type":"release"}]}`))
+		case "/fabric-game":
+			_, _ = w.Write([]byte(`[{"version":"1.21.1","stable":true},{"version":"24w01a","stable":false}]`))
+		case "/fabric-loader":
+			_, _ = w.Write([]byte(`[{"version":"0.16.9","stable":true},{"version":"0.17.0-beta.1","stable":false}]`))
+		case "/forge":
+			w.Header().Set("Content-Type", "application/xml")
+			_, _ = w.Write([]byte(`<metadata><versioning><versions><version>1.7.10-10.13.4.1614-1.7.10</version><version>1.21.1-52.0.9</version><version>1.21.1-52.0.30</version><version>1.7.10_pre4-10.12.2.1149</version><version>1.21.1-52.0.30</version></versions></versioning></metadata>`))
+		default:
+			w.Header().Set("Content-Type", "application/xml")
+			_, _ = w.Write([]byte(`<metadata><versioning><versions><version>21.1.9</version></versions></versioning></metadata>`))
+		}
+	}))
+	defer upstream.Close()
+
+	provider := NewProviderFromSources(upstream.Client(), Sources{
+		Minecraft: upstream.URL + "/minecraft", NeoForge: upstream.URL + "/neoforge",
+		FabricGame: upstream.URL + "/fabric-game", FabricLoader: upstream.URL + "/fabric-loader", Forge: upstream.URL + "/forge",
+	}, time.Hour)
+	catalog, err := provider.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get(): %v", err)
+	}
+	if want := []string{"1.21.1"}; !reflect.DeepEqual(catalog.FabricGame, want) {
+		t.Fatalf("FabricGame = %#v, want %#v", catalog.FabricGame, want)
+	}
+	if want := []string{"0.16.9"}; !reflect.DeepEqual(catalog.Fabric, want) {
+		t.Fatalf("Fabric = %#v, want %#v", catalog.Fabric, want)
+	}
+	want := []string{"1.21.1-52.0.30", "1.21.1-52.0.9", "1.7.10-10.13.4.1614-1.7.10"}
+	if !reflect.DeepEqual(catalog.Forge, want) {
+		t.Fatalf("Forge = %#v, want %#v", catalog.Forge, want)
+	}
+}
+
+func TestProviderKeepsNeoForgeWhenFabricAndForgeAreDown(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/minecraft":
+			_, _ = w.Write([]byte(`{"versions":[{"id":"1.21.1","type":"release"}]}`))
+		case "/neoforge":
+			w.Header().Set("Content-Type", "application/xml")
+			_, _ = w.Write([]byte(`<metadata><versioning><versions><version>21.1.9</version></versions></versioning></metadata>`))
+		default:
+			http.Error(w, "down", http.StatusBadGateway)
+		}
+	}))
+	defer upstream.Close()
+	provider := NewProviderFromSources(upstream.Client(), Sources{
+		Minecraft: upstream.URL + "/minecraft", NeoForge: upstream.URL + "/neoforge",
+		FabricGame: upstream.URL + "/fg", FabricLoader: upstream.URL + "/fl", Forge: upstream.URL + "/forge",
+	}, time.Hour)
+	catalog, err := provider.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get(): %v", err)
+	}
+	if len(catalog.NeoForge) != 1 || len(catalog.Fabric) != 0 || len(catalog.Forge) != 0 {
+		t.Fatalf("unexpected catalog %#v", catalog)
+	}
+}

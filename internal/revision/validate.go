@@ -11,11 +11,17 @@ import (
 )
 
 func validateManifestValues(m Manifest) error {
-	if m.SchemaVersion != 1 && m.SchemaVersion != 2 {
-		return errors.New("schema_version must equal 1 or 2")
+	if m.SchemaVersion < 1 || m.SchemaVersion > 4 {
+		return errors.New("schema_version must equal 1, 2, 3 or 4")
 	}
 	if m.SchemaVersion == 1 && len(m.ConfigSettings) != 0 {
-		return errors.New("config_settings require schema_version 2")
+		return errors.New("config_settings require schema_version 2 or later")
+	}
+	if m.SchemaVersion < 3 && (len(m.JVMOptions) != 0 || len(m.RemoveJVMOptions) != 0) {
+		return errors.New("jvm_options require schema_version 3")
+	}
+	if err := validateJVMOptions(m); err != nil {
+		return err
 	}
 	if !validRevisionID(m.Revision.ID) || m.Revision.Sequence < 1 {
 		return errors.New("revision id or sequence is invalid")
@@ -37,8 +43,8 @@ func validateManifestValues(m Manifest) error {
 			return errors.New("profile icon must be a PNG object of at most 2 MiB")
 		}
 	}
-	if len(m.Game.Minecraft) == 0 || len(m.Game.Minecraft) > 64 || len(m.Game.NeoForge) == 0 || len(m.Game.NeoForge) > 64 {
-		return errors.New("game versions must be non-empty and at most 64 bytes")
+	if err := validateGame(m); err != nil {
+		return err
 	}
 	if m.Permissions.MaxInheritanceDepth < 0 || m.Permissions.MaxInheritanceDepth > MaxInheritanceBases {
 		return errors.New("permissions.max_inheritance_depth is outside 0..8")
@@ -335,4 +341,46 @@ func validateSignature(sig Signature) error {
 		return errors.New("signature.value must be unpadded base64url")
 	}
 	return nil
+}
+
+func validateGame(m Manifest) error {
+	game := m.Game
+	if len(game.Minecraft) == 0 || len(game.Minecraft) > 64 {
+		return errors.New("game versions must be non-empty and at most 64 bytes")
+	}
+	if m.SchemaVersion < 4 {
+		if game.Loader != nil {
+			return errors.New("game.loader requires schema_version 4")
+		}
+		if len(game.NeoForge) == 0 || len(game.NeoForge) > 64 {
+			return errors.New("game versions must be non-empty and at most 64 bytes")
+		}
+		return nil
+	}
+	if game.NeoForge != "" || game.Loader == nil {
+		return errors.New("schema_version 4 requires game.loader and no game.neoforge")
+	}
+	switch game.Loader.Kind {
+	case LoaderNeoForge, LoaderFabric, LoaderForge:
+	default:
+		return fmt.Errorf("game.loader.kind %q is not supported", game.Loader.Kind)
+	}
+	if !validLoaderVersion(game.Loader.Version) {
+		return errors.New("game.loader.version is empty, too long or has unsafe characters")
+	}
+	return nil
+}
+
+func validLoaderVersion(version string) bool {
+	if len(version) == 0 || len(version) > 64 {
+		return false
+	}
+	for i := 0; i < len(version); i++ {
+		c := version[i]
+		alnum := c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+		if !alnum && (i == 0 || !strings.ContainsRune("._+-", rune(c))) {
+			return false
+		}
+	}
+	return true
 }

@@ -10,6 +10,7 @@ function resetPublicationDraft() {
   state.updateProfile = null;
   state.selectedFiles.clear(); state.removedPaths.clear(); state.createdDirs.clear();
   state.policies.clear(); state.modIds.clear(); state.localConfigSettings.clear();
+  state.parentJvmOptions = []; state.localJvmOptions.clear(); state.removedJvmOptions.clear();
   state.pathProblems = []; state.folderSelected = false; state.snapshotMode = false;
   state.icon = null;
   if (state.iconURL) URL.revokeObjectURL(state.iconURL);
@@ -19,7 +20,8 @@ function resetPublicationDraft() {
   ['#derive-local', '#mods-add', '#mods-remove', '#config-default', '#activate-update'].forEach(id => { qs(id).checked = true; });
   qs('#config-enforced').checked = false;
   qs('#profile-icon-preview').hidden = qs('#remove-profile-icon').hidden = true;
-  ['#profile-name', '#release-notes', '#minecraft-version', '#neoforge-version', '#profile-id'].forEach(id => { qs(id).value = ''; });
+  ['#profile-name', '#release-notes', '#minecraft-version', '#loader-version', '#profile-id'].forEach(id => { qs(id).value = ''; });
+  qs('#loader-kind').value = 'neoforge'; refreshLoaderLabels();
   qs('#profile-name').readOnly = false;
   qs('#revision-id').value = generatedRevisionID(); qs('#revision-sequence').value = '1';
   nodes.parentProfile.disabled = false; nodes.parentProfile.value = '';
@@ -30,6 +32,7 @@ function resetPublicationDraft() {
   nodes.publishButton.textContent = 'Publicar versión';
   nodes.stageButton.disabled = false;
   invalidatePrepared();
+  refreshJvmOptionsPanel();
 }
 
 async function startProfileUpdate(profile) {
@@ -48,6 +51,9 @@ async function startProfileUpdate(profile) {
     state.parentMap = new Map(resolved.map);
     state.parentConfigSettings = new Map(base ? base.configSettings : []);
     state.localConfigSettings = new Map((resolved.manifest.config_settings || []).map(rule => [configRuleID(rule.path, rule.key), { ...rule }]));
+    state.parentJvmOptions = base ? base.jvmOptions : [];
+    state.localJvmOptions = new Map((resolved.manifest.jvm_options || []).map(option => [option.id, JSON.parse(JSON.stringify(option))]));
+    state.removedJvmOptions = new Set(resolved.manifest.remove_jvm_options || []);
     state.parentRef = resolved.ref;
     state.parentManifest = base ? base.manifest : null;
     state.parentDepth = resolved.inheritanceDepth;
@@ -57,7 +63,9 @@ async function startProfileUpdate(profile) {
     qs('#profile-name').value = profileName(profile); qs('#profile-name').readOnly = true;
     qs('#release-notes').value = resolved.manifest.profile.description || '';
     qs('#minecraft-version').value = resolved.manifest.game.minecraft;
-    updateNeoForgeOptions(); qs('#neoforge-version').value = resolved.manifest.game.neoforge;
+    const loader = gameLoaderOf(resolved.manifest.game);
+    qs('#loader-kind').value = loader.kind; refreshLoaderLabels();
+    updateLoaderOptions(); qs('#loader-version').value = loader.version;
     qs('#revision-sequence').value = String(Math.max(...versions.map(v => revisionSequence(v) || 0)) + 1);
     const permissions = resolved.manifest.permissions;
     qs('#derive-local').checked = permissions.derive_local;
@@ -73,6 +81,7 @@ async function startProfileUpdate(profile) {
     qs('#update-context-title').textContent = profileName(profile) + ' · versión ' + resolved.sequence + ' → ' + qs('#revision-sequence').value;
     qs('#update-context-help').textContent = 'Los archivos actuales ya están cargados. «Añadir archivos» modifica solo lo elegido; «Importar carpeta» compara un pack completo. La madre global y las versiones anteriores se conservan.';
     nodes.publishButton.textContent = 'Publicar actualización';
+    refreshJvmOptionsPanel();
     setStatus(nodes.parentStatus, resolved.manifest.base ? 'Madre conservada: ' + resolved.manifest.base.profile_id + ' / ' + resolved.manifest.base.revision_id : 'Perfil raíz: la nueva versión seguirá siendo independiente.');
     setStatus(nodes.folderStatus, resolved.map.size + ' archivos publicados cargados. Puedes editar, reemplazar, añadir o quitar archivos.');
     await recomputeDiff();
@@ -89,10 +98,11 @@ function buildProfileUpdateManifest() {
   manifest.revision = { id: requiredValue('#revision-id', 'el ID de revisión'), sequence: Number(qs('#revision-sequence').value), created_at: new Date().toISOString() };
   if (!Number.isSafeInteger(manifest.revision.sequence) || manifest.revision.sequence <= update.resolved.sequence) throw new Error('La nueva versión debe avanzar la secuencia del perfil.');
   const minecraft = requiredValue('#minecraft-version', 'Minecraft');
-  const neoforge = requiredValue('#neoforge-version', 'NeoForge');
-  if (!state.minecraftVersions.includes(minecraft) || !allowedNeoForgeVersions().includes(neoforge)) throw new Error('Selecciona versiones compatibles del catálogo.');
-  manifest.game = { minecraft: minecraft, neoforge: neoforge };
-  if (manifest.base && (minecraft !== update.resolved.manifest.game.minecraft || neoforge !== update.resolved.manifest.game.neoforge)) throw new Error('Un perfil derivado debe conservar las versiones de juego de su madre.');
+  const loaderKind = qs('#loader-kind').value;
+  const loaderVersion = requiredValue('#loader-version', LOADER_LABELS[loaderKind]);
+  if (!state.minecraftVersions.includes(minecraft) || !allowedLoaderVersions().includes(loaderVersion)) throw new Error('Selecciona versiones compatibles del catálogo.');
+  const previousLoader = gameLoaderOf(update.resolved.manifest.game);
+  if (manifest.base && (minecraft !== update.resolved.manifest.game.minecraft || loaderKind !== previousLoader.kind || loaderVersion !== previousLoader.version)) throw new Error('Un perfil derivado debe conservar las versiones de juego de su madre.');
   manifest.profile.description = qs('#release-notes').value.trim();
   if (state.icon) manifest.profile.icon = { sha256: state.icon.sha256, size: state.icon.file.size, media_type: 'image/png' };
   manifest.permissions = { derive_local: qs('#derive-local').checked, mods: { add: qs('#mods-add').checked, remove: qs('#mods-remove').checked }, configs: { override_enforced: qs('#config-enforced').checked, override_default_once: qs('#config-default').checked }, max_inheritance_depth: 8 };
@@ -122,6 +132,8 @@ function buildProfileUpdateManifest() {
   manifest.config_settings = Array.from(state.localConfigSettings.values()).filter(rule => effective.has(rule.path));
   for (const rule of manifest.config_settings) if ((effective.get(rule.path) || {}).kind !== 'config') throw new Error('La regla ' + rule.key + ' debe apuntar a una configuración presente en el pack.');
   manifest.schema_version = manifest.config_settings.length ? 2 : 1;
+  applyDraftJvmOptions(manifest);
+  applyDraftLoader(manifest, minecraft, loaderKind, loaderVersion);
   return manifest;
 }
 

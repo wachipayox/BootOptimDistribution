@@ -95,7 +95,7 @@ func main() {
 	var gameVersionsHandler http.Handler
 	var serviceUpdateHandler http.Handler
 	if adminUIEnabled {
-		gameVersionsHandler = gameversions.NewProvider(nil, "", "", 0)
+		gameVersionsHandler = gameversions.NewProviderFromSources(nil, gameversions.Sources{}, 0)
 		cas, err := storage.OpenCAS(*dataDir, storage.DefaultMaxObjectBytes)
 		if err != nil {
 			log.Fatalf("open content store: %v", err)
@@ -193,7 +193,7 @@ func newHandlerWithConfig(cfg handlerConfig) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		capabilities := []string{"health", "build-version"}
 		if cfg.ProfileAPI != nil {
-			capabilities = append(capabilities, "signed-global-profiles", "admin-profile-publication", "signed-config-setting-rules-v1", "admin-automatic-publication", "auto-follow-parent")
+			capabilities = append(capabilities, "signed-global-profiles", "admin-profile-publication", "signed-config-setting-rules-v1", "admin-automatic-publication", "auto-follow-parent", "signed-jvm-options-v1")
 		}
 		if cfg.ServiceUpdate != nil {
 			capabilities = append(capabilities, "admin-service-update")

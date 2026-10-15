@@ -1,5 +1,47 @@
 # Administrative UI
 
+## Reemplazar y renombrar archivos
+
+- **Reemplazar archivo (↻):** el archivo nuevo toma **su propio nombre** dentro de
+  la misma carpeta (p. ej. `mods/sodium-1.0.jar` + `sodium-1.1.jar` →
+  `mods/sodium-1.1.jar`). El nombre anterior se retira (si era heredado, queda
+  como retirado en esta rama). Si el nombre coincide, solo cambia el contenido.
+- **Renombrar archivo (✐):** cambia solo el nombre, sin tocar el contenido (si es
+  heredado se descarga del servicio). Es una operación aparte del reemplazo.
+- En ambos casos el nombre no puede chocar con otro archivo ni cambiar el tipo
+  (un mod debe seguir terminando en `.jar`); las reglas por ajuste propias de la
+  rama acompañan a un archivo de configuración renombrado. En el manifiesto es un
+  retiro más un alta, así que no hay cambio de esquema.
+
+## Modloader del perfil (esquema 4)
+
+El paso 1 de «Nuevo perfil global» permite elegir NeoForge, Fabric o Forge. La
+versión del loader se filtra según la de Minecraft (Fabric: juegos soportados por
+Fabric; Forge: versiones de Maven que empiezan por la de Minecraft, incluidas las
+antiguas) y la lista de Minecraft se acota a lo que soporta el loader elegido.
+Fabric y Forge publican `schema_version 4`; NeoForge conserva su esquema. Ver
+`PROFILE_PROTOCOL.md`. Los catálogos de Fabric y Forge son opcionales: si su
+servidor upstream falla, NeoForge sigue disponible y se conserva la última lista.
+
+## Parámetros JVM del perfil (0.2.23)
+
+En **Publicación → Revisar** hay una sección *Parámetros JVM del perfil*. Lista
+las opciones heredadas de la madre, las propias de esta versión y las retiradas.
+Con **＋ Parámetro JVM** (o **Editar**) se abre un editor con id estable, nombre,
+tipo (`bool`, `int` con mínimo/máximo, `enum` con valores), plantilla con
+`{value}`, ayuda para el «?» del launcher, rango de Java, VM y, por plataforma
+(PC y/o Android), activado por defecto, valor por defecto y un bloque
+opcional «Automático» en JSON (`logical_cpus`, `memory_mib`). El editor aplica las
+mismas reglas que el servidor (`jvm-options-rules.js`, probado con
+`docs/jvm-options-vectors.json`) y muestra el argumento resultante.
+
+Una opción heredada se puede **sustituir** (editar crea una versión propia con el
+mismo id), **retirar** o **restaurar**. Si la versión publica o retira parámetros
+JVM, el manifiesto pasa a `schema_version: 3` y el panel avisa de que los
+launchers sin soporte no podrán instalar ni actualizar ese perfil. Si no los
+toca, la versión sigue en el esquema 1 o 2. El contrato completo está en
+[`PROFILE_PROTOCOL.md`](PROFILE_PROTOCOL.md#parámetros-jvm-del-perfil-esquema-3-2026-10-14).
+
 ## Espacio de trabajo del administrador (0.2.21)
 
 La **Biblioteca** organiza los perfiles raíz y sus ramas en tarjetas con icono,
@@ -143,10 +185,12 @@ session in HTTPS mode. `GET /admin/api/session` returns the authenticated
 principal and that session's CSRF token for same-origin browser code. Logout is
 `POST /admin/logout` and also requires the session CSRF token.
 
-The profile form's Minecraft and NeoForge selectors read
+The profile form's Minecraft and modloader selectors read
 `GET /admin/api/game-versions`, which requires the same administrator session.
 Distribution filters Minecraft to official releases from Mojang's version
-manifest and reads NeoForge release versions from NeoForged Maven metadata.
+manifest, reads NeoForge release versions from NeoForged Maven metadata, Fabric
+game/loader versions from meta.fabricmc.net and Forge versions from Minecraft
+Forge's Maven metadata.
 The service caches a complete catalog in memory for six hours and continues to
 serve its last complete copy during a temporary upstream outage. Catalog
 responses are bounded and never accept client-selected upstream URLs.

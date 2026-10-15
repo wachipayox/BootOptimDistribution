@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Wachiland · Distribución</title>
-  <link rel="stylesheet" href="/admin/assets/style.css?refresh=admin-workspace-0221">
-  <link rel="stylesheet" href="/admin/assets/admin-workspace.css?refresh=admin-workspace-0221">
+  <link rel="stylesheet" href="/admin/assets/style.css?refresh=admin-jvm-options-0223">
+  <link rel="stylesheet" href="/admin/assets/admin-workspace.css?refresh=admin-jvm-options-0223">
 </head>
 <body>
   <a class="skip-link" href="#main">Ir al contenido</a>
@@ -142,13 +142,22 @@
                 <small>Versiones oficiales de lanzamiento.</small>
               </label>
               <label class="version-picker">
-                <span>NeoForge</span>
-                <div class="version-combobox" id="neoforge-combobox">
-                  <input id="neoforge-version" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="neoforge-options" autocomplete="off" placeholder="Buscar o seleccionar…" aria-label="Buscar y seleccionar versión de NeoForge" required>
-                  <button class="combobox-toggle" type="button" aria-label="Mostrar versiones de NeoForge" aria-haspopup="listbox" aria-expanded="false" aria-controls="neoforge-options">▾</button>
-                  <div id="neoforge-options" class="combobox-options" role="listbox" aria-label="Versiones de NeoForge" hidden></div>
+                <span>Modloader</span>
+                <select id="loader-kind" aria-label="Modloader del perfil">
+                  <option value="neoforge">NeoForge</option>
+                  <option value="fabric">Fabric</option>
+                  <option value="forge">Forge</option>
+                </select>
+                <small>Fabric y Forge requieren launchers compatibles con el esquema 4.</small>
+              </label>
+              <label class="version-picker">
+                <span id="loader-version-label">Versión de NeoForge</span>
+                <div class="version-combobox" id="loader-combobox">
+                  <input id="loader-version" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="loader-options" autocomplete="off" placeholder="Buscar o seleccionar…" aria-label="Buscar y seleccionar versión del modloader" required>
+                  <button class="combobox-toggle" type="button" aria-label="Mostrar versiones del modloader" aria-haspopup="listbox" aria-expanded="false" aria-controls="loader-options">▾</button>
+                  <div id="loader-options" class="combobox-options" role="listbox" aria-label="Versiones del modloader" hidden></div>
                 </div>
-                <small>Versiones publicadas en NeoForged Maven.</small>
+                <small id="loader-version-hint">Versiones publicadas en NeoForged Maven.</small>
               </label>
               <label class="span-2">
                 <span>Descripción para el launcher <small>(opcional)</small></span>
@@ -370,8 +379,25 @@
     </form>
   </dialog>
 
-  <script src="/admin/assets/app.js?refresh=admin-workspace-0221" defer></script>
-  <script src="/admin/assets/profile-workbench.js?refresh=admin-workspace-0221" defer></script>
-  <script src="/admin/assets/admin-workspace.js?refresh=admin-workspace-0221" defer></script>
+  <dialog id="rename-file-dialog" class="compact-dialog" aria-labelledby="rename-file-title">
+    <form method="dialog" id="rename-file-form">
+      <h2 id="rename-file-title">Renombrar archivo</h2>
+      <p id="rename-file-current" class="microcopy"></p>
+      <label><span>Nuevo nombre</span><input id="rename-file-name" autocomplete="off" required></label>
+      <p class="microcopy">Solo cambia el nombre; el archivo sigue en la misma carpeta. Si es heredado, el original se retira de esta rama.</p>
+      <div class="dialog-actions">
+        <button class="button button-secondary" value="cancel">Cancelar</button>
+        <button id="rename-file-save" class="button button-primary" value="save">Renombrar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/admin/assets/jvm-options-rules.js?refresh=admin-jvm-options-0223" defer></script>
+  <script src="/admin/assets/loaders.js?refresh=admin-loaders-0224" defer></script>
+  <script src="/admin/assets/app.js?refresh=admin-jvm-options-0223" defer></script>
+  <script src="/admin/assets/profile-workbench.js?refresh=admin-jvm-options-0223" defer></script>
+  <script src="/admin/assets/admin-workspace.js?refresh=admin-jvm-options-0223" defer></script>
+  <script src="/admin/assets/jvm-options.js?refresh=admin-jvm-options-0223" defer></script>
+  <script src="/admin/assets/file-rename.js?refresh=admin-rename-0224" defer></script>
 </body>
 </html>
