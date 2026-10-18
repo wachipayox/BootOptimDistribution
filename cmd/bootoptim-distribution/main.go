@@ -10,7 +10,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/wachipayox/BootOptimDistribution/internal/adminauth"
@@ -144,7 +146,7 @@ func main() {
 		ServiceUpdate:  serviceUpdateHandler,
 	}), *adminUIHTTPS)
 	if allowedNetwork != nil {
-		handler = restrictToCIDR(handler, allowedNetwork)
+		handler = restrictToCIDR(handler, allowedNetwork, *adminUIHTTPS)
 	}
 	server := &http.Server{
 		Addr:              *listen,
@@ -389,8 +391,16 @@ func isPrivateNetwork(network *net.IPNet) bool {
 	return first.IsPrivate() && last.IsPrivate()
 }
 
-func restrictToCIDR(next http.Handler, allowed *net.IPNet) http.Handler {
+// restrictToCIDR limits the service to the allowed private network. With publicReads (HTTPS mode),
+// read-only profile requests are served to any client so players outside the LAN can install and
+// update profiles; every write, the admin UI and the admin API stay LAN-only (and still require
+// an admin session).
+func restrictToCIDR(next http.Handler, allowed *net.IPNet, publicReads bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if publicReads && isPublicRead(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		clientHost, _, err := net.SplitHostPort(r.RemoteAddr)
 		clientIP := net.ParseIP(clientHost)
 		if err != nil || clientIP == nil || !allowed.Contains(clientIP) {
@@ -399,6 +409,21 @@ func restrictToCIDR(next http.Handler, allowed *net.IPNet) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isPublicRead reports a GET/HEAD to the read-only profile API (/v1/..., not /v1/admin/...) or /healthz.
+func isPublicRead(r *http.Request) bool {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	raw := r.URL.Path
+	if raw == "" || raw != path.Clean(raw) && raw != path.Clean(raw)+"/" {
+		return false
+	}
+	if raw == "/healthz" {
+		return true
+	}
+	return strings.HasPrefix(raw, "/v1/") && !strings.HasPrefix(raw, "/v1/admin/") && raw != "/v1/admin"
 }
 
 func envOr(key, fallback string) string {
