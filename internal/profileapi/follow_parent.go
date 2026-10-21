@@ -40,7 +40,7 @@ type followResult struct {
 // to grandchildren up to the inheritance cap. Failures never affect the parent
 // publication: the child is skipped and a warning is returned and logged.
 func (a *API) followParent(ctx context.Context, published *revision.VerifiedRevision) []followResult {
-	stored, err := a.store.ListSignedRevisions(ctx, 1000)
+	stored, err := a.latestRevisions(ctx)
 	if err != nil {
 		log.Printf("auto-follow: profile inventory unavailable after publishing %s: %v", published.ProfileID(), err)
 		return []followResult{{ProfileID: "*", ParentProfileID: published.ProfileID(), ParentRevision: published.RevisionID(),
@@ -82,6 +82,11 @@ func (a *API) followParent(ctx context.Context, published *revision.VerifiedRevi
 				continue
 			}
 			visited[childID] = true
+			// A test profile can opt out of following; normal profiles always follow.
+			if !a.followsParent(ctx, childID) {
+				log.Printf("auto-follow: test profile %s is pinned; not re-pinned to %s rev %s", childID, parentID, current.parent.RevisionID())
+				continue
+			}
 			result := followResult{ProfileID: childID, ParentProfileID: parentID, ParentRevision: current.parent.RevisionID()}
 			previousID := child.Revision.ID
 			verified, code, message := a.repinChild(ctx, child, current.parent)

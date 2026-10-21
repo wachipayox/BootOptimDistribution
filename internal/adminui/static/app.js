@@ -340,9 +340,10 @@ function renderOverviewProfiles() {
         if (typeof channel === 'string') return channel;
         const name = valueText(channel && (channel.name || channel.channel), '');
         const currentRevision = channel && (channel.revision_id || (channel.revision && channel.revision.revision_id));
+        if (name === 'stable' && currentRevision) return currentRevision;
         return name && currentRevision ? name + ' → ' + currentRevision : name;
       }).filter(Boolean).join(' · ');
-      if (channelText) card.appendChild(make('p', 'card-meta', 'Canales: ' + channelText));
+      if (channelText) card.appendChild(make('p', 'card-meta', 'Revisión estable: ' + channelText));
     }
 
     list.appendChild(card);
@@ -486,11 +487,11 @@ function renderProfileRevisions(profileIdValue, container, revisions) {
       const promoteStatus = make('p', 'inline-status');
       promoteStatus.setAttribute('role', 'status');
       promoteButton.addEventListener('click', async function () {
-        if (!window.confirm('¿Actualizar este perfil a la versión ' + revisionIdentifier + '? Los launchers que sigan el canal estable recibirán esta versión.')) {
+        if (!window.confirm('¿Actualizar este perfil a la versión ' + revisionIdentifier + '? Será la revisión estable que reciben los launchers.')) {
           return;
         }
         promoteButton.disabled = true;
-        setStatus(promoteStatus, 'Actualizando el canal estable…');
+        setStatus(promoteStatus, 'Actualizando la revisión estable…');
         try {
           await request('/v1/admin/profiles/' + encodeURIComponent(profileIdValue) + '/channels/stable/promote', {
             method: 'POST',
@@ -508,7 +509,7 @@ function renderProfileRevisions(profileIdValue, container, revisions) {
             updatedProfile.channels.push({ name: 'stable', revision_id: revisionIdentifier, sequence: seq });
             renderOverview();
           }
-          setStatus(promoteStatus, 'Canal estable actualizado a ' + revisionIdentifier + '.', 'success');
+          setStatus(promoteStatus, 'Revisión estable actualizada a ' + revisionIdentifier + '.', 'success');
           await loadProfiles();
         } catch (error) {
           setStatus(promoteStatus, describeError(error), 'error');
@@ -2209,7 +2210,7 @@ function appendAutoFollowSummary(results) {
   const skipped = results.filter(function (item) { return item.status !== 'published'; });
   const warn = skipped.length || results.some(function (item) { return item.stable === 'promote_failed'; });
   let text = nodes.publishStatus.textContent;
-  if (done.length) text += ' Perfiles hijos actualizados automáticamente: ' + done.map(function (item) { return item.profile_id + ' (v' + (item.revision ? item.revision.sequence : '?') + (item.stable === 'promoted' ? ', activada' : item.stable === 'stable_held' ? ', canal estable retenido en una versión anterior' : item.stable === 'promote_failed' ? ', no activada: ' + (item.stable_message || 'error') : '') + ')'; }).join(', ') + '.';
+  if (done.length) text += ' Perfiles hijos actualizados automáticamente: ' + done.map(function (item) { return item.profile_id + ' (v' + (item.revision ? item.revision.sequence : '?') + (item.stable === 'promoted' ? ', activada' : item.stable === 'stable_held' ? ', revisión estable retenida en una versión anterior' : item.stable === 'promote_failed' ? ', no activada: ' + (item.stable_message || 'error') : '') + ')'; }).join(', ') + '.';
   if (skipped.length) text += ' Atención, no se pudieron actualizar: ' + skipped.map(function (item) { return item.profile_id + ' (' + (item.message || item.code || 'error') + ')'; }).join('; ') + '. Revísalos a mano.';
   setStatus(nodes.publishStatus, text, warn ? 'warning' : nodes.publishStatus.dataset.tone);
 }

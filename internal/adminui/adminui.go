@@ -107,9 +107,20 @@ func (m SQLiteReadModel) Overview(ctx context.Context) (Overview, error) {
 	if m.Store == nil {
 		return Overview{}, errors.New("revision inventory is not configured")
 	}
-	revisions, err := m.Store.ListRevisions(ctx, 100)
+	// Test profiles have their own list under Servicio; keep them out of the
+	// recent-publication overview so agents' churn cannot hide real releases.
+	listed, err := m.Store.ListRevisions(ctx, 500)
 	if err != nil {
 		return Overview{}, err
+	}
+	revisions := make([]storage.StoredRevision, 0, 100)
+	for _, stored := range listed {
+		if len(revisions) == 100 {
+			break
+		}
+		if !strings.HasPrefix(stored.ProfileID, storage.TestProfilePrefix) {
+			revisions = append(revisions, stored)
+		}
 	}
 	stats, err := m.Store.Stats(ctx)
 	if err != nil {
