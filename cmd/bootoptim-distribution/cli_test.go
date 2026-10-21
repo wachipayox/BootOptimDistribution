@@ -100,7 +100,7 @@ func TestPerfilesPruebaCLI(t *testing.T) {
 	expect := func(want int, token string, args ...string) string {
 		t.Helper()
 		code, out := run(token, args...)
-		if code != want || !strings.Contains(out, "[WBOMBO-TESTPROFILE] ") {
+		if code != want || !strings.HasPrefix(out, "[WBOMBO-TESTPROFILE] ") {
 			t.Fatalf("%v: exit %d, want %d\n%s", args, code, want, out)
 		}
 		return out

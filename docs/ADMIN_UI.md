@@ -55,7 +55,7 @@ cuando se seleccionan en el visor. Una madre retirada no oculta sus hijas.
 - **Resumen**: última versión, versión activa y relaciones de familia.
 - **Archivos y cambios**: comparador integrado en la página, con explorador,
   referencias seleccionables y columnas ajustables.
-- **Versiones**: historial y activación del canal estable, con identificadores
+- **Versiones**: historial y activación de la revisión estable, con identificadores
   técnicos plegados para no distraer del número de versión.
 - **Ajustes**: edición de presentación sin publicación; eliminación en una zona
   secundaria, manteniendo la confirmación escrita y la protección del servidor.
@@ -93,7 +93,7 @@ nivel de herencia ni crea otro perfil.
    resumen, marca la confirmación y pulsa **Publicar actualización**.
 
 La casilla **Activar esta versión para los launchers al publicar** está marcada
-por defecto. La publicación y la activación del canal estable son operaciones
+por defecto. La publicación y la activación de la revisión estable son operaciones
 separadas; si falla la segunda, el panel informa de que la revisión ya se publicó
 y permite activarla desde **Ver revisiones**, sin volver a publicar. Para otra
 actualización, abre nuevamente el flujo desde la lista. Las publicaciones
@@ -242,9 +242,10 @@ key.
 ## Profile distribution API
 
 The protocol authority remains `PROFILE_PROTOCOL.md`. In HTTPS mode, launcher
-clients on the permitted CIDR can read `GET /v1/profiles`, signed revision
-envelopes and published objects. Admin-session and CSRF checks protect object
+any client can read `GET /v1/profiles`, signed revision envelopes and published
+objects in HTTPS mode (0.2.25); everything else stays on the permitted CIDR. Admin-session and CSRF checks protect object
 staging and signed revision publication. The API verifies the signer key,
 manifest digest, object hashes, pinned inheritance and anti-rollback rules
-independently of browser code. Channel promotion/rollback is implemented in the
-API, while the panel workflow for those operations remains a later step.
+independently of browser code. Promotion/rollback of the stable revision
+(`channels/stable` in the API) is implemented in the API; the panel promotes, and
+rollback stays API-only (test profiles get a server-signed rollback, 0.3.0).

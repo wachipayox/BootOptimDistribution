@@ -47,8 +47,21 @@ class CliError(Exception):
         self.profile, self.revision, self.sha = profile, revision, sha
 
 
+_notes = []
+
+
+def note(message):
+    """Progress lines are held back so the stable line is always first."""
+    _notes.append(message)
+
+
 def first_line(code, profile="-", revision="-", sha="-"):
     print("%s %s profile=%s revision=%s manifest_sha256=%s" % (PREFIX, STATUS_WORD[code], profile or "-", revision or "-", sha or "-"))
+    for message in _notes:
+        print(message)
+    del _notes[:]
+    # Flush so the stable line precedes anything written to stderr.
+    sys.stdout.flush()
 
 
 def exit_for(status, error_code):
@@ -295,7 +308,7 @@ def upload(client, path, profile="-"):
     sha, size = file_digest(path)
     status, _, _ = client.request("HEAD", "/v1/test/objects/sha256/" + sha)
     if status == 200:
-        print("objeto %s ya estaba en el servidor (%s)" % (sha[:12], human_size(size)))
+        note("objeto %s ya estaba en el servidor (%s)" % (sha[:12], human_size(size)))
         return sha, size
     if status != 404:
         raise api_error(status, {}, profile)
@@ -303,7 +316,7 @@ def upload(client, path, profile="-"):
         status, payload, _ = client.request("POST", "/v1/test/objects/sha256/" + sha, data=handle, length=size)
     if status != 200:
         raise api_error(status, payload, profile)
-    print("objeto %s subido (%s)" % (sha[:12], human_size(size)))
+    note("objeto %s subido (%s)" % (sha[:12], human_size(size)))
     return sha, size
 
 

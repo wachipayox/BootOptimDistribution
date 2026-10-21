@@ -1222,7 +1222,7 @@ footer {
 @media (max-width: 700px) { .comparison-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: 180px minmax(0, 1fr); } }
 
 /* Servicio → Perfiles de prueba (0.3.0) */
-.test-api-panel { margin-top: 1rem; }
+.test-api-panel { margin-top: 1rem; min-width: 0; max-width: 100%; }
 .test-api-subtitle { margin: 1.2rem 0 .5rem; font-size: 1rem; }
 .test-token-reveal { margin-top: .8rem; padding: .8rem; border: 1px solid var(--warning-border); border-radius: 10px; background: var(--warning-bg); }
 .test-token-row { display: flex; gap: .5rem; flex-wrap: wrap; }
@@ -1234,7 +1234,10 @@ footer {
 .test-quota-fill { height: 100%; background: var(--accent); }
 .test-quota-row.is-warning .test-quota-fill { background: var(--warning-border); }
 .test-quota-row.is-warning .test-quota-value { color: var(--text); font-weight: 600; }
-.test-profile-table-wrap { overflow-x: auto; }
+.test-profile-table-wrap { position: relative; max-width: 100%; overflow-x: auto; }
 .test-profile-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .test-profile-table th, .test-profile-table td { padding: .45rem .5rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
-.test-profile-table th { color: var(--muted); font-weight: 600; }
+.test-profile-table th { color: var(--muted); font-weight: 600; white-space: nowrap; overflow-wrap: normal; }
+.test-profile-table td:nth-child(2), .test-profile-table td:nth-child(4), .test-profile-table td:nth-child(6), .test-profile-table td:last-child { white-space: nowrap; overflow-wrap: normal; }
+.test-profile-table td:first-child { min-width: 12rem; }
+.test-profile-table td:nth-child(3), .test-profile-table td:nth-child(5) { min-width: 10rem; font-size: .82rem; }

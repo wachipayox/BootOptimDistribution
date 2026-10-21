@@ -179,7 +179,7 @@ proxy para Distribution.
 
 La primera versión permite publicar revisiones globales firmadas, consultar su
 historial y servir objetos publicados. El panel permite promover una revisión
-al canal `stable`; la interfaz de rollback y la integración de reparación
+a revisión estable (`stable` en la API); la interfaz de rollback y la integración de reparación
 siguen pendientes.
 El servicio nunca almacena claves privadas de firma de releases, credenciales
 Microsoft/Minecraft ni dependencias de identidad externas.
