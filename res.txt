@@ -1,0 +1,247 @@
+res.txt — agente 268 · Perfiles de prueba en BootOptimDistribution (0.3.0)
+Fecha: 2026-10-22
+
+RESULTADO
+- PR: https://github.com/wachipayox/BootOptimDistribution/pull/86
+  (claude/test-profiles-20261022 → agent/integration-current)
+- SHA de la cabeza del PR: 40243d93d9594016a7be761cf8c2e909efad8753
+  Commits: 5004796 (código, CLI, panel, tests) y 40243d9 (docs, orden de salida del CLI, CSS móvil).
+- Base: agent/integration-current dd5205b, que contiene main 61e046c (0.2.25). VERSION = 0.3.0.
+- CI de GitHub: al escribir esto, los checks «storage» y «test» estaban en cola (pending). Que estén
+  verdes es parte del criterio de aceptación: hay que mirarlo en el PR antes de fusionar.
+- Localmente (Linux/WSL, Go 1.26, CGO_ENABLED=0): go test ./... verde, gofmt -l vacío, go vet limpio,
+  node --test del panel verde. En Windows, los tests de storage ya fallaban antes de este cambio
+  (fsync de directorios); el servicio es solo Linux.
+- No se ha tocado main ni se ha desplegado. Nada de Pandora ni de Android.
+
+QUÉ HACE
+- /v1/test/: crear, cambios (add/remove mod, set/remove config, config_settings, jvm_options, notas),
+  repin, follow, presentación, revisión estable (promote/rollback), borrar (lápida), subir al CAS
+  (HEAD y POST), lista, historial y cuotas.
+- Marca: prefijo profile_test- y fila en test_profiles. Cualquier escritura sobre otro id → 403 not_a_test_profile.
+- Un token compartido, siempre obligatorio, generado y rotado en Servicio. Se guarda solo su SHA-256
+  y se compara en tiempo constante. Sin token generado → 503; si falta, es incorrecto o anterior a
+  una rotación → 401; tras 20 fallos por IP en 10 min → 429.
+- /v1/test/ es accesible fuera de la LAN en modo HTTPS. /v1/admin/ sigue solo en la LAN, con sesión y CSRF.
+- Auto-follow: un perfil de prueba con follow_parent=false no se re-fija. Los normales, sin cambios.
+- GET /v1/profiles oculta los de prueba salvo ?include_test=1.
+- Cuotas: 200 perfiles, 2 GiB por objeto, 100 GiB (limitados por disco libre − 10 GiB). Indicador
+  en el panel y en GET /v1/test/usage, con aviso desde el 80 %.
+- CLI tools/perfiles_prueba.py (stdlib, Windows y Linux) con línea estable [WBOMBO-TESTPROFILE] y
+  salidas 0/2/3/4/5/6 (+1 error genérico).
+- Panel → Servicio: token (generar/rotar), barras de cuotas y lista de perfiles de prueba con botón de borrar.
+- Textos: «canal» pasa a «revisión estable» en el panel y los docs. El protocolo no cambia.
+
+DECISIONES (explicadas en el PR)
+1. Corregido un fallo latente: el auto-follow y el catálogo limitaban por número de REVISIONES y
+   ordenaban por profile_id. profile_test-… va antes que profile_wachiland-…, así que unas centenas
+   de revisiones de prueba habrían dejado al Beta fuera del auto-follow y del catálogo, sin error.
+   Ahora se usa la última revisión de cada perfil vivo (ProfileSummaries), sin límite de filas.
+2. La API de admin no escribe perfiles de prueba (403 test_profile_admin_write): solo puede borrarlos.
+   Tampoco puede derivar un perfil normal de uno de prueba (403 test_parent_not_allowed).
+3. Un hijo de prueba copia los permissions del padre. En los cambios se aplican también
+   permissions.mods.add y remove del padre directo (403 parent_permission_denied).
+4. El rollback de la revisión estable de los perfiles de prueba lo firma el servidor.
+5. Recogida de objetos: DOCUMENTADA, NO implementada. Las revisiones son inmutables y el CAS v1 no
+   deja borrar objetos publicados. Borrar un perfil libera la cuota, no el disco; lo subido y nunca
+   publicado deja de contar a las 24 h. El margen de disco es el límite real. El criterio de
+   reapertura está en PROFILE_PROTOCOL.md.
+6. Rutas de apoyo para el CLI: GET /v1/test/profiles/{id}/revisions y HEAD /v1/test/objects/sha256/{d}.
+7. X-Wbombo-Agent es opcional (por defecto «sin-etiqueta»). El slug admite hasta 59 caracteres.
+   Si la cadena rechaza el contenido → 422 inheritance_rule_violation.
+
+PASOS PARA EL USUARIO AL DESPLEGAR
+1. Fusionar a main cuando se decida y actualizar desde Servicio → Actualización del servicio.
+   Las tablas nuevas se crean solas.
+2. Servicio → Perfiles de prueba → Generar token. Copiarlo en ese momento: no se vuelve a mostrar.
+3. Guardar WBOMBO_DIST_TOKEN (el token) y WBOMBO_DIST_URL (la URL HTTPS pública que ya usan las
+   lecturas) en wbombo (privado) o como secretos de los entornos de los agentes: Claude Code/Codex y,
+   si el CI lo usa, GitHub Actions. Nunca en un repo público ni en un prompt. Con el certificado de
+   Let's Encrypt no hace falta WBOMBO_DIST_CA_FILE.
+4. Comprobar: python tools/perfiles_prueba.py usage (salida 0) y que /v1/meta/version lista test-profiles-v1.
+5. Después, actualizar PRUEBAS.md y PACK.md de wbombo (lo hace el agente principal): la sección
+   «Perfiles de prueba propios» ya describe este flujo.
+
+OBSERVACIÓN (fuera del alcance, sin tocar)
+- docs/GUIA_OPERADOR_ES.md y docs/ADMIN_UI_LAN.md de este repo PÚBLICO ya contenían, antes de este
+  cambio, el nombre de host, la IP LAN y el puerto del servidor de casa. Convendría moverlos a wbombo.
+
+SALIDA DE LOS TESTS (commit 40243d9)
+$ gofmt -l .   # vacío
+$ go test -count=1 ./...
+ok  	github.com/wachipayox/BootOptimDistribution/cmd/bootoptim-distribution	2.081s
+ok  	github.com/wachipayox/BootOptimDistribution/cmd/bootoptim-release-signer	0.009s
+ok  	github.com/wachipayox/BootOptimDistribution/internal/adminauth	1.395s
+ok  	github.com/wachipayox/BootOptimDistribution/internal/adminui	0.013s
+ok  	github.com/wachipayox/BootOptimDistribution/internal/gameversions	0.011s
+ok  	github.com/wachipayox/BootOptimDistribution/internal/profileapi	0.450s
+ok  	github.com/wachipayox/BootOptimDistribution/internal/releasesigning	0.005s
+ok  	github.com/wachipayox/BootOptimDistribution/internal/revision	0.022s
+ok  	github.com/wachipayox/BootOptimDistribution/internal/serviceupdate	0.003s
+ok  	github.com/wachipayox/BootOptimDistribution/internal/storage	0.021s
+ok  	github.com/wachipayox/BootOptimDistribution/internal/testauth	0.002s
+
+RECORRIDO COMPLETO (CLI en Windows fuera de la LAN contra el binario 0.3.0/40243d9 en HTTPS)
+== 1. Admin (LAN): perfiles normales locales y token ==
+admin: publicado profile_local-root rev_localroot000000001 (seq 1) · auto-follow: ninguno
+admin: publicado profile_local-beta rev_localbeta000000001 (seq 1) · auto-follow: ninguno
+admin: publicar profile_test-desde-admin → HTTP 403 test_profile_admin_write
+$ python tools/perfiles_prueba.py create sin-token --parent profile_local-beta   # antes de generar el token
+[WBOMBO-TESTPROFILE] AUTH profile=profile_test-sin-token revision=- manifest_sha256=-
+error: HTTP 503 test_token_not_configured: the administrator has not generated the test API token yet
+(salida 4)
+
+admin: token generado (guardado en archivo 0600, no se imprime)
+
+== 2. CLI (Windows, fuera de la LAN) ==
+$ python tools/perfiles_prueba.py list
+[WBOMBO-TESTPROFILE] OK profile=- revision=- manifest_sha256=-
+profile_local-beta  rev=rev_localbeta000000001 seq=1 estable=-  profile_local-beta
+profile_local-root  rev=rev_localroot000000001 seq=1 estable=-  profile_local-root
+(salida 0)
+
+$ python tools/perfiles_prueba.py create agente268-recorrido --parent profile_local-beta --name Recorrido agente 268
+[WBOMBO-TESTPROFILE] OK profile=profile_test-agente268-recorrido revision=rev_be1b0baea779cf120707dcede8e64896 manifest_sha256=827d3528dd601aa2354cd7856c2d5c05c808d59e09781551a91bbbcc655061cb
+secuencia 1 · sigue al padre: sí · estable: promoted
+(salida 0)
+
+$ python tools/perfiles_prueba.py add-mod profile_test-agente268-recorrido <tmp>/mod-prueba-268.jar --notes añadir mod de prueba
+[WBOMBO-TESTPROFILE] OK profile=profile_test-agente268-recorrido revision=rev_d3bbf2edf565ac5546b697a9d67aa6a6 manifest_sha256=07e211e6461ff431662b5ff76540f36dc8e3763b90298149f6359321b44807df
+objeto db51f163c60e subido (38 B)
+secuencia 2 · sigue al padre: sí · estable: promoted
+(salida 0)
+
+$ python tools/perfiles_prueba.py add-mod profile_test-agente268-recorrido <tmp>/mod-prueba-268.jar --notes mismo objeto: no se vuelve a subir
+[WBOMBO-TESTPROFILE] OK profile=profile_test-agente268-recorrido revision=rev_4d6e076f030bab9fa574047764648672 manifest_sha256=fde79aed4ba03b895549c182bf9f6a3bf7e794b7278460ef0239a8bea0e2c4b1
+objeto db51f163c60e ya estaba en el servidor (38 B)
+secuencia 3 · sigue al padre: sí · estable: promoted
+(salida 0)
+
+$ python tools/perfiles_prueba.py show profile_test-agente268-recorrido --effective
+[WBOMBO-TESTPROFILE] OK profile=profile_test-agente268-recorrido revision=rev_4d6e076f030bab9fa574047764648672 manifest_sha256=fde79aed4ba03b895549c182bf9f6a3bf7e794b7278460ef0239a8bea0e2c4b1
+nombre: Recorrido agente 268
+secuencia: 3 · creada: 2026-10-21T23:48:06Z
+notas: mismo objeto: no se vuelve a subir
+juego: Minecraft 1.21.1 · neoforge 21.1.209
+padre: profile_local-beta rev rev_localbeta000000001
+  + mod mods/mod-prueba-268.jar (db51f163c60e, 38 B)
+efectivo: 3 archivos, 3 mods
+  mods/local-beta.jar
+  mods/local-root.jar
+  mods/mod-prueba-268.jar
+(salida 0)
+
+== 3. Admin publica la raíz: el Beta local sigue y el hijo de prueba (follow on) también ==
+admin: publicado profile_local-root rev_localroot000000002 (seq 2) · auto-follow: profile_local-beta:published, profile_test-agente268-recorrido:published
+$ python tools/perfiles_prueba.py show profile_test-agente268-recorrido
+[WBOMBO-TESTPROFILE] OK profile=profile_test-agente268-recorrido revision=rev_e07c5a13ea5247dff2fd792e3c15b013 manifest_sha256=ec54fb262c466f192191e01de8cced10910d4475cf32f8387a53054c3e2457a9
+nombre: Recorrido agente 268
+secuencia: 4 · creada: 2026-10-21T23:48:09Z
+notas: auto: sigue a profile_local-beta rev rev_2c3682a5837b168e816b934a3af0db30
+juego: Minecraft 1.21.1 · neoforge 21.1.209
+padre: profile_local-beta rev rev_2c3682a5837b168e816b934a3af0db30
+  + mod mods/mod-prueba-268.jar (db51f163c60e, 38 B)
+(salida 0)
+
+== 4. Repin a la revisión vieja del Beta local y vuelta a la última ==
+$ python tools/perfiles_prueba.py repin profile_test-agente268-recorrido --parent-rev rev_localbeta000000001
+[WBOMBO-TESTPROFILE] OK profile=profile_test-agente268-recorrido revision=rev_437ee240dfc97c020b212fa0be17bbb4 manifest_sha256=89dde8798651a072927f3e82ad6770973762cdb9861b82eee13107aa37737a77
+secuencia 5 · sigue al padre: sí · estable: promoted
+(salida 0)
+
+$ python tools/perfiles_prueba.py repin profile_test-agente268-recorrido --parent-rev latest
+[WBOMBO-TESTPROFILE] OK profile=profile_test-agente268-recorrido revision=rev_68ce98476afe6808f47faeaf8767292e manifest_sha256=2382585c3ee322199c22a8916d98133b029ec2cc05d00bec4cf5d23989046f71
+secuencia 6 · sigue al padre: sí · estable: promoted
+(salida 0)
+
+== 5. follow off y nueva publicación del padre: el hijo de prueba no se mueve ==
+$ python tools/perfiles_prueba.py follow profile_test-agente268-recorrido off
+[WBOMBO-TESTPROFILE] OK profile=profile_test-agente268-recorrido revision=- manifest_sha256=-
+sigue al padre: no
+(salida 0)
+
+antes:   [WBOMBO-TESTPROFILE] OK profile=profile_test-agente268-recorrido revision=rev_68ce98476afe6808f47faeaf8767292e manifest_sha256=2382585c3ee322199c22a8916d98133b029ec2cc05d00bec4cf5d23989046f71
+admin: publicado profile_local-root rev_localroot000000003 (seq 3) · auto-follow: profile_local-beta:published
+después: [WBOMBO-TESTPROFILE] OK profile=profile_test-agente268-recorrido revision=rev_68ce98476afe6808f47faeaf8767292e manifest_sha256=2382585c3ee322199c22a8916d98133b029ec2cc05d00bec4cf5d23989046f71
+=> el perfil de prueba fijado NO se movió
+$ python tools/perfiles_prueba.py show profile_test-agente268-recorrido
+[WBOMBO-TESTPROFILE] OK profile=profile_test-agente268-recorrido revision=rev_68ce98476afe6808f47faeaf8767292e manifest_sha256=2382585c3ee322199c22a8916d98133b029ec2cc05d00bec4cf5d23989046f71
+nombre: Recorrido agente 268
+secuencia: 6 · creada: 2026-10-21T23:48:11Z
+notas: test: repin a profile_local-beta rev rev_2c3682a5837b168e816b934a3af0db30
+juego: Minecraft 1.21.1 · neoforge 21.1.209
+padre: profile_local-beta rev rev_2c3682a5837b168e816b934a3af0db30
+  + mod mods/mod-prueba-268.jar (db51f163c60e, 38 B)
+(salida 0)
+
+$ python tools/perfiles_prueba.py list --include-test
+[WBOMBO-TESTPROFILE] OK profile=- revision=- manifest_sha256=-
+profile_local-beta  rev=rev_fa50f970737ec06d27bb6f25966fe1fe seq=3 estable=-  profile_local-beta
+profile_local-root  rev=rev_localroot000000003 seq=3 estable=-  profile_local-root
+profile_test-agente268-recorrido  rev=rev_68ce98476afe6808f47faeaf8767292e seq=6 estable=rev_68ce98476afe6808f47faeaf8767292e  Recorrido agente 268  [dueño=agente-268 sigue_padre=no]
+(salida 0)
+
+$ python tools/perfiles_prueba.py usage
+[WBOMBO-TESTPROFILE] OK profile=- revision=- manifest_sha256=-
+perfiles de prueba [..............................] 1 / 200 (0 %)
+bytes de prueba    [..............................] 38 B / 100.0 GiB (0 %)
+máximo efectivo    100.0 GiB (cuota limitada por disco libre − margen)
+objeto máximo      2.0 GiB
+disco              [##............................] 951.5 GiB libres de 1006.9 GiB (6 % usado, margen 10.0 GiB)
+(salida 0)
+
+== 6. Intentos sobre perfiles normales (rechazados) ==
+$ python tools/perfiles_prueba.py remove-mod profile_local-beta local-beta.jar
+[WBOMBO-TESTPROFILE] REJECTED profile=profile_local-beta revision=- manifest_sha256=-
+error: profile_local-beta no es un perfil de prueba: la terminal solo escribe profile_test-…
+(salida 3)
+
+$ python tools/perfiles_prueba.py follow profile_local-root off
+[WBOMBO-TESTPROFILE] REJECTED profile=profile_local-root revision=- manifest_sha256=-
+error: profile_local-root no es un perfil de prueba: la terminal solo escribe profile_test-…
+(salida 3)
+
+$ (petición directa, sin el CLI) POST /v1/test/profiles/profile_local-beta/changes
+HTTP 403 {"schema_version":1,"protocol_version":1,"error":{"code":"not_a_test_profile","message":"only test profiles (profile_test-…) registered by the test API can be written here"}}
+
+$ WBOMBO_DIST_TOKEN=<incorrecto> python tools/perfiles_prueba.py usage
+[WBOMBO-TESTPROFILE] AUTH profile=- revision=- manifest_sha256=-
+error: HTTP 401 invalid_token: missing or invalid test API token
+(salida 4)
+
+== 7. Diff y borrado ==
+$ python tools/perfiles_prueba.py diff profile_test-agente268-recorrido rev_be1b0baea779cf120707dcede8e64896 rev_68ce98476afe6808f47faeaf8767292e
+[WBOMBO-TESTPROFILE] OK profile=profile_test-agente268-recorrido revision=rev_68ce98476afe6808f47faeaf8767292e manifest_sha256=2382585c3ee322199c22a8916d98133b029ec2cc05d00bec4cf5d23989046f71
+~ mod mods/local-root.jar (82d487452f0d → 9b11df5a6da0)
++ mod mods/mod-prueba-268.jar
+2 diferencias de archivos entre rev_be1b0baea779cf120707dcede8e64896 y rev_68ce98476afe6808f47faeaf8767292e
+(salida 0)
+
+$ python tools/perfiles_prueba.py delete profile_test-agente268-recorrido --confirm profile_test-agente268-recorrido
+[WBOMBO-TESTPROFILE] OK profile=profile_test-agente268-recorrido revision=- manifest_sha256=-
+borrado: lápida creada; el id queda quemado y sus revisiones siguen legibles por id
+(salida 0)
+
+$ python tools/perfiles_prueba.py repin profile_test-agente268-recorrido
+[WBOMBO-TESTPROFILE] NOT_FOUND profile=profile_test-agente268-recorrido revision=- manifest_sha256=-
+error: HTTP 404 profile_not_found: test profile was deleted; its id stays burned
+(salida 5)
+
+$ python tools/perfiles_prueba.py create agente268-recorrido --parent profile_local-beta
+[WBOMBO-TESTPROFILE] CONFLICT profile=profile_test-agente268-recorrido revision=- manifest_sha256=-
+error: HTTP 409 profile_id_taken: this test profile id exists or was used before (deleted ids stay burned)
+(salida 6)
+
+$ python tools/perfiles_prueba.py list --include-test
+[WBOMBO-TESTPROFILE] OK profile=- revision=- manifest_sha256=-
+profile_local-beta  rev=rev_fa50f970737ec06d27bb6f25966fe1fe seq=3 estable=-  profile_local-beta
+profile_local-root  rev=rev_localroot000000003 seq=3 estable=-  profile_local-root
+(salida 0)
+
+== 8. Perfiles normales tras el recorrido ==
+$ python tools/perfiles_prueba.py list
+[WBOMBO-TESTPROFILE] OK profile=- revision=- manifest_sha256=-
+profile_local-beta  rev=rev_fa50f970737ec06d27bb6f25966fe1fe seq=3 estable=-  profile_local-beta
+profile_local-root  rev=rev_localroot000000003 seq=3 estable=-  profile_local-root
+(salida 0)
+
