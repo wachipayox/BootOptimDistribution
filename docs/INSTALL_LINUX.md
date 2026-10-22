@@ -23,19 +23,19 @@ administrador configure explícitamente uno de los modos LAN.
 ### Ruta personalizada
 
 La instalación puede vivir fuera de `/opt`. Por ejemplo, para usar
-`/home/wachi/launcher_manager`:
+`/home/<usuario>/launcher_manager`:
 
 ```bash
-sudo git clone https://github.com/wachipayox/BootOptimDistribution.git /home/wachi/launcher_manager
-sudo /home/wachi/launcher_manager/scripts/install.sh
+sudo git clone https://github.com/wachipayox/BootOptimDistribution.git /home/<usuario>/launcher_manager
+sudo /home/<usuario>/launcher_manager/scripts/install.sh
 ```
 
 Los scripts detectan automáticamente su propia carpeta, así que después de
 clonar en esa ruta no hace falta conservar ni repetir una variable de entorno:
 
 ```bash
-sudo /home/wachi/launcher_manager/scripts/update.sh --check
-sudo /home/wachi/launcher_manager/scripts/update.sh --apply
+sudo /home/<usuario>/launcher_manager/scripts/update.sh --check
+sudo /home/<usuario>/launcher_manager/scripts/update.sh --apply
 ```
 
 ## Prueba manual
@@ -65,7 +65,7 @@ unidad `bootoptim-distribution.service` instala automáticamente el ejecutor
 limitado. Si se necesita repetir esa configuración:
 
 ```bash
-sudo /home/wachi/launcher_manager/scripts/install-admin-updater.sh
+sudo /home/<usuario>/launcher_manager/scripts/install-admin-updater.sh
 ```
 
 El instalador crea una unidad root oneshot y un socket Unix que sólo puede
