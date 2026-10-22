@@ -285,7 +285,7 @@
         <div>
           <p class="eyebrow">ESTADO</p>
           <h2 id="service-title">Servicio</h2>
-          <p class="lede">Estado de conexión y almacenamiento.</p>
+          <p class="lede">Estado de conexión, almacenamiento y perfiles de prueba.</p>
         </div>
       </div>
 
@@ -320,6 +320,33 @@
           <button id="apply-service-update" class="button button-primary" type="button" hidden>Actualizar y reiniciar</button>
         </div>
         <p id="service-update-status" class="service-update-status" role="status" aria-live="polite">Aún no se ha comprobado si hay una versión nueva.</p>
+      </section>
+
+      <section class="panel test-api-panel" aria-labelledby="test-api-title">
+        <h3 id="test-api-title">Perfiles de prueba</h3>
+        <p class="microcopy">Los agentes crean y cambian perfiles <code>profile_test-…</code> desde la terminal con un token compartido. Los perfiles normales no se pueden modificar por esa vía. Guarda el token y la URL fuera de los repositorios públicos.</p>
+        <dl class="detail-list">
+          <div><dt>Token de la API de prueba</dt><dd id="test-token-state">—</dd></div>
+        </dl>
+        <div class="service-update-actions">
+          <button id="rotate-test-token" class="button button-secondary" type="button">Generar token</button>
+          <button id="refresh-test-api" class="button button-secondary" type="button">Actualizar</button>
+        </div>
+        <div id="test-token-reveal" class="test-token-reveal" hidden>
+          <p class="microcopy"><strong>Cópialo ahora: no se volverá a mostrar.</strong> El token anterior ya no funciona.</p>
+          <div class="test-token-row"><input id="test-token-value" readonly autocomplete="off" spellcheck="false" aria-label="Token nuevo"><button id="copy-test-token" class="button button-secondary" type="button">Copiar</button></div>
+        </div>
+        <p id="test-api-status" class="service-update-status" role="status" aria-live="polite"></p>
+        <h4 class="test-api-subtitle">Cuotas</h4>
+        <div id="test-quota-bars" class="test-quota-bars"></div>
+        <h4 class="test-api-subtitle">Perfiles de prueba vivos</h4>
+        <div class="test-profile-table-wrap">
+          <table class="test-profile-table">
+            <thead><tr><th scope="col">Perfil</th><th scope="col">Dueño</th><th scope="col">Padre</th><th scope="col">Sigue</th><th scope="col">Revisión</th><th scope="col">Tamaño propio</th><th scope="col"><span class="visually-hidden">Acciones</span></th></tr></thead>
+            <tbody id="test-profile-rows"></tbody>
+          </table>
+        </div>
+        <p id="test-profile-empty" class="microcopy" hidden>No hay perfiles de prueba.</p>
       </section>
 
     </section>
@@ -399,5 +426,6 @@
   <script src="/admin/assets/admin-workspace.js?refresh=admin-jvm-options-0223" defer></script>
   <script src="/admin/assets/jvm-options.js?refresh=admin-jvm-options-0223" defer></script>
   <script src="/admin/assets/file-rename.js?refresh=admin-rename-0224" defer></script>
+  <script src="/admin/assets/test-profiles.js?refresh=admin-test-profiles-0300" defer></script>
 </body>
 </html>

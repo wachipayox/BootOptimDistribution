@@ -13,7 +13,7 @@ Guía práctica para administrar el servicio privado de distribución de perfile
 1. [Qué hace el servicio](#qué-hace-el-servicio)
 2. [Rutas y accesos actuales](#rutas-y-accesos-actuales)
 3. [Uso del panel y publicación](#uso-del-panel-y-publicación)
-4. [Las tres credenciales que no hay que confundir](#las-tres-credenciales-que-no-hay-que-confundir)
+4. [Las credenciales que no hay que confundir](#las-credenciales-que-no-hay-que-confundir)
 5. [Copia, recuperación y rotación de la clave de firma](#copia-recuperación-y-rotación-de-la-clave-de-firma)
 6. [Administrar el servicio Linux](#administrar-el-servicio-linux)
 7. [Cambiar la configuración de systemd](#cambiar-la-configuración-de-systemd)
@@ -90,7 +90,7 @@ curl -fsS https://welite.ddns.net:8444/v1/profiles
 
 `/v1/meta/version` muestra versión, commit y capacidades. `/v1/profiles` puede devolver una lista vacía si aún no hay revisiones publicadas; eso no significa que el proceso esté roto.
 
-## Las tres credenciales que no hay que confundir
+## Las credenciales que no hay que confundir
 
 ### 1. Clave privada de firma de perfiles
 
@@ -105,6 +105,12 @@ Está en `/etc/bootoptim-distribution/admin-password.hash`. Es un hash PBKDF2, n
 ### 3. Clave privada TLS del sitio
 
 Es la clave de Certbot `privkey.pem` para HTTPS. No firma perfiles y no es la contraseña del panel. systemd la carga con `LoadCredential=` al iniciar el proceso. No alteres los permisos de `/etc/letsencrypt` para intentar conceder acceso directo a `wachi`.
+
+### 4. Token de la API de perfiles de prueba (0.3.0)
+
+Lo usan los agentes para crear y cambiar perfiles `profile_test-…` desde la terminal (`tools/perfiles_prueba.py`). No firma nada y no abre el panel: solo permite escribir perfiles de prueba; los normales siguen protegidos. Se genera en **Servicio → Perfiles de prueba → Generar token** y se muestra una sola vez; el servidor guarda solo su SHA-256 en la base de datos (va con la copia normal). **Rotar token** lo invalida al momento. Guárdalo, junto con la URL HTTPS, en los secretos de los entornos de los agentes (no en un repo ni en un prompt). Mientras no exista, `/v1/test/` responde 503.
+
+Las cuotas de la API de prueba se ven en la misma sección y se cambian con `--test-max-profiles`, `--test-max-object-bytes`, `--test-max-bytes` y `--test-disk-margin-bytes` en `ExecStart`. Borrar perfiles de prueba libera la cuota, no el disco (las revisiones son inmutables); ver «Perfiles de prueba» en `docs/PROFILE_PROTOCOL.md`.
 
 ## Copia, recuperación y rotación de la clave de firma
 

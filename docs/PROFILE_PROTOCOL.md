@@ -7,6 +7,12 @@ integration plan. The authenticated profile API and browser publication panel
 are present on `agent/integration-current`; `main` remains the deployable
 release branch.
 
+**Terminología (0.3.0).** Lo que el protocolo llama *channel* (rutas
+`/channels/{name}/…`, campos JSON `channels`, tablas SQL y el valor `stable`)
+se llama en el panel, los mensajes y estos docs **revisión estable**. Las rutas,
+los campos y el valor `stable` no cambian. Así no se confunde con el *canal del
+launcher* (`player`/`developer`), que es otra cosa.
+
 ## Authorities and identifiers
 
 - Distribution is authoritative for global profile IDs, immutable revision
@@ -57,6 +63,18 @@ and inheritance permissions; the client validates and merges the text format.
 
 ## HTTP shape
 
+Access policy in HTTPS mode (`--admin-ui-https`, since 0.2.25 for reads and
+0.3.0 for the test API):
+
+| Routes | Who can reach them | Authentication |
+|---|---|---|
+| `GET`/`HEAD` `/v1/...` except `/v1/admin/` and `/v1/test/`, `/healthz` | any address (players outside the LAN) | none; installation trusts the signed revision |
+| `/v1/test/...` (any method) | any address | shared test token (`Authorization: Bearer`), see «Perfiles de prueba» |
+| `/v1/admin/...`, `/admin/...` | only `--admin-ui-allow-cidr` (LAN) | admin session cookie + CSRF |
+
+In the legacy modes every route stays on the LAN CIDR. The default listener is
+still loopback.
+
 All state-changing admin routes require authenticated administrator session and
 CSRF protection over Distribution-native HTTPS. As explicitly requested on
 2026-10-01, signing is automatic in the service's persistent private data
@@ -64,14 +82,17 @@ folder. Browser and launcher never receive the private key. This supersedes
 the earlier workstation-only signing policy: publication authority now follows
 admin authentication and verified HTTPS server identity.
 
-Public/client read routes:
+Public/client read routes (reachable outside the LAN in HTTPS mode):
 
 ```text
 GET /v1/signing-keys  # schema_version: 1, keys: {id: base64url public key}
-GET /v1/profiles
-GET /v1/profiles/{profile_id}/revisions/{revision_id}
+GET /v1/profiles      # test profiles hidden unless ?include_test=1
+GET /v1/profiles/{profile_id}/revisions/{revision_id}   # any profile, test or not
 GET /v1/objects/sha256/{sha256}
 ```
+
+`GET /v1/profiles` lists every live profile (since 0.3.0 it no longer truncates
+by revision count; `truncated` refers to profiles).
 
 Implemented administrator routes:
 
@@ -81,15 +102,24 @@ GET  /v1/admin/profiles/{profile_id}/revisions
 POST /v1/admin/objects/sha256/{sha256}                 # authenticated staged upload
 POST /v1/admin/publications                           # validated request, server signs
 POST /v1/admin/revisions                              # signed immutable envelope
-POST /v1/admin/profiles/{profile_id}/channels/{name}/promote
+POST /v1/admin/profiles/{profile_id}/channels/{name}/promote   # revisión estable
 POST /v1/admin/profiles/{profile_id}/channels/{name}/rollback
+PUT  /v1/admin/profiles/{profile_id}/presentation
+DELETE /v1/admin/profiles/{profile_id}
+GET  /v1/admin/test-api                               # token state, quotas, test profiles
+POST /v1/admin/test-api/token                         # generate/rotate the shared test token
 ```
+
+The admin API rejects with `403 test_profile_admin_write` any publication,
+presentation or stable-revision change on a `profile_test-…` id (it may only
+delete them), and with `403 test_parent_not_allowed` a normal profile whose
+`base` is a test profile.
 
 Profile creation is the publication of a valid root revision whose profile ID
 does not yet exist. Child publication pins its parent in the manifest. Uploads
 that have not yet been referenced are not visible as a profile/revision and
 must be eligible for later orphan collection. Promotion/rollback changes only
-channel state; it never mutates the published revision.
+the stable-revision state; it never mutates the published revision.
 
 Presentation-only read-model routes:
 
@@ -141,7 +171,13 @@ longer fit) and `message`; the admin panel shows it as a warning and the log
 gets an `auto-follow: WARN` line. The parent publication never fails because
 of its children.
 
-Channels: if the child's `stable` channel pointed at the child's previous
+Only exception (0.3.0): a **test profile** registered with `follow_parent:
+false` is skipped (logged, not listed in `auto_follow`), and so are its own
+descendants through it. Normal profiles still always follow. The inventory used
+here is the latest revision of every live profile, with no row limit, so test
+revisions can never push a normal child out of it.
+
+Stable revision: if the child's stable revision (`stable`) pointed at the child's previous
 latest revision (it was tracking), it is promoted to the automatic revision
 through the same forward-promotion checks as a manual promote
 (`stable: "promoted"`). If it pointed at an older revision (deliberately held
@@ -178,7 +214,7 @@ presentation; installation authority remains the signed revision.
 Presentation edits publish a new monotonically increasing revision of the same
 profile, retaining its exact game identity, base pin, files and rules. They use
 the same automatic signing workflow as modpack changes. Editing never rewrites an
-existing immutable revision. Channel promotion remains an explicit separate
+existing immutable revision. Promoting the stable revision remains an explicit separate
 operation; a launcher following `stable` sees the edit after promotion.
 
 ## Mutable profile presentation (2026-10-01)
@@ -187,7 +223,7 @@ operation; a launcher following `stable` sees the edit after promotion.
 admin session, LAN policy and CSRF protection. Body: `{name, description, icon}`;
 icon is null or a verified PNG CAS reference (2 MiB, at most 1024x1024).
 Name/description/icon are mutable catalog presentation, not game revisions.
-No sequence, channel, parent pin or signed game manifest is changed, and no
+No sequence, stable revision, parent pin or signed game manifest is changed, and no
 release private key is required. `/v1/profiles` includes a `presentation` override.
 Older profiles fall back to signed metadata until first edit; later game updates
 do not replace the override. The launcher trusts HTTPS for cosmetic presentation,
@@ -218,7 +254,7 @@ Deletion is a durable catalog tombstone (`deleted_profiles`), not deletion of
 immutable signed history or shared CAS files. The profile disappears from both
 admin/client catalog and recent publication lists. Existing exact revision pins
 remain readable so local installations and derived profiles keep their valid
-ancestry. Deleted identifiers cannot receive publications or channel changes
+ancestry. Deleted identifiers cannot receive publications or stable-revision changes
 and cannot be reused for a different profile. It is idempotent. No filesystem
 or player-world deletion is performed.
 
@@ -375,3 +411,131 @@ Fabric y Forge además de NeoForge:
 - Contrato para los launchers: aceptar el 4; si no pueden instalar el `kind`,
   rechazar la revisión con un mensaje claro (no instalar otro loader). Un
   launcher que no conozca el esquema 4 rechaza la revisión como hoy.
+
+## Perfiles de prueba (0.3.0)
+
+Decisión del usuario (2026-10-21): los agentes crean, cambian, publican,
+consultan y borran perfiles **de prueba** desde la terminal; los perfiles
+normales no se pueden modificar por esa vía. Uso previsto: hijos de prueba del
+Beta (`profile_wachiland-elite-beta`). Guía del CLI:
+[`PERFILES_PRUEBA_CLI.md`](PERFILES_PRUEBA_CLI.md).
+
+### Marca
+
+- El id empieza por `profile_test-` **y** existe una fila en `test_profiles`
+  (`profile_id`, dueño, `created_at`, `follow_parent`). La API de prueba exige
+  las dos; cualquier escritura sobre otro id responde
+  `403 {"error":{"code":"not_a_test_profile"}}`.
+- El id va firmado dentro del manifiesto, así que la marca viaja con cada
+  revisión sin cambiar el esquema: Pandora y Android pueden reconocerla por el
+  prefijo. Las revisiones de prueba son revisiones normales: inmutables,
+  firmadas por el servidor, `official: true`, verificables con la verificación
+  existente (`ParseAndVerifyRevisionEnvelope` y `/v1/signing-keys`).
+- La API de admin no puede publicar ids `profile_test-…` ni derivar un perfil
+  normal de uno de prueba; sí puede borrarlos (panel → Servicio).
+- Un perfil de prueba es hijo (o nieto, hasta 8 niveles) de cualquier perfil
+  vivo, normal o de prueba. Nada sube de hijo a padre.
+
+### Autenticación
+
+Un único token compartido, siempre obligatorio en `/v1/test/`:
+
+- Se genera y se rota en **Servicio → Perfiles de prueba**. Se muestra una vez;
+  el servidor guarda solo su SHA-256 (`test_api_token`) y compara en tiempo
+  constante. Rotarlo invalida el anterior al momento. Sin token generado, todo
+  `/v1/test/` responde `503 test_token_not_configured`.
+- Cabeceras: `Authorization: Bearer <token>` y `X-Wbombo-Agent: <etiqueta>`
+  (opcional, `[A-Za-z0-9._-]{1,64}`, se guarda como dueño; es informativa).
+- Sin cookie ni CSRF. El token nunca se registra ni se devuelve salvo en la
+  respuesta de generación. Token ausente o incorrecto: `401 invalid_token`.
+  Tras 20 fallos en 10 minutos desde una IP: `429 too_many_auth_failures`.
+- En modo HTTPS `/v1/test/` es accesible fuera de la LAN, como las lecturas
+  públicas; `/v1/admin/` sigue solo en la LAN.
+
+### Rutas
+
+```text
+GET    /v1/test/profiles[?include_deleted=1]         # dueño, padre, follow_parent, última revisión, bytes propios
+POST   /v1/test/profiles                             # {slug, name?, parent_profile_id, parent_revision_id|"latest", follow_parent?}
+POST   /v1/test/profiles/{id}/changes                # {notes?, operations:[…]}
+POST   /v1/test/profiles/{id}/repin                  # {parent_revision_id|"latest"}
+PUT    /v1/test/profiles/{id}/follow                 # {follow_parent: bool}
+PUT    /v1/test/profiles/{id}/presentation           # como la del admin
+POST   /v1/test/profiles/{id}/channels/{ch}/promote  # {revision_id}
+POST   /v1/test/profiles/{id}/channels/{ch}/rollback # {revision_id, reason?}; el servidor firma el rollback
+DELETE /v1/test/profiles/{id}                        # {confirm_profile_id}; lápida
+GET    /v1/test/profiles/{id}/revisions              # historial de cualquier perfil (solo lectura)
+HEAD   /v1/test/objects/sha256/{d}                   # 200 si el CAS ya tiene los bytes
+POST   /v1/test/objects/sha256/{d}                   # cuerpo crudo, cuenta en las cuotas
+GET    /v1/test/usage                                # cuotas y disco
+```
+
+- **Crear** publica la revisión 1: un hijo vacío fijado al padre, con su misma
+  versión de juego y loader, y los `permissions` del padre (nunca más
+  permisivo). Promueve su revisión estable. `follow_parent` es `true` por
+  defecto.
+- **Cambios** parte de la última revisión del perfil de prueba, aplica las
+  operaciones y publica una revisión nueva por la misma `publishCore` que una
+  publicación normal (firma, CAS, cadena, `config_settings`, `jvm_options`,
+  anti-rollback). Además respeta `permissions.mods` del padre directo: sin
+  `add` no se añaden ni reemplazan mods; sin `remove` no se quitan heredados
+  (`403 parent_permission_denied`). Si la cadena rechaza el contenido (reglas
+  heredadas) responde `422 inheritance_rule_violation`. Operaciones:
+
+  | `op` | Campos | Efecto |
+  |---|---|---|
+  | `add_mod` | `name` (`.jar`), `sha256`, `size`, `id?` | `mods/<name>`; si el padre lo tiene, lo reemplaza con `expect_base_object_sha256` |
+  | `remove_mod` | `name` (archivo o id) o `sha256` | quita el propio y, si es heredado, añade `remove_mods` |
+  | `set_config` | `path`, `sha256`, `size`, `policy?` (`default_once`) | config propia (reemplaza la heredada) |
+  | `remove_config` | `path` | quita la propia y, si es heredada, añade `remove_configs` |
+  | `set_config_setting` | `path`, `format`, `key`, `value`, `policy?` | regla de `config_settings` propia |
+  | `remove_config_setting` | `path`, `key` | quita una regla propia |
+  | `set_jvm_options` | `jvm_options`, `remove_jvm_options` | sustituye las listas propias |
+
+  `notes` va a `revision.release_notes`. El esquema del manifiesto es el
+  mínimo que admite el contenido (4 con loader, 3 con JVM, 2 con ajustes).
+- **Repin** publica una revisión con el mismo contenido propio y la base en
+  otra revisión del mismo padre (vieja o la última). Sirve para probar una
+  actualización vieja → nueva.
+- **Follow**: con `follow_parent: false` el auto-follow no re-fija ese perfil
+  de prueba. Los perfiles normales siguen igual que siempre.
+- Tras crear, cambiar o re-fijar, su revisión estable avanza si seguía a la
+  última (como en el auto-follow) y sus propios hijos de prueba que siguen se
+  re-fijan.
+- **Borrar** deja la lápida de siempre: el id queda quemado
+  (`409 profile_id_taken` al reutilizarlo) y sus revisiones siguen legibles por
+  id.
+
+### Catálogo
+
+`GET /v1/profiles` oculta los `profile_test-…` salvo `?include_test=1`, para que
+los jugadores no los vean. Una revisión u objeto de prueba concreto sigue siendo
+legible por su id. `/v1/admin/profiles` también los oculta (el panel los lista
+aparte en Servicio) y las publicaciones recientes del panel no los muestran.
+
+### Cuotas (globales, opciones de arranque)
+
+| Opción | Por defecto | Error al superarla |
+|---|---|---|
+| `--test-max-profiles` | 200 perfiles de prueba vivos | `409 quota_profiles_exceeded` |
+| `--test-max-object-bytes` | 2 GiB por objeto (máximo del CAS) | `413 quota_object_too_large` |
+| `--test-max-bytes` | 100 GiB | `409 quota_bytes_exceeded` |
+| `--test-disk-margin-bytes` | 10 GiB libres siempre | `507 disk_space_low` |
+
+Los bytes contados son los de objetos que **la API de prueba añadió al CAS**
+(si los bytes ya estaban, p. ej. los mods del Beta, no cuentan) y que siguen
+referenciados por una revisión de un perfil de prueba vivo, o que se subieron
+hace menos de 24 h y aún no se han publicado. El máximo efectivo es
+`min(--test-max-bytes, usados + disco libre − margen)`. El panel (Servicio) y
+`GET /v1/test/usage` muestran uso, máximo y porcentaje de cada cuota y del
+disco, con aviso desde el 80 %.
+
+**Recogida de objetos.** Borrar un perfil de prueba libera su cuota al momento,
+pero no borra bytes del disco: sus revisiones son inmutables y siguen legibles
+por id (instalaciones existentes, otros hijos), y el CAS v1 conserva los
+objetos publicados (trigger `published_objects_no_delete`). Los objetos subidos
+y nunca publicados dejan de contar a las 24 h, pero su archivo sigue en el CAS.
+El margen de disco es el límite real: si se acerca, el admin borra perfiles de
+prueba viejos y, si hace falta espacio físico, lo trata como una tarea de
+mantenimiento del CAS (fuera de este cambio). Criterio para reabrir: el disco
+llega al aviso del 80 % con los perfiles de prueba ya borrados.

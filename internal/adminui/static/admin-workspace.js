@@ -159,7 +159,7 @@ async function renderProfilePage() {
     }
     const manifest = await latestProfileManifest(profile); if (!valid()) return;
     body.replaceChildren(); const grid = make('div', 'profile-summary-grid');
-    const releases = make('section', 'panel'); releases.append(make('p', 'eyebrow', 'PUBLICACIONES'), make('h3', '', 'Última publicada · versión ' + revisionSequence(versions[0])), make('p', 'microcopy', active ? 'Los launchers siguen la versión ' + revisionSequence(active) + ' del canal estable.' : 'Elige una versión en la pestaña Versiones para activarla en los launchers.'), make('p', 'microcopy', versions.length + ' versiones en el historial.'));
+    const releases = make('section', 'panel'); releases.append(make('p', 'eyebrow', 'PUBLICACIONES'), make('h3', '', 'Última publicada · versión ' + revisionSequence(versions[0])), make('p', 'microcopy', active ? 'Los launchers siguen la versión ' + revisionSequence(active) + ' (revisión estable).' : 'Elige una versión en la pestaña Versiones para activarla en los launchers.'), make('p', 'microcopy', versions.length + ' versiones en el historial.'));
     const lineage = make('section', 'panel'); lineage.append(make('p', 'eyebrow', 'FAMILIA'), make('h3', '', 'Madre y ramas derivadas'));
     if (manifest && manifest.base) {
       const parent = state.profiles.find(item => profileId(item) === manifest.base.profile_id); const link = make('a', 'family-link', parent ? profileName(parent) : manifest.base.profile_id);

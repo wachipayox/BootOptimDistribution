@@ -497,3 +497,26 @@ func rejectDeletedProfile(ctx context.Context, tx *sql.Tx, id string) error {
 	}
 	return nil
 }
+
+// Has reports whether CAS already holds bytes for digest (staged or
+// published) without hashing them; publication re-verifies before use.
+func (c *CAS) Has(ctx context.Context, digest string) (int64, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, false, err
+	}
+	path, err := c.objectPath(digest, false)
+	if err != nil {
+		return 0, false, err
+	}
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	if !info.Mode().IsRegular() {
+		return 0, false, fmt.Errorf("%w: non-regular CAS entry", ErrCorruptObject)
+	}
+	return info.Size(), true, nil
+}

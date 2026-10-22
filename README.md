@@ -67,30 +67,57 @@ explícita para la prueba:
 curl http://127.0.0.1:8088/v1/meta/version
 ```
 
-## Endpoints actuales
+## Endpoints actuales (0.3.0)
+
+Acceso en modo HTTPS (`--admin-ui-https`): las lecturas públicas (desde
+0.2.25) y la API de perfiles de prueba (0.3.0, con token) se sirven a cualquier
+dirección; el panel y `/v1/admin/` siguen solo en la LAN
+(`--admin-ui-allow-cidr`) con sesión y CSRF. En los demás modos todo queda en
+la LAN. Detalle: `docs/PROFILE_PROTOCOL.md` («HTTP shape»).
+
+Públicos, sin autenticación:
 
 - `GET /healthz` — disponibilidad del proceso.
 - `GET /v1/meta/version` — versión semántica, commit instalado, esquema de
-  protocolo y capacidades expuestas.
+  protocolo y capacidades expuestas (`test-profiles-v1` desde 0.3.0).
 - `GET /v1/signing-keys` — claves públicas actuales e históricas, nunca privadas.
-- `POST /v1/admin/publications` — valida y firma una publicación desde el panel.
-- `GET /v1/profiles`, revisiones y objetos por SHA-256 — catálogo y contenido
-  global para el launcher en modo HTTPS autenticado.
-- `/v1/admin/...` — publicación e historial protegidos por sesión admin y
-  CSRF en modo HTTPS.
-- `GET /admin/api/game-versions` — catálogo actualizado de versiones de
-  Minecraft de tipo release y NeoForge, protegido por sesión admin.
-- `GET /admin/api/service-update` — consulta versión y commit de `main` para
-  comprobar si hay actualización; requiere sesión de administrador.
-- `POST /admin/api/service-update` — instala el tip actual de `main` y reinicia
-  el servicio; requiere sesión, token CSRF y el ejecutor systemd configurado.
+- `GET /v1/profiles` — catálogo; oculta los perfiles de prueba salvo
+  `?include_test=1`.
+- `GET /v1/profiles/{id}/revisions/{rev}` y `GET|HEAD /v1/objects/sha256/{d}` —
+  revisiones firmadas y objetos publicados de cualquier perfil.
 
-La lista de capacidades de `/v1/meta/version` indica si los endpoints de
-perfiles están habilitados. La publicación valida firmas Ed25519, manifiestos
-canónicos, objetos y reglas de secuencia/herencia. El panel firma automáticamente
-las solicitudes mediante el servicio. La herramienta offline permanece como
-compatibilidad opcional para sobres externos, no como paso del flujo normal.
-Consulta `docs/GUIA_OPERADOR_ES.md` para copias y recuperación.
+Perfiles de prueba, con el token compartido (`Authorization: Bearer`):
+
+- `/v1/test/...` — crear, cambiar, re-fijar, seguir o no al padre, revisión
+  estable, presentación, borrar, subir objetos, listar y cuotas de perfiles
+  `profile_test-…`. Cualquier escritura sobre otro perfil responde `403
+  not_a_test_profile`. CLI: [`tools/perfiles_prueba.py`](tools/perfiles_prueba.py),
+  guía en [`docs/PERFILES_PRUEBA_CLI.md`](docs/PERFILES_PRUEBA_CLI.md).
+
+Administración, solo LAN, sesión de administrador y CSRF:
+
+- `POST /v1/admin/publications` — valida y firma una publicación desde el panel.
+- `/v1/admin/...` — objetos, historial, revisión estable, presentación y
+  borrado de perfiles. No escribe perfiles de prueba (solo puede borrarlos).
+- `GET /v1/admin/test-api` y `POST /v1/admin/test-api/token` — estado y
+  generación/rotación del token de la API de prueba, cuotas y lista de perfiles
+  de prueba (panel: **Servicio → Perfiles de prueba**).
+- `GET /admin/api/game-versions` — catálogo actualizado de versiones de
+  Minecraft de tipo release y NeoForge.
+- `GET /admin/api/service-update` — consulta versión y commit de `main` para
+  comprobar si hay actualización.
+- `POST /admin/api/service-update` — instala el tip actual de `main` y reinicia
+  el servicio; requiere además el ejecutor systemd configurado.
+
+La publicación valida firmas Ed25519, manifiestos canónicos, objetos y reglas
+de secuencia/herencia. El panel firma automáticamente las solicitudes mediante
+el servicio. La herramienta offline permanece como compatibilidad opcional para
+sobres externos, no como paso del flujo normal. Consulta
+`docs/GUIA_OPERADOR_ES.md` para copias y recuperación.
+
+Opciones de arranque de la API de prueba (cuotas globales):
+`--test-max-profiles` (200), `--test-max-object-bytes` (2 GiB),
+`--test-max-bytes` (100 GiB) y `--test-disk-margin-bytes` (10 GiB).
 
 ## Panel de administración en red local
 
