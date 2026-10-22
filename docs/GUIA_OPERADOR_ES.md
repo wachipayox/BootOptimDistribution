@@ -1,10 +1,10 @@
 # Guía de uso y mantenimiento de BootOptim Distribution
 
-Guía práctica para administrar el servicio privado de distribución de perfiles de Wachiland Elite. Está pensada para el servidor actual y distingue sus rutas conocidas de las instrucciones generales. No contiene contraseñas, claves privadas ni tokens.
+Guía práctica para administrar el servicio privado de distribución de perfiles de Wachiland Elite. Los datos del servidor real (nombre, IP de LAN, dominio y rutas) están en wbombo (privado), `servidor/`; aquí aparecen como `<servidor>`, `<IP_LAN>`, `<CIDR_LAN>`, `<dominio>` y `<usuario>`. No contiene contraseñas, claves privadas ni tokens.
 
 **Última revisión:** 1 de octubre de 2026
 
-**Servidor conocido:** `wachilandserver` · Ubuntu/Debian · IP LAN `192.168.1.69`
+**Servidor conocido:** `<servidor>` · Ubuntu/Debian · IP LAN `<IP_LAN>`
 
 **Última versión publicada en esta guía:** `0.2.18`. Comprueba siempre la versión instalada con los comandos de esta guía.
 
@@ -28,28 +28,28 @@ Distribution guarda revisiones globales inmutables, valida sus firmas y almacena
 
 El servidor firma automáticamente al publicar desde el panel autenticado. La clave privada se genera una vez y permanece en el directorio de datos de Linux; el navegador y el launcher sólo reciben claves públicas y firmas. No necesitas guardar ni usar claves en tu PC. El administrador puede instalar y reiniciar las actualizaciones desde Servicio; la recuperación manual sigue disponible.
 
-La interfaz administrativa actual está en `https://welite.ddns.net:8444/admin/`. En la LAN, el nombre `welite.ddns.net` debe resolver a `192.168.1.69` para que el certificado Certbot coincida. No uses la URL por IP como dirección habitual porque el certificado es para el nombre DNS.
+La interfaz administrativa actual está en `https://<dominio>:8444/admin/`. En la LAN, el nombre `<dominio>` debe resolver a `<IP_LAN>` para que el certificado Certbot coincida. No uses la URL por IP como dirección habitual porque el certificado es para el nombre DNS.
 
-El proceso escucha en `192.168.1.69:8444`, restringe clientes a `192.168.1.0/24` y usa HTTPS nativo. No necesita Caddy ni un proxy Nginx. No reenvíes este puerto desde Internet.
+El proceso escucha en `<IP_LAN>:8444`, restringe clientes a `<CIDR_LAN>` y usa HTTPS nativo. No necesita Caddy ni un proxy Nginx. No reenvíes este puerto desde Internet.
 
 ## Rutas y accesos actuales
 
 | Elemento | Ruta o valor conocido |
 |---|---|
-| Checkout Linux | `/home/wachi/launcher_manager` |
+| Checkout Linux | `/home/<usuario>/launcher_manager` |
 | Binario que ejecuta systemd con el actualizador habilitado | `/usr/local/bin/bootoptim-distribution` |
-| Copia del binario del checkout | `/home/wachi/launcher_manager/bin/bootoptim-distribution` |
+| Copia del binario del checkout | `/home/<usuario>/launcher_manager/bin/bootoptim-distribution` |
 | Unidad systemd | `/etc/systemd/system/bootoptim-distribution.service` |
 | Datos publicados y objetos | `/var/lib/bootoptim-distribution` |
 | Clave automática del servidor (privada, no compartir) | `/var/lib/bootoptim-distribution/signing/server-release-key.json` |
 | Historial automático de claves públicas | `/var/lib/bootoptim-distribution/signing/public-keys.json` |
 | Mapa de claves públicas de firma anteriores | `/etc/bootoptim-distribution/release-public-keys.json` |
 | Verificador de contraseña admin | `/etc/bootoptim-distribution/admin-password.hash` |
-| Certificado TLS Certbot | `/etc/letsencrypt/live/welite.ddns.net/fullchain.pem` |
-| Clave privada TLS Certbot | `/etc/letsencrypt/live/welite.ddns.net/privkey.pem` |
+| Certificado TLS Certbot | `/etc/letsencrypt/live/<dominio>/fullchain.pem` |
+| Clave privada TLS Certbot | `/etc/letsencrypt/live/<dominio>/privkey.pem` |
 | Usuario/grupo del servicio | `wachi` / `wachi` |
-| Bind / puerto / CIDR LAN | `192.168.1.69:8444` / `192.168.1.0/24` |
-| Panel | `https://welite.ddns.net:8444/admin/` |
+| Bind / puerto / CIDR LAN | `<IP_LAN>:8444` / `<CIDR_LAN>` |
+| Panel | `https://<dominio>:8444/admin/` |
 
 Las rutas de Certbot son gestionadas por Certbot y Nginx; no cambies sus permisos ni copies los archivos a mano. La unidad usa credenciales de systemd para entregarlas al proceso sin abrir los directorios privados de Certbot.
 
@@ -57,7 +57,7 @@ El instalador y el actualizador mantienen el binario del checkout y el binario r
 
 ## Uso del panel y publicación
 
-1. Abre `https://welite.ddns.net:8444/admin/` desde la LAN e inicia sesión con el usuario administrador configurado (`wachi`) y la contraseña elegida al crear el verificador. No hay una contraseña predeterminada.
+1. Abre `https://<dominio>:8444/admin/` desde la LAN e inicia sesión con el usuario administrador configurado (`wachi`) y la contraseña elegida al crear el verificador. No hay una contraseña predeterminada.
 2. En Perfiles globales, crea o selecciona el perfil y prepara el contenido/revisión. Para una hija, comprueba la versión base y los permisos heredados antes de publicar.
 3. Revisa los archivos y reglas y pulsa **Preparar archivos**. Sólo se suben los objetos necesarios.
 4. Marca que has revisado los cambios y pulsa **Publicar versión**. Confirma la publicación. El servidor valida, firma y almacena la revisión automáticamente.
@@ -83,9 +83,9 @@ las copias de seguridad completas del servicio.
 Desde Linux:
 
 ```bash
-curl -fsS https://welite.ddns.net:8444/healthz
-curl -fsS https://welite.ddns.net:8444/v1/meta/version
-curl -fsS https://welite.ddns.net:8444/v1/profiles
+curl -fsS https://<dominio>:8444/healthz
+curl -fsS https://<dominio>:8444/v1/meta/version
+curl -fsS https://<dominio>:8444/v1/profiles
 ```
 
 `/v1/meta/version` muestra versión, commit y capacidades. `/v1/profiles` puede devolver una lista vacía si aún no hay revisiones publicadas; eso no significa que el proceso esté roto.
@@ -217,7 +217,7 @@ sudo ufw status numbered
 Si UFW está activo, la regla actual debe permitir TCP/8444 sólo desde la LAN:
 
 ```bash
-sudo ufw allow from 192.168.1.0/24 to 192.168.1.69 port 8444 proto tcp
+sudo ufw allow from <CIDR_LAN> to <IP_LAN> port 8444 proto tcp
 ```
 
 No añadas una regla global para cualquier origen. Si modificas o borras una regla UFW, usa el número que muestre `ufw status numbered` y revisa de nuevo el resultado.
@@ -231,14 +231,14 @@ sudo systemctl restart bootoptim-distribution.service
 sudo systemctl status bootoptim-distribution.service --no-pager
 ```
 
-No copies archivos a `/home/wachi`, no cambies el propietario/modo de `/etc/letsencrypt` y no añadas un hook que los copie. Si el servicio falla al abrir un certificado, inspecciona la unidad y los logs; comprueba también que `LoadCredential` apunte a las rutas actuales.
+No copies archivos a `/home/<usuario>`, no cambies el propietario/modo de `/etc/letsencrypt` y no añadas un hook que los copie. Si el servicio falla al abrir un certificado, inspecciona la unidad y los logs; comprueba también que `LoadCredential` apunte a las rutas actuales.
 
 ## Cambiar la configuración de systemd
 
 La unidad activa está en `/etc/systemd/system/bootoptim-distribution.service`. Su `ExecStart` conocido es equivalente a:
 
 ```ini
-ExecStart=/home/wachi/launcher_manager/bin/bootoptim-distribution --listen 192.168.1.69:8444 --admin-ui-https --admin-ui-allow-cidr 192.168.1.0/24 --tls-cert-file=${ADMIN_TLS_CERT} --tls-key-file=${ADMIN_TLS_KEY} --admin-username wachi --admin-password-hash-file /etc/bootoptim-distribution/admin-password.hash --data-dir /var/lib/bootoptim-distribution --release-public-keys-file /etc/bootoptim-distribution/release-public-keys.json
+ExecStart=/home/<usuario>/launcher_manager/bin/bootoptim-distribution --listen <IP_LAN>:8444 --admin-ui-https --admin-ui-allow-cidr <CIDR_LAN> --tls-cert-file=${ADMIN_TLS_CERT} --tls-key-file=${ADMIN_TLS_KEY} --admin-username wachi --admin-password-hash-file /etc/bootoptim-distribution/admin-password.hash --data-dir /var/lib/bootoptim-distribution --release-public-keys-file /etc/bootoptim-distribution/release-public-keys.json
 ```
 
 La unidad también configura `LoadCredential=admin-cert:...`, `LoadCredential=admin-key:...` y las variables `ADMIN_TLS_CERT`/`ADMIN_TLS_KEY`. No elimines esas tres piezas mientras los argumentos TLS las usen.
@@ -276,7 +276,7 @@ Cambiar el puerto requiere actualizar `--listen`, la regla UFW y la URL utilizad
 | `bad-setting` / “more than one ExecStart” | `systemctl cat` y `systemctl show -p ExecStart`; deja sólo un comando efectivo no vacío tras el reset `ExecStart=`. Ejecuta `daemon-reload`. |
 | `permission denied` con Certbot | Verifica `LoadCredential` y las rutas. No abras los directorios de Certbot a `wachi` ni copies la clave. |
 | Login incorrecto | Usuario configurado (`wachi`), contraseña introducida y ruta/hash legible. Reemplaza el verificador con el procedimiento anterior si se perdió la contraseña. |
-| Panel no conecta | Confirma servicio activo, escucha en `192.168.1.69:8444`, regla LAN UFW, DNS local `welite.ddns.net → 192.168.1.69` y que el cliente esté en `192.168.1.0/24`. |
+| Panel no conecta | Confirma servicio activo, escucha en `<IP_LAN>:8444`, regla LAN UFW, DNS local `<dominio> → <IP_LAN>` y que el cliente esté en `<CIDR_LAN>`. |
 | El perfil no aparece | Consulta historial de perfiles y `/v1/profiles`; comprueba que la revisión se publicó y que el sobre fue firmado con un ID de clave confiable. |
 | Cliente rechaza una firma | Comprueba HTTPS y `/v1/signing-keys`, conserva el historial público y actualiza el launcher a una versión con descubrimiento automático. |
 
@@ -291,14 +291,14 @@ Si la consulta de GitHub falla, la web muestra un mensaje genérico y el journal
 La primera actualización manual después de instalar esta versión configura el ejecutor automáticamente si `bootoptim-distribution.service` ya existe. Para instalarlo o reparar su configuración por separado, ejecuta:
 
 ```bash
-sudo /home/wachi/launcher_manager/scripts/install-admin-updater.sh
+sudo /home/<usuario>/launcher_manager/scripts/install-admin-updater.sh
 ```
 
 Esto instala una unidad oneshot root, protegida por `flock`, y un socket Unix propiedad de la cuenta definida en `User=`. El proceso web sólo puede enviar la petición fija de actualizar; no recibe permisos generales de root ni una consola. La configuración conserva los argumentos actuales y cambia `ExecStart` a `/usr/local/bin/bootoptim-distribution`. Las futuras versiones se compilan desde un checkout temporal root-owned. Si el panel no está disponible, conserva este método manual de recuperación:
 
 ```bash
-sudo /home/wachi/launcher_manager/scripts/update.sh --check
-sudo /home/wachi/launcher_manager/scripts/update.sh --apply
+sudo /home/<usuario>/launcher_manager/scripts/update.sh --check
+sudo /home/<usuario>/launcher_manager/scripts/update.sh --apply
 ```
 
 `--check` compara el commit del servicio con `origin/main`. Después de habilitar el actualizador web, lee el marcador root-owned de `/var/lib/bootoptim-distribution-updater/installed-commit`; antes de eso usa `.installed-commit` en el checkout. `--apply` hace fetch, restablece el checkout al tip de `main`, compila e instala el binario. **El reset descarta cambios rastreados locales en ese checkout**; no guardes configuración manual dentro del repositorio. La configuración real del servicio, las claves y los datos están fuera del checkout.
@@ -308,17 +308,17 @@ Al terminar, reinicia el servicio explícitamente y verifica versión/estado:
 ```bash
 sudo systemctl restart bootoptim-distribution.service
 sudo systemctl status bootoptim-distribution.service --no-pager --full
-curl -fsS https://welite.ddns.net:8444/v1/meta/version
+curl -fsS https://<dominio>:8444/v1/meta/version
 ```
 
 El script mantiene `bin/bootoptim-distribution.previous` y `/usr/local/bin/bootoptim-distribution.previous`. Con el actualizador habilitado, la unidad activa usa `/usr/local/bin/bootoptim-distribution`. Para restaurar manualmente el anterior, detén el servicio, conserva primero el binario actual y copia el anterior sobre el ejecutado:
 
 ```bash
 sudo systemctl stop bootoptim-distribution.service
-sudo cp -a /home/wachi/launcher_manager/bin/bootoptim-distribution \
-  /home/wachi/launcher_manager/bin/bootoptim-distribution.failed
-sudo cp -a /home/wachi/launcher_manager/bin/bootoptim-distribution.previous \
-  /home/wachi/launcher_manager/bin/bootoptim-distribution
+sudo cp -a /home/<usuario>/launcher_manager/bin/bootoptim-distribution \
+  /home/<usuario>/launcher_manager/bin/bootoptim-distribution.failed
+sudo cp -a /home/<usuario>/launcher_manager/bin/bootoptim-distribution.previous \
+  /home/<usuario>/launcher_manager/bin/bootoptim-distribution
 sudo systemctl start bootoptim-distribution.service
 sudo systemctl status bootoptim-distribution.service --no-pager --full
 ```
@@ -331,7 +331,7 @@ intentar instalar `50-admin-updater-binary.conf` o una unidad bajo
 oneshot. Ejecuta una actualización manual una sola vez desde el checkout:
 
 ```bash
-sudo /home/wachi/launcher_manager/scripts/update.sh --apply
+sudo /home/<usuario>/launcher_manager/scripts/update.sh --apply
 sudo systemctl restart bootoptim-distribution.service
 ```
 

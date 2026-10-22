@@ -13,9 +13,9 @@ confianza:
 
 ```bash
 /usr/local/bin/bootoptim-distribution \
-  --listen 192.168.1.20:8088 \
+  --listen <IP_LAN>:8088 \
   --admin-ui-lan \
-  --admin-ui-allow-cidr 192.168.1.0/24 \
+  --admin-ui-allow-cidr <CIDR_LAN> \
   --data-dir /var/lib/bootoptim-distribution
 ```
 
@@ -40,19 +40,19 @@ sudo openssl req -x509 -newkey rsa:3072 -nodes -days 365 \
   -keyout /etc/bootoptim-distribution/admin-tls.key \
   -out /etc/bootoptim-distribution/admin-tls.crt \
   -subj '/CN=bootoptim-admin' \
-  -addext 'subjectAltName=IP:192.168.1.20'
+  -addext 'subjectAltName=IP:<IP_LAN>'
 sudo chown bootoptim-distribution:bootoptim-distribution \
   /etc/bootoptim-distribution/admin-tls.key /etc/bootoptim-distribution/admin-tls.crt
 sudo chmod 0600 /etc/bootoptim-distribution/admin-tls.key
 sudo chmod 0644 /etc/bootoptim-distribution/admin-tls.crt
 ```
 
-### Reutilizar el certificado Certbot de `welite.ddns.net`
+### Reutilizar el certificado Certbot de `<dominio>`
 
 En el servidor de Wachiland ya existe un certificado de Certbot. Sus rutas son:
 
-- Certificado y cadena: `/etc/letsencrypt/live/welite.ddns.net/fullchain.pem`
-- Clave privada TLS: `/etc/letsencrypt/live/welite.ddns.net/privkey.pem`
+- Certificado y cadena: `/etc/letsencrypt/live/<dominio>/fullchain.pem`
+- Clave privada TLS: `/etc/letsencrypt/live/<dominio>/privkey.pem`
 
 No copies estos archivos ni cambies permisos en `/etc/letsencrypt`: en este
 servidor, los directorios pertenecen a `root:pterodactyl` y están cerrados a
@@ -82,9 +82,9 @@ No hay usuario predeterminado. Elige uno explícitamente al arrancar el servicio
 
 ```bash
 /usr/local/bin/bootoptim-distribution \
-  --listen 192.168.1.20:8443 \
+  --listen <IP_LAN>:8443 \
   --admin-ui-https \
-  --admin-ui-allow-cidr 192.168.1.0/24 \
+  --admin-ui-allow-cidr <CIDR_LAN> \
   --tls-cert-file /etc/bootoptim-distribution/admin-tls.crt \
   --tls-key-file /etc/bootoptim-distribution/admin-tls.key \
   --admin-username operator \
@@ -133,18 +133,18 @@ override local de `ExecStart` con las opciones anteriores. No cambies el usuario
 del servicio ni abras permisos más amplios a los certificados.
 
 En el servidor de Wachiland, Nginx ya ocupa el puerto `8443`, por lo que
-Distribution escucha directamente en `192.168.1.69:8444`. Aplica este override
+Distribution escucha directamente en `<IP_LAN>:8444`. Aplica este override
 con `sudo systemctl edit bootoptim-distribution`; conserva la contraseña hash
 generada anteriormente:
 
 ```ini
 [Service]
-LoadCredential=admin-cert:/etc/letsencrypt/live/welite.ddns.net/fullchain.pem
-LoadCredential=admin-key:/etc/letsencrypt/live/welite.ddns.net/privkey.pem
+LoadCredential=admin-cert:/etc/letsencrypt/live/<dominio>/fullchain.pem
+LoadCredential=admin-key:/etc/letsencrypt/live/<dominio>/privkey.pem
 Environment=ADMIN_TLS_CERT=%d/admin-cert
 Environment=ADMIN_TLS_KEY=%d/admin-key
 ExecStart=
-ExecStart=/home/wachi/launcher_manager/bin/bootoptim-distribution --listen 192.168.1.69:8444 --admin-ui-https --admin-ui-allow-cidr 192.168.1.0/24 --tls-cert-file=${ADMIN_TLS_CERT} --tls-key-file=${ADMIN_TLS_KEY} --admin-username wachi --admin-password-hash-file /etc/bootoptim-distribution/admin-password.hash --data-dir /var/lib/bootoptim-distribution
+ExecStart=/home/<usuario>/launcher_manager/bin/bootoptim-distribution --listen <IP_LAN>:8444 --admin-ui-https --admin-ui-allow-cidr <CIDR_LAN> --tls-cert-file=${ADMIN_TLS_CERT} --tls-key-file=${ADMIN_TLS_KEY} --admin-username wachi --admin-password-hash-file /etc/bootoptim-distribution/admin-password.hash --data-dir /var/lib/bootoptim-distribution
 ```
 
 `LoadCredential` evita dar acceso a `wachi` a los directorios privados de
@@ -164,15 +164,15 @@ Permite TCP/8444 únicamente desde la subred de confianza. Con UFW, ajusta las
 direcciones a tu red:
 
 ```bash
-sudo ufw allow from 192.168.1.0/24 to 192.168.1.69 port 8444 proto tcp
+sudo ufw allow from <CIDR_LAN> to <IP_LAN> port 8444 proto tcp
 ```
 
 El proceso comprueba además la IP real del socket contra
 `--admin-ui-allow-cidr` y no confía en `X-Forwarded-For`. El filtro de red no
 sustituye al login: sólo es una defensa adicional. Para que el nombre coincida
 con el certificado desde la LAN, abre
-`https://welite.ddns.net:8444/admin/` y configura DNS local para que
-`welite.ddns.net` resuelva a `192.168.1.69`. No hace falta que Nginx haga de
+`https://<dominio>:8444/admin/` y configura DNS local para que
+`<dominio>` resuelva a `<IP_LAN>`. No hace falta que Nginx haga de
 proxy para Distribution.
 
 ## Límites
