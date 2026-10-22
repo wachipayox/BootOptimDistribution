@@ -19,6 +19,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -76,14 +78,21 @@ type Dependencies struct {
 	Keys       KeyResolver
 	Signer     interface{ SignRequest([]byte) ([]byte, error) }
 	PublicKeys map[string]string
+	// TestTokens rotates the shared test API token from the admin panel.
+	TestTokens TestTokens
+	// DiskUsage reports free and total bytes of the data directory volume.
+	DiskUsage func() (free, total uint64, err error)
 }
 
 type Options struct {
 	ReadMiddleware  Middleware
 	AdminMiddleware Middleware
-	MaxJSONBytes    int64
-	MaxObjectBytes  int64
-	ListLimit       int
+	// TestMiddleware enables /v1/test/ and must enforce the shared token.
+	TestMiddleware Middleware
+	TestQuotas     TestQuotas
+	MaxJSONBytes   int64
+	MaxObjectBytes int64
+	ListLimit      int
 }
 
 type API struct {
@@ -92,6 +101,9 @@ type API struct {
 	objects        ObjectStore
 	store          RevisionStore
 	keys           KeyResolver
+	testTokens     TestTokens
+	diskUsage      func() (uint64, uint64, error)
+	testQuotas     TestQuotas
 	maxJSONBytes   int64
 	maxObjectBytes int64
 	listLimit      int
@@ -120,11 +132,16 @@ func New(deps Dependencies, opts Options) (http.Handler, error) {
 	api := &API{
 		objects: deps.Objects, store: deps.Store, keys: deps.Keys,
 		signer: deps.Signer, publicKeys: deps.PublicKeys,
+		testTokens: deps.TestTokens, diskUsage: deps.DiskUsage,
+		testQuotas:   opts.TestQuotas.withDefaults(opts.MaxObjectBytes),
 		maxJSONBytes: opts.MaxJSONBytes, maxObjectBytes: opts.MaxObjectBytes,
 		listLimit: opts.ListLimit,
 	}
 	root := http.NewServeMux()
 	root.Handle("/v1/admin/", opts.AdminMiddleware(http.HandlerFunc(api.serveAdmin)))
+	if opts.TestMiddleware != nil {
+		root.Handle("/v1/test/", opts.TestMiddleware(http.HandlerFunc(api.serveTest)))
+	}
 	root.Handle("/v1/", opts.ReadMiddleware(http.HandlerFunc(api.serveRead)))
 	return root, nil
 }
@@ -217,6 +234,9 @@ func (a *API) serveRead(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) serveAdmin(w http.ResponseWriter, r *http.Request) {
+	if a.serveAdminTest(w, r) {
+		return
+	}
 	if r.URL.Path == "/v1/admin/publications" {
 		if r.Method != http.MethodPost {
 			a.methodNotAllowed(w, http.MethodPost)
@@ -229,6 +249,9 @@ func (a *API) serveAdmin(w http.ResponseWriter, r *http.Request) {
 		raw, err := a.readJSONBody(w, r)
 		if err != nil {
 			a.writeBodyReadError(w, err)
+			return
+		}
+		if a.rejectAdminTestPublication(w, raw) {
 			return
 		}
 		envelope, err := a.signer.SignRequest(raw)
@@ -269,6 +292,9 @@ func (a *API) serveAdmin(w http.ResponseWriter, r *http.Request) {
 			a.methodNotAllowed(w, http.MethodPut)
 			return
 		}
+		if a.rejectAdminTestProfile(w, parts[3]) {
+			return
+		}
 		a.handlePresentation(w, r, parts[3])
 		return
 	}
@@ -291,6 +317,9 @@ func (a *API) serveAdmin(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 7 && parts[0] == "v1" && parts[1] == "admin" && parts[2] == "profiles" && parts[4] == "channels" {
 		if r.Method != http.MethodPost {
 			a.methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		if a.rejectAdminTestProfile(w, parts[3]) {
 			return
 		}
 		switch parts[6] {
@@ -349,7 +378,15 @@ func (a *API) handleObjectUpload(w http.ResponseWriter, r *http.Request, digest 
 		a.writeError(w, http.StatusRequestEntityTooLarge, "payload_too_large", "object exceeds configured upload limit")
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, a.maxObjectBytes+1)
+	if !a.putObject(w, r, digest, a.maxObjectBytes) {
+		return
+	}
+	a.writeJSON(w, http.StatusOK, okBody{SchemaVersion: SchemaVersion, ProtocolVersion: ProtocolVersion, Status: "staged"})
+}
+
+// putObject stages the request body in CAS. On failure it writes the error.
+func (a *API) putObject(w http.ResponseWriter, r *http.Request, digest string, limit int64) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, limit+1)
 	err := a.objects.Put(r.Context(), storage.Object{SHA256: digest, Size: r.ContentLength}, r.Body)
 	if err != nil {
 		switch {
@@ -362,9 +399,9 @@ func (a *API) handleObjectUpload(w http.ResponseWriter, r *http.Request, digest 
 		default:
 			a.writeError(w, http.StatusInternalServerError, "storage_error", "object could not be staged")
 		}
-		return
+		return false
 	}
-	a.writeJSON(w, http.StatusOK, okBody{SchemaVersion: SchemaVersion, ProtocolVersion: ProtocolVersion, Status: "staged"})
+	return true
 }
 
 func (a *API) handleObjectDownload(w http.ResponseWriter, r *http.Request, digest string) {
@@ -436,6 +473,9 @@ func (a *API) handlePublishRevision(w http.ResponseWriter, r *http.Request) {
 	raw, err := a.readJSONBody(w, r)
 	if err != nil {
 		a.writeBodyReadError(w, err)
+		return
+	}
+	if a.rejectAdminTestPublication(w, raw) {
 		return
 	}
 	a.publishEnvelope(w, r, raw)
@@ -630,6 +670,11 @@ func (a *API) handleRevision(w http.ResponseWriter, r *http.Request, profileID, 
 }
 
 func (a *API) handleProfiles(w http.ResponseWriter, r *http.Request, admin bool) {
+	includeTest := r.URL.Query().Get("include_test") == "1"
+	if _, ok := a.store.(profileSummaryStore); ok {
+		a.handleProfileSummaries(w, r, admin, includeTest)
+		return
+	}
 	stored, err := a.store.ListSignedRevisions(r.Context(), a.listLimit)
 	if err != nil {
 		a.writeError(w, http.StatusInternalServerError, "storage_error", "profile inventory unavailable")
@@ -651,6 +696,9 @@ func (a *API) handleProfiles(w http.ResponseWriter, r *http.Request, admin bool)
 	views := make([]profileView, 0)
 	index := make(map[string]int)
 	for _, item := range stored {
+		if isTestProfileID(item.ProfileID) && !includeTest {
+			continue
+		}
 		verified, _, err := a.verifyStoredRevision(r.Context(), item)
 		if err != nil {
 			a.writeError(w, http.StatusInternalServerError, "revision_corrupt", "stored revision failed integrity verification")
@@ -773,59 +821,64 @@ func (a *API) handleRollback(w http.ResponseWriter, r *http.Request, profileID, 
 		a.writeError(w, http.StatusBadRequest, "invalid_request", "rollback_event is required")
 		return
 	}
-	target, err := a.loadCandidate(r.Context(), profileID, channel, req.RevisionID)
-	if err != nil {
-		a.writeCandidateError(w, err)
-		return
-	}
-	knownRecord, knownState, err := a.loadChannel(r.Context(), profileID, channel)
-	if err != nil {
-		a.writeError(w, http.StatusInternalServerError, "storage_error", "channel state unavailable")
-		return
-	}
-	if knownState == nil {
-		a.writeError(w, http.StatusConflict, "channel_not_found", "rollback requires an existing channel head")
-		return
-	}
-
-	keyID, err := signatureKeyID(req.RollbackEvent)
-	if err != nil {
-		a.writeError(w, http.StatusUnprocessableEntity, "invalid_rollback", "rollback event is malformed")
-		return
-	}
-	pub, err := a.keys.PublicKey(r.Context(), keyID)
-	if err != nil {
-		if errors.Is(err, ErrKeyNotFound) {
-			a.writeError(w, http.StatusUnprocessableEntity, "unknown_release_key", "rollback signature key is not trusted")
-		} else {
-			a.writeError(w, http.StatusInternalServerError, "key_resolver_error", "release key lookup failed")
-		}
-		return
-	}
-	event, err := revision.ParseAndVerifyRollbackEvent(req.RollbackEvent, pub)
-	if err != nil {
-		a.writeError(w, http.StatusUnprocessableEntity, "invalid_rollback", "rollback signature or statement is invalid")
-		return
-	}
-	if err := revision.DecideChannelTransition(knownState, target, event); err != nil {
-		switch {
-		case errors.Is(err, revision.ErrRollbackRequired):
-			a.writeError(w, http.StatusConflict, "rollback_required", "downgrade requires a valid signed rollback event")
-		default:
-			a.writeError(w, http.StatusConflict, "channel_conflict", "rollback statement does not bind the current and target channel heads")
-		}
-		return
-	}
-	candidate := channelRecord(target)
-	if err := a.store.CompareAndSetChannel(r.Context(), knownRecord, candidate); err != nil {
-		if errors.Is(err, storage.ErrChannelConflict) {
-			a.writeError(w, http.StatusConflict, "channel_conflict", "channel state changed concurrently")
-			return
-		}
-		a.writeError(w, http.StatusInternalServerError, "storage_error", "channel could not be updated")
+	candidate, status, code, message := a.rollbackChannel(r.Context(), profileID, channel, req.RevisionID, req.RollbackEvent)
+	if status != 0 {
+		a.writeError(w, status, code, message)
 		return
 	}
 	a.writeChannel(w, candidate)
+}
+
+// rollbackChannel moves a channel back to an older revision under a verified
+// signed rollback event. A non-zero status reports the error.
+func (a *API) rollbackChannel(ctx context.Context, profileID, channel, revisionID string, rawEvent []byte) (storage.ChannelRecord, int, string, string) {
+	target, err := a.loadCandidate(ctx, profileID, channel, revisionID)
+	if err != nil {
+		if errors.Is(err, storage.ErrRevisionNotFound) {
+			return storage.ChannelRecord{}, http.StatusNotFound, "not_found", "target revision not found"
+		}
+		if errors.Is(err, ErrStoredRevisionCorrupt) {
+			return storage.ChannelRecord{}, http.StatusInternalServerError, "revision_corrupt", "stored target revision failed integrity verification"
+		}
+		return storage.ChannelRecord{}, http.StatusInternalServerError, "storage_error", "target revision unavailable"
+	}
+	knownRecord, knownState, err := a.loadChannel(ctx, profileID, channel)
+	if err != nil {
+		return storage.ChannelRecord{}, http.StatusInternalServerError, "storage_error", "channel state unavailable"
+	}
+	if knownState == nil {
+		return storage.ChannelRecord{}, http.StatusConflict, "channel_not_found", "rollback requires an existing channel head"
+	}
+
+	keyID, err := signatureKeyID(rawEvent)
+	if err != nil {
+		return storage.ChannelRecord{}, http.StatusUnprocessableEntity, "invalid_rollback", "rollback event is malformed"
+	}
+	pub, err := a.keys.PublicKey(ctx, keyID)
+	if err != nil {
+		if errors.Is(err, ErrKeyNotFound) {
+			return storage.ChannelRecord{}, http.StatusUnprocessableEntity, "unknown_release_key", "rollback signature key is not trusted"
+		}
+		return storage.ChannelRecord{}, http.StatusInternalServerError, "key_resolver_error", "release key lookup failed"
+	}
+	event, err := revision.ParseAndVerifyRollbackEvent(rawEvent, pub)
+	if err != nil {
+		return storage.ChannelRecord{}, http.StatusUnprocessableEntity, "invalid_rollback", "rollback signature or statement is invalid"
+	}
+	if err := revision.DecideChannelTransition(knownState, target, event); err != nil {
+		if errors.Is(err, revision.ErrRollbackRequired) {
+			return storage.ChannelRecord{}, http.StatusConflict, "rollback_required", "downgrade requires a valid signed rollback event"
+		}
+		return storage.ChannelRecord{}, http.StatusConflict, "channel_conflict", "rollback statement does not bind the current and target channel heads"
+	}
+	candidate := channelRecord(target)
+	if err := a.store.CompareAndSetChannel(ctx, knownRecord, candidate); err != nil {
+		if errors.Is(err, storage.ErrChannelConflict) {
+			return storage.ChannelRecord{}, http.StatusConflict, "channel_conflict", "channel state changed concurrently"
+		}
+		return storage.ChannelRecord{}, http.StatusInternalServerError, "storage_error", "channel could not be updated"
+	}
+	return candidate, 0, "", ""
 }
 
 func (a *API) loadCandidate(ctx context.Context, profileID, channel, revisionID string) (revision.ChannelState, error) {
@@ -1053,6 +1106,11 @@ func pathParts(path string) []string {
 		return nil
 	}
 	return strings.Split(trimmed, "/")
+}
+
+func sha256Hex(data []byte) string {
+	digest := sha256.Sum256(data)
+	return hex.EncodeToString(digest[:])
 }
 
 func validDigest(value string) bool {

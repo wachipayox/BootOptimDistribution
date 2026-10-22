@@ -89,3 +89,19 @@ func TestStaticAssetsAreRevalidatedAndVersioned(t *testing.T) {
 		}
 	}
 }
+
+func TestServicePanelHasTestProfileControls(t *testing.T) {
+	handler := NewHandler(EmptyReadModel{}, BuildInfo{Version: "test", Commit: "test"})
+	page := httptest.NewRecorder()
+	handler.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/admin/", nil))
+	for _, fragment := range []string{"/admin/assets/test-profiles.js?refresh=admin-test-profiles-0300", `id="rotate-test-token"`, `id="test-quota-bars"`, `id="test-profile-rows"`} {
+		if !strings.Contains(page.Body.String(), fragment) {
+			t.Errorf("Servicio is missing %q", fragment)
+		}
+	}
+	script := httptest.NewRecorder()
+	handler.ServeHTTP(script, httptest.NewRequest(http.MethodGet, "/admin/assets/test-profiles.js", nil))
+	if script.Code != http.StatusOK || !strings.Contains(script.Body.String(), "/v1/admin/test-api/token") {
+		t.Fatalf("test-profiles.js: %d", script.Code)
+	}
+}

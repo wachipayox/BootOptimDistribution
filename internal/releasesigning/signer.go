@@ -178,3 +178,21 @@ func (s *Signer) SignRequest(raw []byte) ([]byte, error) {
 		Signature: revision.Signature{KeyID: s.id, Algorithm: revision.SignatureAlgorithm, Value: base64.RawURLEncoding.EncodeToString(ed25519.Sign(s.private, canonical))},
 	})
 }
+
+// SignRollback signs one rollback statement with the server identity. It is
+// used only for test profiles, whose channel downgrades the service decides.
+func (s *Signer) SignRollback(eventID string, statement revision.RollbackStatement) ([]byte, error) {
+	raw, err := json.Marshal(statement)
+	if err != nil {
+		return nil, err
+	}
+	canonical, err := revision.CanonicalizeJSON(raw)
+	if err != nil {
+		return nil, err
+	}
+	digest := sha256.Sum256(canonical)
+	return json.Marshal(revision.RollbackEvent{
+		EventID: eventID, StatementSHA256: hex.EncodeToString(digest[:]), Statement: canonical,
+		Signature: revision.Signature{KeyID: s.id, Algorithm: revision.SignatureAlgorithm, Value: base64.RawURLEncoding.EncodeToString(ed25519.Sign(s.private, canonical))},
+	})
+}

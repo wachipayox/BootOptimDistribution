@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -22,6 +23,7 @@ import (
 	"github.com/wachipayox/BootOptimDistribution/internal/releasesigning"
 	"github.com/wachipayox/BootOptimDistribution/internal/serviceupdate"
 	"github.com/wachipayox/BootOptimDistribution/internal/storage"
+	"github.com/wachipayox/BootOptimDistribution/internal/testauth"
 )
 
 var (
@@ -59,6 +61,10 @@ func main() {
 	adminPasswordHashFile := flag.String("admin-password-hash-file", "", "0600 file containing the local administrator PBKDF2 password verifier")
 	releasePublicKeysFile := flag.String("release-public-keys-file", "", "optional JSON map of release key ids to unpadded base64url Ed25519 public keys")
 	dataDir := flag.String("data-dir", envOr("BOOTOPTIM_DATA_DIR", "./data"), "directory for private CAS objects and SQLite metadata")
+	testMaxProfiles := flag.Int("test-max-profiles", 200, "maximum live test profiles created through /v1/test/")
+	testMaxObjectBytes := flag.Int64("test-max-object-bytes", storage.DefaultMaxObjectBytes, "maximum size of one object uploaded through /v1/test/ (capped by the CAS limit)")
+	testMaxBytes := flag.Int64("test-max-bytes", 100<<30, "maximum bytes uploaded through /v1/test/ that live test profiles still reference")
+	testDiskMarginBytes := flag.Int64("test-disk-margin-bytes", 10<<30, "free disk space that test uploads must always leave")
 	flag.Parse()
 
 	allowedNetwork, err := validateAdminExposureModes(*devAdminUI, *adminUILAN, *adminUIHTTPS, *listen, *adminUIAllowCIDR)
@@ -123,12 +129,25 @@ func main() {
 			serviceUpdateHandler = adminauth.RequireAdmin(authManager.RequireCSRF(
 				serviceupdate.NewHandler(buildVersion, buildCommit),
 			))
+			testTokens, err := testauth.New(context.Background(), store)
+			if err != nil {
+				log.Fatalf("configure test API token: %v", err)
+			}
+			stateDir := *dataDir
 			profileHandler, err = profileapi.New(profileapi.Dependencies{
 				Objects: cas, Store: store, Keys: keys, Signer: signer, PublicKeys: keys.Encoded(),
+				TestTokens: testTokens,
+				DiskUsage:  func() (uint64, uint64, error) { return storage.DiskUsage(stateDir) },
 			}, profileapi.Options{
 				ReadMiddleware: identityMiddleware,
 				AdminMiddleware: func(next http.Handler) http.Handler {
 					return adminauth.RequireAdmin(authManager.RequireCSRF(next))
+				},
+				// The test API never uses the admin cookie or CSRF: only the shared token.
+				TestMiddleware: testTokens.Middleware,
+				TestQuotas: profileapi.TestQuotas{
+					MaxProfiles: *testMaxProfiles, MaxObjectBytes: *testMaxObjectBytes,
+					MaxBytes: *testMaxBytes, DiskMarginBytes: *testDiskMarginBytes,
 				},
 			})
 			if err != nil {
@@ -195,7 +214,7 @@ func newHandlerWithConfig(cfg handlerConfig) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		capabilities := []string{"health", "build-version"}
 		if cfg.ProfileAPI != nil {
-			capabilities = append(capabilities, "signed-global-profiles", "admin-profile-publication", "signed-config-setting-rules-v1", "admin-automatic-publication", "auto-follow-parent", "signed-jvm-options-v1")
+			capabilities = append(capabilities, "signed-global-profiles", "admin-profile-publication", "signed-config-setting-rules-v1", "admin-automatic-publication", "auto-follow-parent", "signed-jvm-options-v1", "test-profiles-v1")
 		}
 		if cfg.ServiceUpdate != nil {
 			capabilities = append(capabilities, "admin-service-update")
@@ -393,11 +412,11 @@ func isPrivateNetwork(network *net.IPNet) bool {
 
 // restrictToCIDR limits the service to the allowed private network. With publicReads (HTTPS mode),
 // read-only profile requests are served to any client so players outside the LAN can install and
-// update profiles; every write, the admin UI and the admin API stay LAN-only (and still require
-// an admin session).
+// update profiles, and the token-protected test-profile API is reachable for agents and CI; every
+// other write, the admin UI and the admin API stay LAN-only (and still require an admin session).
 func restrictToCIDR(next http.Handler, allowed *net.IPNet, publicReads bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if publicReads && isPublicRead(r) {
+		if publicReads && (isPublicRead(r) || isTestAPI(r)) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -424,6 +443,16 @@ func isPublicRead(r *http.Request) bool {
 		return true
 	}
 	return strings.HasPrefix(raw, "/v1/") && !strings.HasPrefix(raw, "/v1/admin/") && raw != "/v1/admin"
+}
+
+// isTestAPI reports a request to /v1/test/... with a clean path. Those routes
+// always require the shared test token (internal/testauth).
+func isTestAPI(r *http.Request) bool {
+	raw := r.URL.Path
+	if raw == "" || raw != path.Clean(raw) && raw != path.Clean(raw)+"/" {
+		return false
+	}
+	return strings.HasPrefix(raw, "/v1/test/")
 }
 
 func envOr(key, fallback string) string {
