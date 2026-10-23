@@ -578,9 +578,10 @@ Reglas comunes:
   el launcher muestra lo último que guardó.
 - Fechas en RFC 3339 UTC (`2026-10-19T18:30:00Z`). Límites en bytes UTF-8.
   Errores con la forma de siempre: `{"error":{"code","message"}}`.
-- **Texto plano** en `body` y `notes`: una línea en blanco separa párrafos; un
-  salto simple es salto de línea; sin marcado. El cliente puede convertir en
-  enlace una URL `https://` suelta.
+- **Texto plano** (changelogs de revisión y de launcher): una línea en blanco
+  separa párrafos; un salto simple es salto de línea; sin marcado. El cliente
+  puede convertir en enlace una URL `https://` suelta. Las noticias usan
+  Markdown restringido (apartado 1).
 
 ### 1. Noticias
 
@@ -608,8 +609,8 @@ Noticia:
 {
   "id": "news_8f2k1q0z",
   "title": "Mantenimiento del servidor el sábado",
-  "body": "Primer párrafo.\n\nSegundo párrafo.",
-  "image": { "sha256": "…", "size": 284113, "media_type": "image/jpeg" },
+  "body": "Primer párrafo con **negrita**.\n\n## Novedades\n\n- Uno\n- Dos\n\n![Captura](https://example.com/captura.png)\n\nhttps://youtu.be/dQw4w9WgXcQ",
+  "image": { "url": "https://example.com/portada.jpg" },
   "author": "Equipo",
   "category_id": "cat_3k9x2",
   "target_profile_id": null,
@@ -625,8 +626,8 @@ Noticia:
 |---|---|
 | `id` | Lo genera el servidor (`news_` + 8–16 `[a-z0-9]`). |
 | `title` | 1–160 bytes, una línea. |
-| `body` | 0–32768 bytes de texto plano. |
-| `image` | `null` o JPEG/PNG 16:9 (tolerancia 1 %), ancho 640–3840, ≤ 4 MiB. El panel recorta y convierte a 1600 × 900 JPEG. |
+| `body` | 0–65536 bytes de **Markdown restringido** (ver «Cuerpo de la noticia»). |
+| `image` | Portada. `null`, una referencia CAS subida desde el panel (`{sha256, size, media_type}`: JPEG/PNG 16:9 con tolerancia 1 %, ancho 640–3840, ≤ 4 MiB; el panel recorta y convierte a 1600 × 900 JPEG) o una imagen externa `{url}` (`https://`, ≤ 2048 bytes). La externa no la comprueba el servidor: el cliente la recorta a 16:9. |
 | `author` | 1–64 bytes, una línea. Texto libre, no una cuenta. |
 | `category_id` | Una categoría existente. |
 | `target_profile_id` | `null` = **General**. Si no, un perfil global: la noticia es para ese perfil y **todos sus descendientes** (su familia). |
@@ -635,6 +636,48 @@ Noticia:
 | `updated_at` | Última edición. |
 | `expires_at` | `null` = permanente. Si es una fecha, desde ella la noticia pasa al historial. Posterior a `published_at`. |
 | `linked_revision` | `null` o una revisión existente; el cliente abre su changelog (apartado 3, `?revision=`). |
+
+#### Cuerpo de la noticia
+
+Subconjunto de CommonMark. El servidor lo valida al guardar (`422
+invalid_news_body`, con la línea en `message`) y los dos launchers deben
+aceptar y pintar exactamente lo mismo: casos compartidos en
+[`news-markdown-vectors.json`](news-markdown-vectors.json), que cada cliente
+copia tal cual a sus tests.
+
+| Se admite | Sintaxis |
+|---|---|
+| Párrafos y saltos de línea | Línea en blanco / salto simple |
+| Títulos | `##` y `###` (el `#` es el titular de la noticia; `#`, `####`… se rechazan) |
+| Énfasis | `**negrita**`, `*cursiva*` |
+| Listas | `- ` o `* ` con viñetas, `1. ` numeradas; hasta 2 niveles |
+| Cita | `> ` |
+| Separador | `---` en su propia línea |
+| Enlace | `[texto](https://…)` o una URL `https://` suelta |
+| Imagen | `![alt](https://…)` (externa, p. ej. Imgur) o `![alt](cas:<sha256>)` (subida desde el panel; el servidor comprueba que existe) |
+| Vídeo de YouTube | Un párrafo que es **solo** un enlace a YouTube: `https://www.youtube.com/watch?v=<id>`, `https://youtu.be/<id>` o `https://www.youtube.com/shorts/<id>`, con `<id>` = `[A-Za-z0-9_-]{11}` (se ignoran otros parámetros) |
+
+Se rechaza: HTML (en bloque o en línea), tablas, bloques y spans de código,
+imágenes o enlaces que no sean `https:` (o `cas:` en imágenes), títulos de
+nivel 1 o 4–6, listas de más de 2 niveles, notas al pie y referencias de
+enlace (`[x][1]`). Como máximo 50 imágenes y 10 vídeos por noticia; cada URL
+≤ 2048 bytes.
+
+El cliente:
+
+- Descarga las imágenes externas sin cookies ni credenciales, solo por
+  `https:` (también tras redirecciones, como mucho 3), ≤ 10 MiB y ≤ 4096 px
+  por lado; si fallan, pinta el texto `alt`. Las cachea por URL.
+- Pinta un vídeo como tarjeta con la miniatura
+  `https://i.ytimg.com/vi/<id>/hqdefault.jpg` y un botón de reproducir que
+  abre `https://www.youtube.com/watch?v=<id>` en el navegador del sistema.
+  No incrusta un reproductor.
+- Abre los enlaces en el navegador del sistema, nunca dentro del launcher.
+
+Las imágenes externas y las miniaturas de YouTube hacen que el launcher
+contacte con esos servidores (ven la IP del jugador). Es aceptable en una
+comunidad cerrada; decisión del usuario 2026-10-23, para no gastar disco del
+servidor.
 
 Reglas para el cliente:
 
@@ -770,14 +813,31 @@ nombre del perfil; sin `artwork`, el «Vanilla» que lleva dentro.
 
 #### Texto
 
-Cada revisión tiene un changelog mutable `{title, notes}`: título 0–120 bytes
-en una línea, notas 0–16384 bytes de texto plano. Si el operador nunca lo
-editó, se deriva de `release_notes` firmado (primera línea → `title`, resto →
-`notes`). Las notas automáticas `auto: sigue a …` no se muestran (ver
-«Origen»). La fecha es `revision.created_at` del manifiesto firmado.
+Cada revisión tiene un changelog mutable:
+
+```json
+{
+  "title": "Actualización de Create",
+  "description": "Por qué se hizo esta revisión, en texto plano.",
+  "changes": [ "Create actualizado a 6.0.1", "Arreglado el crasheo al abrir el mapa" ]
+}
+```
+
+| Campo | Regla |
+|---|---|
+| `title` | 0–120 bytes, una línea. |
+| `description` | 0–8192 bytes de texto plano (párrafos). |
+| `changes` | 0–100 cambios; cada uno 1–300 bytes, una línea, texto plano. El cliente los pinta como viñetas. |
+
+Los mods añadidos, quitados y actualizados no se escriben aquí: van aparte en
+`mods`, calculados. Si el operador nunca editó el changelog, se deriva de
+`release_notes` firmado: la primera línea → `title`; las líneas que empiezan
+por `- ` → `changes` (sin el guion); el resto → `description`. Las notas
+automáticas `auto: sigue a …` no se muestran (ver «Origen»). La fecha es
+`revision.created_at` del manifiesto firmado.
 
 ```text
-PUT /v1/admin/revisions/{revision_id}/changelog      # {title, notes}
+PUT /v1/admin/revisions/{revision_id}/changelog      # {title, description, changes}
 ```
 
 #### Origen
@@ -815,7 +875,8 @@ GET /v1/profiles/{profile_id}/changelog?revision=<rev>           # una entrada (
       "revision": { "revision_id": "rev_…", "sequence": 12 },
       "created_at": "2026-10-19T18:30:00Z",
       "title": "Actualización de Create",
-      "notes": "…",
+      "description": "…",
+      "changes": [ "Create actualizado a 6.0.1" ],
       "mods": {
         "added":   [ { "id": "example-mod", "file": "example-mod-1.2.jar" } ],
         "removed": [ { "id": "old-mod", "file": "old-mod-0.9.jar" } ],
