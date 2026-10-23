@@ -175,7 +175,7 @@ async function renderProfilePage() {
 
 function workspaceRoute(target) {
   workspaceState.token++;
-  const labels = { resumen: 'Inicio', perfiles: 'Biblioteca', perfil: 'Biblioteca / Perfil', crear: 'Publicación', servicio: 'Servicio', noticias: 'Noticias' };
+  const labels = { resumen: 'Inicio', perfiles: 'Biblioteca', perfil: 'Biblioteca / Perfil', crear: 'Publicación', servicio: 'Servicio', noticias: 'Noticias', launcher: 'Versiones del launcher' };
   qs('.topbar-label').textContent = 'Distribución / ' + labels[target];
   document.body.dataset.workspaceView = target;
   if (target === 'perfil') renderProfilePage();

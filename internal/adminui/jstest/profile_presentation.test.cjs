@@ -24,11 +24,11 @@ test('artwork author rules', () => {
 });
 
 test('logo file rules', () => {
-  assert.strictEqual(p.logoFileError('image/png', 1000, 64, 32), '');
-  assert.strictEqual(p.logoFileError('image/png', 1000, 1600, 800), '');
+  assert.strictEqual(p.logoFileError('image/png', 1000, 16, 16), '');
+  assert.strictEqual(p.logoFileError('image/png', 1000, 8192, 8192), '');
   assert.notStrictEqual(p.logoFileError('image/jpeg', 1000, 200, 80), '');
-  assert.notStrictEqual(p.logoFileError('image/png', 3 * 1024 * 1024, 200, 80), '');
-  for (const [w, h] of [[63, 80], [200, 31], [1601, 80], [200, 801]]) assert.notStrictEqual(p.logoFileError('image/png', 1000, w, h), '');
+  assert.notStrictEqual(p.logoFileError('image/png', 17 * 1024 * 1024, 200, 80), '');
+  for (const [w, h] of [[15, 80], [200, 15], [8193, 80], [200, 8193]]) assert.notStrictEqual(p.logoFileError('image/png', 1000, w, h), '');
 });
 
 test('inherited label', () => {

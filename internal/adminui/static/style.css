@@ -1247,3 +1247,7 @@ footer {
 @media (max-width: 760px) { .launcher-artifact-row { grid-template-columns: minmax(0, 1fr); } }
 .launcher-edit { margin-top: 1rem; }
 .is-withdrawn td { color: var(--muted); }
+
+.publish-changelog { display: grid; gap: .6rem; margin: 1rem 0; padding: .9rem 1rem; border: 1px solid var(--line, #2a2a30); border-radius: 10px; }
+.publish-changelog label { display: grid; gap: .3rem; }
+.publish-changelog legend { padding: 0 .3rem; font-weight: 600; }

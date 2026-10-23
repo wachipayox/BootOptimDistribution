@@ -25,7 +25,7 @@ import (
 const (
 	maxIconBytes    = 2 * 1024 * 1024
 	maxArtworkBytes = 6 * 1024 * 1024
-	maxLogoBytes    = 2 * 1024 * 1024
+	maxLogoBytes    = 16 << 20
 	artworkWidth    = 1920
 	artworkHeight   = 760
 	maxInheritDepth = 8
@@ -307,8 +307,8 @@ func (a *API) parseLogo(ctx context.Context, raw json.RawMessage) (*revision.Obj
 	if err != nil {
 		return nil, errors.New("logo is not a valid PNG")
 	}
-	if cfg.Width < 64 || cfg.Width > 1600 || cfg.Height < 32 || cfg.Height > 800 {
-		return nil, errors.New("logo must be 64-1600 pixels wide and 32-800 pixels tall")
+	if cfg.Width < 16 || cfg.Width > 8192 || cfg.Height < 16 || cfg.Height > 8192 {
+		return nil, errors.New("logo must be 16-8192 pixels per side")
 	}
 	if !hasAlpha(cfg.ColorModel) {
 		return nil, errors.New("logo must be a PNG with transparency")

@@ -769,8 +769,9 @@ PUT /v1/test/profiles/{profile_id}/presentation      # solo perfiles de prueba
 - `icon`: como hasta ahora (PNG, ≤ 2 MiB, 1–1024 px por lado).
 - `artwork.image`: JPEG o PNG de **exactamente 1920 × 760**, ≤ 6 MiB (el
   panel recorta y escala). `artwork.author`: 1–64 bytes, obligatorio.
-- `logo`: PNG **con alfa** (RGBA, gris+alfa o `tRNS`), ancho 64–1600 y alto
-  32–800, ≤ 2 MiB. El panel no lo recomprime.
+- `logo`: PNG **con alfa** (RGBA, gris+alfa o `tRNS`), 16–8192 px por
+  lado, ≤ 16 MiB. El panel no lo recomprime. El cliente lo reduce al decodificar
+  (p. ej. al doble de su tamaño en pantalla) para no gastar memoria.
 - `android_compatible`: booleano, por defecto `false`.
 - Respuesta: la presentación propia guardada.
 
