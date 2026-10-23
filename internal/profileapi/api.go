@@ -216,6 +216,10 @@ func (a *API) serveRead(w http.ResponseWriter, r *http.Request) {
 		a.handleProfiles(w, r, false)
 		return
 	}
+	if r.URL.Path == "/v1/news" {
+		a.handleNews(w, r)
+		return
+	}
 	parts := pathParts(r.URL.Path)
 
 	if len(parts) == 5 && parts[0] == "v1" && parts[1] == "profiles" && parts[3] == "revisions" {
@@ -238,7 +242,7 @@ func (a *API) serveRead(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) serveAdmin(w http.ResponseWriter, r *http.Request) {
-	if a.serveAdminTest(w, r) {
+	if a.serveAdminTest(w, r) || a.serveAdminNews(w, r) {
 		return
 	}
 	if r.URL.Path == "/v1/admin/publications" {
