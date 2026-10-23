@@ -25,7 +25,7 @@ func presentationPNG(t *testing.T, img image.Image) []byte {
 	return b.Bytes()
 }
 
-func jpegBytes(t *testing.T, w, h int) []byte {
+func presentationJPEG(t *testing.T, w, h int) []byte {
 	t.Helper()
 	var b bytes.Buffer
 	if err := jpeg.Encode(&b, image.NewRGBA(image.Rect(0, 0, w, h)), nil); err != nil {
@@ -110,7 +110,7 @@ func mediaOf(entry map[string]any, field string) string {
 func TestPresentationPartialUpdateAbsentVersusNull(t *testing.T) {
 	env := newTestEnv(t, TestQuotas{})
 	env.seedNormal()
-	art := env.artwork(jpegBytes(t, 1920, 760), "image/jpeg", "Autora")
+	art := env.artwork(presentationJPEG(t, 1920, 760), "image/jpeg", "Autora")
 	logo := env.ref(transparentPNG(t, 200, 80), "image/png")
 
 	if rec := env.put("profile_child", `{"name":"Hijo","description":"Texto","artwork":`+art+`,"logo":`+logo+`}`); rec.Code != 200 {
@@ -157,7 +157,7 @@ func TestPresentationArtworkAndLogoValidation(t *testing.T) {
 	env.seedNormal()
 	paletted := image.NewPaletted(image.Rect(0, 0, 100, 50), color.Palette{color.NRGBA{0, 0, 0, 0}, color.NRGBA{255, 0, 0, 255}})
 	opaquePalette := image.NewPaletted(image.Rect(0, 0, 100, 50), color.Palette{color.RGBA{0, 0, 0, 255}, color.RGBA{255, 0, 0, 255}})
-	jpg := jpegBytes(t, 1920, 760)
+	jpg := presentationJPEG(t, 1920, 760)
 	pngArt := opaquePNG(t, 1920, 760)
 
 	cases := []struct {
@@ -166,8 +166,8 @@ func TestPresentationArtworkAndLogoValidation(t *testing.T) {
 	}{
 		{"artwork jpeg ok", `{"artwork":` + env.artwork(jpg, "image/jpeg", "A") + `}`, "", 200},
 		{"artwork png ok", `{"artwork":` + env.artwork(pngArt, "image/png", "A") + `}`, "", 200},
-		{"artwork wrong width", `{"artwork":` + env.artwork(jpegBytes(t, 1919, 760), "image/jpeg", "A") + `}`, "invalid_artwork", 422},
-		{"artwork wrong height", `{"artwork":` + env.artwork(jpegBytes(t, 1920, 761), "image/jpeg", "A") + `}`, "invalid_artwork", 422},
+		{"artwork wrong width", `{"artwork":` + env.artwork(presentationJPEG(t, 1919, 760), "image/jpeg", "A") + `}`, "invalid_artwork", 422},
+		{"artwork wrong height", `{"artwork":` + env.artwork(presentationJPEG(t, 1920, 761), "image/jpeg", "A") + `}`, "invalid_artwork", 422},
 		{"artwork png declared jpeg", `{"artwork":` + env.artwork(pngArt, "image/jpeg", "A") + `}`, "invalid_artwork", 422},
 		{"artwork webp type", `{"artwork":` + env.artwork(jpg, "image/webp", "A") + `}`, "invalid_artwork", 422},
 		{"artwork not an image", `{"artwork":` + env.artwork([]byte("plain text"), "image/png", "A") + `}`, "invalid_artwork", 422},
@@ -210,7 +210,7 @@ func TestPresentationInheritsThroughThreeLevelsWithReplacement(t *testing.T) {
 	env.publishAdmin(grand)
 
 	icon := env.ref(presentationPNG(t, image.NewRGBA(image.Rect(0, 0, 16, 16))), "image/png")
-	art := env.artwork(jpegBytes(t, 1920, 760), "image/jpeg", "Autora")
+	art := env.artwork(presentationJPEG(t, 1920, 760), "image/jpeg", "Autora")
 	logo := env.ref(transparentPNG(t, 200, 80), "image/png")
 	if rec := env.put("profile_root", `{"icon":`+icon+`,"artwork":`+art+`,"logo":`+logo+`}`); rec.Code != 200 {
 		t.Fatalf("%d %s", rec.Code, rec.Body.String())
@@ -348,7 +348,7 @@ func TestPresentationCatalogShapeOwnPresentationAndETag(t *testing.T) {
 func TestPresentationObjectsArePublicOnlyWhileReferenced(t *testing.T) {
 	env := newTestEnv(t, TestQuotas{})
 	env.seedNormal()
-	artRef := env.ref(jpegBytes(t, 1920, 760), "image/jpeg")
+	artRef := env.ref(presentationJPEG(t, 1920, 760), "image/jpeg")
 	art := `{"image":` + artRef + `,"author":"Autora"}`
 	logo := env.ref(transparentPNG(t, 200, 80), "image/png")
 	artDigest, logoDigest := refDigest(artRef), refDigest(logo)
@@ -380,7 +380,7 @@ func TestTestAPIPutsPresentationOfItsOwnProfilesOnly(t *testing.T) {
 	env.rotate()
 	env.seedNormal()
 	decodePublished(t, env.test("POST", "/v1/test/profiles", `{"slug":"a","parent_profile_id":"profile_root"}`), http.StatusCreated)
-	art := env.artwork(jpegBytes(t, 1920, 760), "image/jpeg", "Autora")
+	art := env.artwork(presentationJPEG(t, 1920, 760), "image/jpeg", "Autora")
 	if rec := env.test("PUT", "/v1/test/profiles/profile_test-a/presentation", `{"name":"Prueba","artwork":`+art+`}`); rec.Code != 200 {
 		t.Fatalf("%d %s", rec.Code, rec.Body.String())
 	}
