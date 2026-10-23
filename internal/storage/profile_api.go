@@ -58,7 +58,7 @@ func (c *CAS) Open(ctx context.Context, digest string) (io.ReadCloser, int64, er
 }
 
 func (s *SQLiteStore) ensureProfileAPISchema(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, profileAPISchema)
+	_, err := s.db.ExecContext(ctx, profileAPISchema+presentationAssetsSchema)
 	if err != nil {
 		return fmt.Errorf("initialize profile API storage: %w", err)
 	}
@@ -265,9 +265,11 @@ func (s *SQLiteStore) PublishedObject(ctx context.Context, digest string) (Objec
 		       FROM revision_objects ro
 		       JOIN revision_envelopes e ON e.revision_id = ro.revision_id
 		       WHERE ro.object_sha256 = o.sha256
-		   ) OR EXISTS (SELECT 1 FROM profile_presentation p WHERE p.icon_sha256 = o.sha256))
+		   ) OR EXISTS (SELECT 1 FROM profile_presentation p WHERE p.icon_sha256 = o.sha256)
+		   OR EXISTS (SELECT 1 FROM profile_presentation_assets pa WHERE pa.sha256 = o.sha256))
 		 UNION SELECT p.icon_sha256, json_extract(p.payload, '$.icon.size') FROM profile_presentation p WHERE p.icon_sha256 = ?
-         LIMIT 1`, digest, digest).Scan(&object.SHA256, &object.Size)
+		 UNION SELECT pa.sha256, pa.size FROM profile_presentation_assets pa WHERE pa.sha256 = ?
+         LIMIT 1`, digest, digest, digest).Scan(&object.SHA256, &object.Size)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Object{}, ErrObjectMissing
 	}
@@ -451,13 +453,6 @@ func (s *SQLiteStore) ProfilePresentation(ctx context.Context, id string) ([]byt
 		return nil, nil
 	}
 	return raw, err
-}
-func (s *SQLiteStore) SetProfilePresentation(ctx context.Context, id string, raw []byte, icon string) error {
-	if err := s.ensureProfileAPISchema(ctx); err != nil {
-		return err
-	}
-	_, err := s.db.ExecContext(ctx, "INSERT INTO profile_presentation(profile_id,payload,icon_sha256) VALUES(?,?,?) ON CONFLICT(profile_id) DO UPDATE SET payload=excluded.payload,icon_sha256=excluded.icon_sha256", id, raw, icon)
-	return err
 }
 
 // DeleteProfile withdraws a profile from the catalog. Immutable revisions remain

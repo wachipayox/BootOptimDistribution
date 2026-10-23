@@ -175,17 +175,21 @@ type channelView struct {
 }
 
 type profileView struct {
-	Presentation   *profilePresentation `json:"presentation,omitempty"`
-	Description    string               `json:"description,omitempty"`
-	Minecraft      string               `json:"minecraft"`
-	NeoForge       string               `json:"neoforge"`
-	Loader         revision.GameLoader  `json:"loader"`
-	Icon           *revision.ObjectRef  `json:"icon,omitempty"`
-	ProfileID      string               `json:"profile_id"`
-	Name           string               `json:"name"`
-	LatestRevision revisionRef          `json:"latest_revision"`
-	Channels       []channelView        `json:"channels"`
-	PublishedCount int                  `json:"published_revision_count,omitempty"`
+	Description     string               `json:"description,omitempty"`
+	ParentProfileID *string              `json:"parent_profile_id"`
+	Artwork         *artworkRef          `json:"artwork"`
+	Logo            *revision.ObjectRef  `json:"logo"`
+	InheritedFrom   inheritedFrom        `json:"inherited_from"`
+	OwnPresentation *profilePresentation `json:"own_presentation,omitempty"`
+	Minecraft       string               `json:"minecraft"`
+	NeoForge        string               `json:"neoforge"`
+	Loader          revision.GameLoader  `json:"loader"`
+	Icon            *revision.ObjectRef  `json:"icon,omitempty"`
+	ProfileID       string               `json:"profile_id"`
+	Name            string               `json:"name"`
+	LatestRevision  revisionRef          `json:"latest_revision"`
+	Channels        []channelView        `json:"channels"`
+	PublishedCount  int                  `json:"published_revision_count,omitempty"`
 }
 
 func (a *API) serveRead(w http.ResponseWriter, r *http.Request) {
@@ -722,29 +726,15 @@ func (a *API) handleProfiles(w http.ResponseWriter, r *http.Request, admin bool)
 				Channels:       profileChannels,
 			})
 		}
-		if store, ok := a.store.(presentationStore); ok && views[i].Presentation == nil {
-			raw, err := store.ProfilePresentation(r.Context(), item.ProfileID)
-			if err != nil {
-				a.writeError(w, 500, "storage_error", "profile presentation unavailable")
-				return
-			}
-			if len(raw) > 0 {
-				var p profilePresentation
-				if json.Unmarshal(raw, &p) != nil {
-					a.writeError(w, 500, "storage_error", "invalid stored presentation")
-					return
-				}
-				views[i].Presentation = &p
-				views[i].Name = p.Name
-				views[i].Description = p.Description
-				views[i].Icon = p.Icon
-			}
-		}
 		if admin {
 			views[i].PublishedCount++
 		}
 	}
-	a.writeJSON(w, http.StatusOK, struct {
+	if err := a.applyPresentations(r.Context(), views, admin); err != nil {
+		a.writeError(w, 500, "storage_error", "profile presentation unavailable")
+		return
+	}
+	a.writeCatalog(w, r, admin, struct {
 		SchemaVersion   int           `json:"schema_version"`
 		ProtocolVersion int           `json:"protocol_version"`
 		Profiles        []profileView `json:"profiles"`
@@ -1124,61 +1114,6 @@ func validDigest(value string) bool {
 		}
 	}
 	return true
-}
-
-type profilePresentation struct {
-	Name        string              `json:"name"`
-	Description string              `json:"description"`
-	Icon        *revision.ObjectRef `json:"icon"`
-}
-type presentationStore interface {
-	ProfilePresentation(context.Context, string) ([]byte, error)
-	SetProfilePresentation(context.Context, string, []byte, string) error
-}
-
-func (a *API) handlePresentation(w http.ResponseWriter, r *http.Request, id string) {
-	store, ok := a.store.(presentationStore)
-	if !ok {
-		a.writeError(w, 503, "unavailable", "presentation storage unavailable")
-		return
-	}
-	if _, err := a.store.ProfileHead(r.Context(), id); err != nil {
-		a.writeError(w, 404, "profile_not_found", "profile not found")
-		return
-	}
-	var p profilePresentation
-	if err := a.decodeJSON(w, r, &p); err != nil {
-		a.writeError(w, 400, "invalid_request", err.Error())
-		return
-	}
-	p.Name = strings.TrimSpace(p.Name)
-	if p.Name == "" || len(p.Name) > 384 || len(p.Description) > 8192 {
-		a.writeError(w, 422, "invalid_presentation", "invalid name or description")
-		return
-	}
-	icon := ""
-	if p.Icon != nil {
-		if p.Icon.MediaType != "image/png" || p.Icon.Size < 1 || p.Icon.Size > 2*1024*1024 {
-			a.writeError(w, 422, "invalid_icon", "invalid icon")
-			return
-		}
-		if err := a.validateProfileIcon(r.Context(), p.Icon); err != nil {
-			a.writeError(w, 422, "invalid_icon", err.Error())
-			return
-		}
-		// CAS bytes must match the declared digest and length before publication.
-		if err := a.objects.Verify(r.Context(), storage.Object{SHA256: p.Icon.SHA256, Size: p.Icon.Size}); err != nil {
-			a.writeError(w, 422, "invalid_icon", "icon integrity check failed")
-			return
-		}
-		icon = p.Icon.SHA256
-	}
-	raw, _ := json.Marshal(p)
-	if err := store.SetProfilePresentation(r.Context(), id, raw, icon); err != nil {
-		a.writeError(w, 500, "storage_error", "could not save presentation")
-		return
-	}
-	a.writeJSON(w, 200, p)
 }
 
 func (a *API) handleDeleteProfile(w http.ResponseWriter, r *http.Request, id string) {
