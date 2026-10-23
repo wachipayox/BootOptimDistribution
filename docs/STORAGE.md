@@ -106,3 +106,10 @@ same-sequence concurrent publication. Missing coverage is deliberate fault
 injection for kernel/fsync/ENOSPC/power-loss behavior, hostile concurrent state
 mutation by another process, multi-process writers, and any future GC. Those
 need dedicated integration/fault tests rather than simulated success claims.
+
+## Revision changelog text
+
+`revision_changelog(revision_id, title, description, changes JSON, updated_at)`
+lives in `metadata.sqlite3` and holds the mutable, unsigned operator text of a
+revision (created idempotently on first use). Everything else of the changelog
+(origin, mod differences, dates) is derived from the signed manifests.

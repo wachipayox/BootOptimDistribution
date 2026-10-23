@@ -519,6 +519,7 @@ function renderProfileRevisions(profileIdValue, container, revisions) {
       });
       promoteRow.appendChild(promoteButton);
       card.append(promoteRow, promoteStatus);
+      if (typeof renderRevisionChangelog === 'function') card.appendChild(renderRevisionChangelog(profileIdValue, revisionIdentifier));
     }
     fragment.appendChild(card);
   });
