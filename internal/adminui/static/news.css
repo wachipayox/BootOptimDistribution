@@ -1,0 +1,31 @@
+/* Sección Noticias del panel. */
+.news-heading-actions { display: flex; gap: .6rem; flex-wrap: wrap; }
+.news-table-wrap { overflow-x: auto; }
+.news-table { width: 100%; border-collapse: collapse; }
+.news-table th, .news-table td { padding: .6rem .5rem; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+.news-table th { color: var(--muted); font-size: .8rem; font-weight: 650; }
+.news-actions { display: flex; gap: .4rem; white-space: nowrap; }
+
+.news-dialog { width: min(1100px, 96vw); max-height: 94vh; overflow: auto; }
+.news-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
+.news-check { display: flex; align-items: center; gap: .5rem; }
+.news-check input { width: auto; min-height: 0; }
+.news-expiry, .news-link, .news-cover { display: grid; gap: .5rem; }
+.news-cover-preview { width: 320px; max-width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--line); border-radius: .5rem; }
+.news-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
+.news-body-box, .news-preview-box { display: grid; gap: .4rem; align-content: start; min-width: 0; }
+.news-body-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.news-body { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .86rem; }
+.news-preview { min-height: 12rem; max-height: 26rem; overflow: auto; padding: .7rem .9rem; border: 1px solid var(--line); border-radius: .6rem; background: var(--surface-muted); overflow-wrap: anywhere; }
+.news-preview blockquote { margin: .5rem 0; padding-left: .8rem; border-left: 3px solid var(--line); color: var(--muted); }
+.news-preview h4, .news-preview h5 { margin: .8rem 0 .3rem; }
+.news-preview-image, .news-preview-video { display: inline-block; padding: .3rem .6rem; border: 1px dashed var(--line); border-radius: .4rem; color: var(--muted); }
+.news-preview-image img { max-width: 100%; display: block; }
+.news-preview-video { display: flex; gap: .6rem; }
+.news-preview-invalid { color: var(--danger); }
+.news-warnings { margin: 0; padding-left: 1.1rem; color: var(--danger); font-size: .85rem; }
+.news-category-rows { display: grid; gap: .5rem; }
+.news-category-row { display: grid; grid-template-columns: minmax(0, 1fr) 6rem auto; gap: .5rem; align-items: center; }
+@media (max-width: 800px) {
+  .news-form-grid, .news-editor { grid-template-columns: minmax(0, 1fr); }
+}
