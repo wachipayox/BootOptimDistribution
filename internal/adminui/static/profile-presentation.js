@@ -81,6 +81,8 @@ async function editProfilePresentation(profile) {
   };
   const name = make('input'); name.value = own.name || profileName(profile); name.maxLength = 96;
   const description = make('textarea'); description.value = own.description ?? profile.description ?? ''; description.maxLength = 8192; description.rows = 4;
+  const android = make('input'); android.type = 'checkbox'; android.checked = !!(profile.android_compatible || own.android_compatible);
+  const androidField = make('label', 'checkbox-field'); androidField.append(android, make('span', '', ' Compatible con Android'));
   const status = make('p', 'inline-status'); status.setAttribute('role', 'status');
   const save = make('button', 'button button-primary', 'Guardar cambios'); save.type = 'button';
   const close = make('button', 'button button-secondary', 'Cancelar'); close.type = 'button';
@@ -153,7 +155,7 @@ async function editProfilePresentation(profile) {
   }
 
   content.append(make('h3', '', 'Editar perfil'), field('Nombre', name), field('Descripción', description),
-    icon.wrapper, artwork.wrapper, authorField, logo.wrapper, status, save, close);
+    icon.wrapper, artwork.wrapper, authorField, logo.wrapper, androidField, status, save, close);
   dialog.append(content); document.body.append(dialog); dialog.showModal();
   close.addEventListener('click', () => dialog.close());
   save.addEventListener('click', async () => {
@@ -165,7 +167,7 @@ async function editProfilePresentation(profile) {
     if (authorChanged && authorProblem) { status.textContent = authorProblem; author.focus(); return; }
     save.disabled = close.disabled = true; status.textContent = 'Guardando…';
     try {
-      const body = { name: name.value.trim(), description: description.value.trim() };
+      const body = { name: name.value.trim(), description: description.value.trim(), android_compatible: android.checked };
       for (const [api, key] of [[icon, 'icon'], [logo, 'logo']]) {
         if (api.change === null) body[key] = null;
         else if (api.change) {

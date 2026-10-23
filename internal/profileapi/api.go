@@ -175,21 +175,22 @@ type channelView struct {
 }
 
 type profileView struct {
-	Description     string               `json:"description,omitempty"`
-	ParentProfileID *string              `json:"parent_profile_id"`
-	Artwork         *artworkRef          `json:"artwork"`
-	Logo            *revision.ObjectRef  `json:"logo"`
-	InheritedFrom   inheritedFrom        `json:"inherited_from"`
-	OwnPresentation *profilePresentation `json:"own_presentation,omitempty"`
-	Minecraft       string               `json:"minecraft"`
-	NeoForge        string               `json:"neoforge"`
-	Loader          revision.GameLoader  `json:"loader"`
-	Icon            *revision.ObjectRef  `json:"icon,omitempty"`
-	ProfileID       string               `json:"profile_id"`
-	Name            string               `json:"name"`
-	LatestRevision  revisionRef          `json:"latest_revision"`
-	Channels        []channelView        `json:"channels"`
-	PublishedCount  int                  `json:"published_revision_count,omitempty"`
+	Description       string               `json:"description,omitempty"`
+	ParentProfileID   *string              `json:"parent_profile_id"`
+	Artwork           *artworkRef          `json:"artwork"`
+	Logo              *revision.ObjectRef  `json:"logo"`
+	InheritedFrom     inheritedFrom        `json:"inherited_from"`
+	AndroidCompatible bool                 `json:"android_compatible"`
+	OwnPresentation   *profilePresentation `json:"own_presentation,omitempty"`
+	Minecraft         string               `json:"minecraft"`
+	NeoForge          string               `json:"neoforge"`
+	Loader            revision.GameLoader  `json:"loader"`
+	Icon              *revision.ObjectRef  `json:"icon,omitempty"`
+	ProfileID         string               `json:"profile_id"`
+	Name              string               `json:"name"`
+	LatestRevision    revisionRef          `json:"latest_revision"`
+	Channels          []channelView        `json:"channels"`
+	PublishedCount    int                  `json:"published_revision_count,omitempty"`
 }
 
 func (a *API) serveRead(w http.ResponseWriter, r *http.Request) {
