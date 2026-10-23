@@ -223,6 +223,14 @@ func (a *API) serveRead(w http.ResponseWriter, r *http.Request) {
 	}
 	parts := pathParts(r.URL.Path)
 
+	if len(parts) == 4 && parts[0] == "v1" && parts[1] == "profiles" && parts[3] == "changelog" {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			a.methodNotAllowed(w, http.MethodGet, http.MethodHead)
+			return
+		}
+		a.handleChangelog(w, r, parts[2])
+		return
+	}
 	if len(parts) == 5 && parts[0] == "v1" && parts[1] == "profiles" && parts[3] == "revisions" {
 		if r.Method != http.MethodGet {
 			a.methodNotAllowed(w, http.MethodGet)
@@ -305,6 +313,14 @@ func (a *API) serveAdmin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.handlePresentation(w, r, parts[3])
+		return
+	}
+	if len(parts) == 5 && parts[0] == "v1" && parts[1] == "admin" && parts[2] == "revisions" && parts[4] == "changelog" {
+		if r.Method != http.MethodPut {
+			a.methodNotAllowed(w, http.MethodPut)
+			return
+		}
+		a.handleRevisionChangelog(w, r, parts[3])
 		return
 	}
 	if len(parts) == 5 && parts[0] == "v1" && parts[1] == "admin" && parts[2] == "profiles" && parts[4] == "revisions" {

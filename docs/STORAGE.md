@@ -117,3 +117,10 @@ need dedicated integration/fault tests rather than simulated success claims.
 `profile_presentation_assets(profile_id, kind, sha256, size)` lives in
 `metadata.sqlite3` and lists the artwork and logo objects a profile's own
 presentation references. `PublishedObject` serves them while a row exists.
+
+## Revision changelog text
+
+`revision_changelog(revision_id, title, description, changes JSON, updated_at)`
+lives in `metadata.sqlite3` and holds the mutable, unsigned operator text of a
+revision (created idempotently on first use). Everything else of the changelog
+(origin, mod differences, dates) is derived from the signed manifests.
