@@ -633,7 +633,7 @@ async function waitForServiceRestart(previousCommit, targetVersion) {
 }
 
 function route() {
-  const allowed = ['resumen', 'perfiles', 'crear', 'servicio', 'perfil'];
+  const allowed = ['resumen', 'perfiles', 'crear', 'servicio', 'perfil', 'launcher'];
   const requested = window.location.hash.replace(/^#/, '');
   const root = requested.split('/')[0];
   const target = allowed.includes(root) ? root : 'resumen';

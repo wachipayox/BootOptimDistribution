@@ -265,7 +265,8 @@ func (s *SQLiteStore) PublishedObject(ctx context.Context, digest string) (Objec
 		       FROM revision_objects ro
 		       JOIN revision_envelopes e ON e.revision_id = ro.revision_id
 		       WHERE ro.object_sha256 = o.sha256
-		   ) OR EXISTS (SELECT 1 FROM profile_presentation p WHERE p.icon_sha256 = o.sha256))
+		   ) OR EXISTS (SELECT 1 FROM profile_presentation p WHERE p.icon_sha256 = o.sha256)
+		   OR EXISTS (SELECT 1 FROM launcher_artifacts la JOIN launcher_releases lr ON lr.app = la.app AND lr.version = la.version WHERE la.sha256 = o.sha256 AND lr.withdrawn_at IS NULL))
 		 UNION SELECT p.icon_sha256, json_extract(p.payload, '$.icon.size') FROM profile_presentation p WHERE p.icon_sha256 = ?
          LIMIT 1`, digest, digest).Scan(&object.SHA256, &object.Size)
 	if errors.Is(err, sql.ErrNoRows) {

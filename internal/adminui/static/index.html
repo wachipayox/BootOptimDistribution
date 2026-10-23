@@ -21,6 +21,7 @@
       <nav class="main-nav" aria-label="Administración">
         <a href="#resumen" data-nav="resumen"><span class="nav-icon" aria-hidden="true">⌂</span><span>Inicio</span></a>
         <a href="#perfiles" data-nav="perfiles"><span class="nav-icon" aria-hidden="true">▤</span><span>Perfiles globales</span></a>
+        <a href="#launcher" data-nav="launcher"><span class="nav-icon" aria-hidden="true">⇪</span><span>Versiones del launcher</span></a>
         <a href="#servicio" data-nav="servicio"><span class="nav-icon" aria-hidden="true">⚙</span><span>Servicio</span></a>
       </nav>
       <div class="sidebar-footer"><span class="online-dot" aria-hidden="true"></span><span>Panel privado</span></div>
@@ -280,6 +281,52 @@
       <div class="wizard-navigation"><button id="wizard-back" type="button" class="button button-secondary">Anterior</button><p id="wizard-status" class="microcopy" role="status"></p><button id="wizard-next" type="button" class="button button-primary">Revisar cambios →</button></div>
     </section>
 
+    <section class="view" data-view="launcher" aria-labelledby="launcher-title" hidden>
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">LAUNCHERS</p>
+          <h2 id="launcher-title">Versiones del launcher</h2>
+          <p class="lede">Publica los binarios de Pandora y del launcher Android. El servidor firma cada binario al publicarlo; una versión publicada no se modifica ni se reutiliza.</p>
+        </div>
+      </div>
+      <section class="panel" aria-labelledby="launcher-publish-title">
+        <h3 id="launcher-publish-title">Publicar versión</h3>
+        <form id="launcher-form" class="launcher-form">
+          <div class="form-grid">
+            <label><span>Aplicación</span><select id="launcher-app"><option value="pandora">Pandora</option><option value="android">Android</option></select></label>
+            <label><span>Versión <small>(SemVer, p. ej. 1.4.0 o 1.5.0-rc.1)</small></span><input id="launcher-version" autocomplete="off" required placeholder="1.4.0"></label>
+            <label><span>Canal</span><select id="launcher-channel"><option value="player">Jugador</option><option value="developer">Desarrollador (también ve las de jugador)</option></select></label>
+            <label class="span-2"><span>Notas de la versión <small>(texto plano)</small></span><textarea id="launcher-notes" rows="5" maxlength="16384"></textarea></label>
+          </div>
+          <h4 class="test-api-subtitle">Binarios por plataforma</h4>
+          <datalist id="launcher-platform-options"></datalist>
+          <div id="launcher-artifact-rows" class="launcher-artifact-rows"></div>
+          <div class="service-update-actions">
+            <button id="launcher-add-artifact" class="button button-secondary" type="button">Añadir plataforma</button>
+            <button id="launcher-publish" class="button button-primary" type="submit">Subir y publicar</button>
+          </div>
+        </form>
+        <p id="launcher-status" class="service-update-status" role="status" aria-live="polite"></p>
+      </section>
+      <form id="launcher-edit" class="panel launcher-edit" hidden>
+        <h3 id="launcher-edit-title">Editar versión</h3>
+        <div class="form-grid">
+          <label><span>Canal</span><select id="launcher-edit-channel"><option value="player">Jugador</option><option value="developer">Desarrollador</option></select></label>
+          <label class="span-2"><span>Notas</span><textarea id="launcher-edit-notes" rows="5" maxlength="16384"></textarea></label>
+        </div>
+        <p class="microcopy">Solo cambian el canal y las notas; el binario y su firma son inmutables.</p>
+        <div class="service-update-actions">
+          <button class="button button-primary" type="submit">Guardar</button>
+          <button id="launcher-edit-cancel" class="button button-secondary" type="button">Cancelar</button>
+        </div>
+      </form>
+      <section class="panel" aria-labelledby="launcher-list-title">
+        <h3 id="launcher-list-title">Versiones publicadas</h3>
+        <div class="service-update-actions"><button id="launcher-refresh" class="button button-secondary" type="button">Actualizar</button></div>
+        <div id="launcher-release-lists"></div>
+      </section>
+    </section>
+
     <section class="view" data-view="servicio" aria-labelledby="service-title" hidden>
       <div class="page-heading">
         <div>
@@ -427,5 +474,6 @@
   <script src="/admin/assets/jvm-options.js?refresh=admin-jvm-options-0223" defer></script>
   <script src="/admin/assets/file-rename.js?refresh=admin-rename-0224" defer></script>
   <script src="/admin/assets/test-profiles.js?refresh=admin-test-profiles-0300" defer></script>
+  <script src="/admin/assets/launcher-releases.js?refresh=admin-launcher-0400" defer></script>
 </body>
 </html>

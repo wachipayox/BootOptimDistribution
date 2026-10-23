@@ -975,8 +975,11 @@ defecto `player`; `developer` ve también las de `player`.
 ```
 
 firmado con Ed25519 por la clave de publicación del servidor (la de
-`/v1/signing-keys`; `type` impide confundirlo con un manifiesto). Antes de
-instalar, el cliente:
+`/v1/signing-keys`; `type` impide confundirlo con un manifiesto). La firma es
+Ed25519 sobre los bytes canónicos exactos; `statement` y `signature.value` van
+en base64url sin relleno (como `signature.value` de las revisiones) y el
+cliente verifica sobre los bytes decodificados de `statement`, sin
+recanonicalizar. Antes de instalar, el cliente:
 
 1. Verifica la firma con una clave conocida (mismas reglas que para las
    revisiones: descubrimiento por `/v1/signing-keys` y nunca contra una clave
