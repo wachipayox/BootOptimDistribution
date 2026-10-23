@@ -96,6 +96,15 @@ SQLite itself still enforces database constraints. Deploy exactly one writer
 process per state directory. There is no multi-process filesystem/SQLite commit
 protocol and no GC process in this cut.
 
+## Launcher releases (0.4.0)
+
+`launcher_releases` (app, version, channel, notes, published_at, withdrawn_at)
+and `launcher_artifacts` (app, version, platform, file_name, sha256, size,
+statement, key_id, signature) live in `metadata.sqlite3`. Artifacts are
+immutable (triggers), releases are never deleted and `(app, version)` is unique
+by SemVer precedence forever. Binaries are ordinary CAS objects, served
+publicly only while a non-withdrawn release references them.
+
 ## Dependency and test scope
 
 New direct dependency: `modernc.org/sqlite v1.20.4`, a CGo-free SQLite driver,

@@ -1241,3 +1241,9 @@ footer {
 .test-profile-table td:nth-child(2), .test-profile-table td:nth-child(4), .test-profile-table td:nth-child(6), .test-profile-table td:last-child { white-space: nowrap; overflow-wrap: normal; }
 .test-profile-table td:first-child { min-width: 12rem; }
 .test-profile-table td:nth-child(3), .test-profile-table td:nth-child(5) { min-width: 10rem; font-size: .82rem; }
+
+.launcher-artifact-rows { display: grid; gap: .6rem; margin-bottom: .8rem; }
+.launcher-artifact-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1.4fr) auto; gap: .6rem; align-items: end; }
+@media (max-width: 760px) { .launcher-artifact-row { grid-template-columns: minmax(0, 1fr); } }
+.launcher-edit { margin-top: 1rem; }
+.is-withdrawn td { color: var(--muted); }

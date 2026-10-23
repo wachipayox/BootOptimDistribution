@@ -19,6 +19,8 @@ func TestRestrictToCIDRPublicReads(t *testing.T) {
 		{"HEAD", "/v1/profiles/p/revisions/r/manifest", "203.0.113.7:5000", true, 200},
 		{"GET", "/v1/signing-keys", "203.0.113.7:5000", true, 200},
 		{"GET", "/healthz", "203.0.113.7:5000", true, 200},
+		{"GET", "/v1/launcher/pandora/releases", "203.0.113.7:5000", true, 200},
+		{"POST", "/v1/admin/launcher-releases", "203.0.113.7:5000", true, 403},
 		{"POST", "/v1/profiles", "203.0.113.7:5000", true, 403},
 		{"GET", "/v1/admin/profiles", "203.0.113.7:5000", true, 403},
 		{"GET", "/v1/../admin/", "203.0.113.7:5000", true, 403},

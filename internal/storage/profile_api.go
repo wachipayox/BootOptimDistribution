@@ -267,7 +267,8 @@ func (s *SQLiteStore) PublishedObject(ctx context.Context, digest string) (Objec
 		       WHERE ro.object_sha256 = o.sha256
 		   ) OR EXISTS (SELECT 1 FROM profile_presentation p WHERE p.icon_sha256 = o.sha256)
 		   OR EXISTS (SELECT 1 FROM profile_presentation_assets pa WHERE pa.sha256 = o.sha256)
-		   OR EXISTS (SELECT 1 FROM news_objects n WHERE n.sha256 = o.sha256))
+		   OR EXISTS (SELECT 1 FROM news_objects n WHERE n.sha256 = o.sha256)
+		   OR EXISTS (SELECT 1 FROM launcher_artifacts la JOIN launcher_releases lr ON lr.app = la.app AND lr.version = la.version WHERE la.sha256 = o.sha256 AND lr.withdrawn_at IS NULL))
 		 UNION SELECT p.icon_sha256, json_extract(p.payload, '$.icon.size') FROM profile_presentation p WHERE p.icon_sha256 = ?
 		 UNION SELECT pa.sha256, pa.size FROM profile_presentation_assets pa WHERE pa.sha256 = ?
 		 UNION SELECT n.sha256, n.size FROM news_objects n WHERE n.sha256 = ?

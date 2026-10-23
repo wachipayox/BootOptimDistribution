@@ -196,3 +196,9 @@ func (s *Signer) SignRollback(eventID string, statement revision.RollbackStateme
 		Signature: revision.Signature{KeyID: s.id, Algorithm: revision.SignatureAlgorithm, Value: base64.RawURLEncoding.EncodeToString(ed25519.Sign(s.private, canonical))},
 	})
 }
+
+// SignBytes signs already-canonical bytes (for example a launcher artifact
+// statement) with the server identity. The private key never leaves Signer.
+func (s *Signer) SignBytes(canonical []byte) revision.Signature {
+	return revision.Signature{KeyID: s.id, Algorithm: revision.SignatureAlgorithm, Value: base64.RawURLEncoding.EncodeToString(ed25519.Sign(s.private, canonical))}
+}

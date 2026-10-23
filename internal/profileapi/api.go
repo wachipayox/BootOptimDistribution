@@ -194,6 +194,9 @@ type profileView struct {
 }
 
 func (a *API) serveRead(w http.ResponseWriter, r *http.Request) {
+	if a.serveLauncherRead(w, r) {
+		return
+	}
 	if r.URL.Path == "/v1/signing-keys" {
 		if r.Method != http.MethodGet {
 			a.methodNotAllowed(w, http.MethodGet)
@@ -252,6 +255,9 @@ func (a *API) serveRead(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) serveAdmin(w http.ResponseWriter, r *http.Request) {
 	if a.serveAdminTest(w, r) || a.serveAdminNews(w, r) {
+		return
+	}
+	if a.serveLauncherAdmin(w, r) {
 		return
 	}
 	if r.URL.Path == "/v1/admin/publications" {
