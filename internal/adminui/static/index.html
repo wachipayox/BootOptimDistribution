@@ -7,6 +7,7 @@
   <title>Wachiland · Distribución</title>
   <link rel="stylesheet" href="/admin/assets/style.css?refresh=admin-jvm-options-0223">
   <link rel="stylesheet" href="/admin/assets/admin-workspace.css?refresh=admin-jvm-options-0223">
+  <link rel="stylesheet" href="/admin/assets/news.css?refresh=admin-news-0400">
 </head>
 <body>
   <a class="skip-link" href="#main">Ir al contenido</a>
@@ -21,6 +22,7 @@
       <nav class="main-nav" aria-label="Administración">
         <a href="#resumen" data-nav="resumen"><span class="nav-icon" aria-hidden="true">⌂</span><span>Inicio</span></a>
         <a href="#perfiles" data-nav="perfiles"><span class="nav-icon" aria-hidden="true">▤</span><span>Perfiles globales</span></a>
+        <a href="#noticias" data-nav="noticias"><span class="nav-icon" aria-hidden="true">✎</span><span>Noticias</span></a>
         <a href="#launcher" data-nav="launcher"><span class="nav-icon" aria-hidden="true">⇪</span><span>Versiones del launcher</span></a>
         <a href="#servicio" data-nav="servicio"><span class="nav-icon" aria-hidden="true">⚙</span><span>Servicio</span></a>
       </nav>
@@ -281,6 +283,30 @@
       <div class="wizard-navigation"><button id="wizard-back" type="button" class="button button-secondary">Anterior</button><p id="wizard-status" class="microcopy" role="status"></p><button id="wizard-next" type="button" class="button button-primary">Revisar cambios →</button></div>
     </section>
 
+    <section class="view" data-view="noticias" aria-labelledby="news-title" hidden>
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">LAUNCHERS</p>
+          <h2 id="news-title">Noticias</h2>
+          <p class="lede">Avisos y novedades que ven los jugadores en Pandora y en el launcher Android. Los cambios se publican al guardar.</p>
+        </div>
+        <div class="news-heading-actions">
+          <button id="edit-news-categories" class="button button-secondary" type="button">Categorías</button>
+          <button id="new-news" class="button button-primary" type="button">＋ Nueva noticia</button>
+        </div>
+      </div>
+      <section id="news-root" class="panel" aria-labelledby="news-list-title">
+        <div class="section-heading">
+          <div><h3 id="news-list-title">Noticias publicadas</h3><p id="news-count" class="microcopy"></p></div>
+        </div>
+        <p id="news-status" class="inline-status" role="status"></p>
+        <div class="news-table-wrap">
+          <table class="news-table">
+            <thead><tr><th scope="col">Título</th><th scope="col">Categoría</th><th scope="col">Destino</th><th scope="col">Fijada</th><th scope="col">Caducidad</th><th scope="col"><span class="visually-hidden">Acciones</span></th></tr></thead>
+            <tbody id="news-rows"></tbody>
+          </table>
+        </div>
+        <p id="news-empty" class="empty-state" role="status">Todavía no hay noticias.</p>
     <section class="view" data-view="launcher" aria-labelledby="launcher-title" hidden>
       <div class="page-heading">
         <div>
@@ -469,11 +495,14 @@
   <script src="/admin/assets/jvm-options-rules.js?refresh=admin-jvm-options-0223" defer></script>
   <script src="/admin/assets/loaders.js?refresh=admin-loaders-0224" defer></script>
   <script src="/admin/assets/app.js?refresh=admin-jvm-options-0223" defer></script>
+  <script src="/admin/assets/profile-presentation.js?refresh=admin-presentation-0400" defer></script>
   <script src="/admin/assets/profile-workbench.js?refresh=admin-jvm-options-0223" defer></script>
   <script src="/admin/assets/admin-workspace.js?refresh=admin-jvm-options-0223" defer></script>
   <script src="/admin/assets/jvm-options.js?refresh=admin-jvm-options-0223" defer></script>
   <script src="/admin/assets/file-rename.js?refresh=admin-rename-0224" defer></script>
+  <script src="/admin/assets/changelog.js?refresh=admin-changelog-0400" defer></script>
   <script src="/admin/assets/test-profiles.js?refresh=admin-test-profiles-0300" defer></script>
+  <script src="/admin/assets/news.js?refresh=admin-news-0400" defer></script>
   <script src="/admin/assets/launcher-releases.js?refresh=admin-launcher-0400" defer></script>
 </body>
 </html>

@@ -105,3 +105,19 @@ func TestServicePanelHasTestProfileControls(t *testing.T) {
 		t.Fatalf("test-profiles.js: %d", script.Code)
 	}
 }
+
+func TestNewsPanelIsLinked(t *testing.T) {
+	handler := NewHandler(EmptyReadModel{}, BuildInfo{Version: "test", Commit: "test"})
+	page := httptest.NewRecorder()
+	handler.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/admin/", nil))
+	for _, fragment := range []string{`data-nav="noticias"`, `data-view="noticias"`, `id="news-rows"`, `id="new-news"`, `id="edit-news-categories"`, "/admin/assets/news.js?refresh=admin-news-0400", "/admin/assets/news.css?refresh=admin-news-0400"} {
+		if !strings.Contains(page.Body.String(), fragment) {
+			t.Errorf("Noticias is missing %q", fragment)
+		}
+	}
+	script := httptest.NewRecorder()
+	handler.ServeHTTP(script, httptest.NewRequest(http.MethodGet, "/admin/assets/news.js", nil))
+	if script.Code != http.StatusOK || !strings.Contains(script.Body.String(), "/v1/admin/news-categories") {
+		t.Fatalf("news.js: %d", script.Code)
+	}
+}

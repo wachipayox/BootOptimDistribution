@@ -133,6 +133,9 @@ func (s *SQLiteStore) initialize() error {
 	if _, err := s.db.Exec(testProfilesSchema); err != nil {
 		return fmt.Errorf("initialize test profile schema: %w", err)
 	}
+	if _, err := s.db.Exec(newsSchema); err != nil {
+		return fmt.Errorf("initialize news schema: %w", err)
+	}
 	return nil
 }
 
