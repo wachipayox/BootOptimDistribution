@@ -44,6 +44,11 @@ physical check and the transaction commits. Schema triggers reject update or
 delete of published revisions, their object edges, and published object rows.
 There is no revision/object GC in v1.
 
+News (0.4.0) live in the same `metadata.sqlite3`: `news_categories`, `news_items`
+(public JSON payload), `news_changes` (append-only change log; its AUTOINCREMENT id is the sync cursor and
+delete rows are the tombstones, kept forever) and `news_objects` (CAS objects a live news item references;
+they are served publicly only while a row exists).
+
 ## Default layout and permissions
 
 The deployment default remains the PR #35 layout:
