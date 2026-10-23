@@ -25,7 +25,7 @@ import (
 const (
 	maxIconBytes    = 2 * 1024 * 1024
 	maxArtworkBytes = 6 * 1024 * 1024
-	maxLogoBytes = 16 << 20
+	maxLogoBytes    = 16 << 20
 	artworkWidth    = 1920
 	artworkHeight   = 760
 	maxInheritDepth = 8
