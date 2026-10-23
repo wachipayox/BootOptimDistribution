@@ -111,3 +111,9 @@ same-sequence concurrent publication. Missing coverage is deliberate fault
 injection for kernel/fsync/ENOSPC/power-loss behavior, hostile concurrent state
 mutation by another process, multi-process writers, and any future GC. Those
 need dedicated integration/fault tests rather than simulated success claims.
+
+## Profile presentation assets (0.4.0)
+
+`profile_presentation_assets(profile_id, kind, sha256, size)` lives in
+`metadata.sqlite3` and lists the artwork and logo objects a profile's own
+presentation references. `PublishedObject` serves them while a row exists.

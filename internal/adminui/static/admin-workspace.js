@@ -10,7 +10,7 @@ function activeProfileRef(profile) {
   return stable || null;
 }
 function profileIcon(profile, className) {
-  const icon = profile.presentation ? profile.presentation.icon : profile.icon;
+  const icon = profile.icon;
   const holder = make('div', className || 'library-icon');
   if (icon && /^[a-f0-9]{64}$/.test(icon.sha256 || '')) {
     const image = make('img'); image.alt = ''; image.loading = 'lazy';
@@ -20,7 +20,7 @@ function profileIcon(profile, className) {
   } else holder.textContent = profileName(profile).slice(0, 1);
   return holder;
 }
-function profileDescription(profile) { return (profile.presentation ? profile.presentation.description : profile.description) || 'Sin descripción todavía.'; }
+function profileDescription(profile) { return profile.description || 'Sin descripción todavía.'; }
 function workspaceButton(label, action, primary) {
   const button = make('button', 'button ' + (primary ? 'button-primary' : 'button-secondary'), label);
   button.type = 'button'; button.addEventListener('click', action); return button;
@@ -139,7 +139,7 @@ async function renderProfilePage() {
   try {
     if (tab === 'ajustes') {
       body.replaceChildren(); const presentation = make('section', 'panel settings-section');
-      presentation.append(make('h3', '', 'Presentación del perfil'), make('p', 'microcopy', 'Nombre, descripción e icono del launcher. Estos cambios no publican una versión del modpack.'), workspaceButton('Editar presentación', () => editProfilePresentation(profile)));
+      presentation.append(make('h3', '', 'Presentación del perfil'), make('p', 'microcopy', 'Nombre, descripción, icono, artwork y logo del launcher. Estos cambios no publican una versión del modpack.'), workspaceButton('Editar presentación', () => editProfilePresentation(profile)));
       const danger = make('details', 'panel danger-zone'); danger.appendChild(make('summary', '', 'Zona de eliminación'));
       danger.append(make('p', 'microcopy', 'Retira el perfil del catálogo. El historial se conserva para las instancias y ramas existentes.'), workspaceButton('Borrar perfil', () => deleteGlobalProfile(profile)));
       body.append(presentation, danger); return;
