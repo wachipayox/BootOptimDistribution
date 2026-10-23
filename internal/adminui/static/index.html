@@ -256,6 +256,12 @@
             <p id="stage-status" class="inline-status" role="status">Pendiente.</p>
             <progress id="stage-progress" max="1" value="0" hidden></progress>
 
+            <fieldset class="publish-changelog">
+              <legend>Changelog de esta versión <small>(opcional, lo ven los jugadores)</small></legend>
+              <label><span>Título</span><input id="publish-changelog-title" type="text" maxlength="120" placeholder="Actualización de Create"></label>
+              <label><span>Descripción</span><textarea id="publish-changelog-description" rows="3" maxlength="8192" placeholder="Por qué se hace esta versión"></textarea></label>
+              <label><span>Cambios <small>(uno por línea; los mods añadidos y quitados se calculan solos)</small></span><textarea id="publish-changelog-changes" rows="4"></textarea></label>
+            </fieldset>
             <div class="publish-final">
               <label class="check-row">
                 <input id="confirm-diff" type="checkbox">
@@ -307,6 +313,9 @@
           </table>
         </div>
         <p id="news-empty" class="empty-state" role="status">Todavía no hay noticias.</p>
+      </section>
+    </section>
+
     <section class="view" data-view="launcher" aria-labelledby="launcher-title" hidden>
       <div class="page-heading">
         <div>

@@ -2193,6 +2193,7 @@ async function publishEnvelope() {
       if (promotionError) setStatus(nodes.publishStatus, 'Versión publicada, pero no activada: ' + promotionError + '. Puedes activarla desde «Ver revisiones».', 'warning');
       else setStatus(nodes.publishStatus, 'Versión ' + state.manifest.revision.sequence + ' publicada' + (qs('#activate-update').checked ? ' y activada para los launchers.' : '. Puedes activarla desde «Ver revisiones».'), 'success');
     }
+    await savePublishChangelog(revision);
     appendAutoFollowSummary(published && published.auto_follow);
     updatePublishEnabled();
     await loadOverview();
@@ -2200,6 +2201,30 @@ async function publishEnvelope() {
   } catch (error) {
     setStatus(nodes.publishStatus, 'La publicación no fue aceptada: ' + describeError(error), 'error');
     updatePublishEnabled();
+  }
+}
+
+// Optional changelog typed in «Subir y publicar»: saved on the new revision
+// right after publication (the text is mutable and unsigned).
+function publishChangelogBody() {
+  const title = qs('#publish-changelog-title').value.trim();
+  const description = qs('#publish-changelog-description').value.trim();
+  const changes = qs('#publish-changelog-changes').value.split(/\r?\n/).map(function (line) { return line.trim().replace(/^[-*]\s+/, ''); }).filter(Boolean);
+  if (!title && !description && changes.length === 0) return null;
+  return { title: title, description: description, changes: changes };
+}
+
+async function savePublishChangelog(revision) {
+  const body = publishChangelogBody();
+  if (!body || !revision) return;
+  try {
+    await request('/v1/admin/revisions/' + encodeURIComponent(revision) + '/changelog', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    ['#publish-changelog-title', '#publish-changelog-description', '#publish-changelog-changes'].forEach(function (id) { qs(id).value = ''; });
+    nodes.publishStatus.textContent += ' Changelog guardado.';
+  } catch (error) {
+    setStatus(nodes.publishStatus, nodes.publishStatus.textContent + ' El changelog no se guardó: ' + describeError(error) + '. Puedes escribirlo desde «Ver revisiones» → Changelog.', 'warning');
   }
 }
 
