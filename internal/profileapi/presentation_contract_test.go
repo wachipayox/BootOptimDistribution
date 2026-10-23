@@ -16,7 +16,7 @@ import (
 	"github.com/wachipayox/BootOptimDistribution/internal/revision"
 )
 
-func pngBytes(t *testing.T, img image.Image) []byte {
+func presentationPNG(t *testing.T, img image.Image) []byte {
 	t.Helper()
 	var b bytes.Buffer
 	if err := png.Encode(&b, img); err != nil {
@@ -35,7 +35,7 @@ func jpegBytes(t *testing.T, w, h int) []byte {
 }
 
 func transparentPNG(t *testing.T, w, h int) []byte {
-	return pngBytes(t, image.NewNRGBA(image.Rect(0, 0, w, h)))
+	return presentationPNG(t, image.NewNRGBA(image.Rect(0, 0, w, h)))
 }
 
 func opaquePNG(t *testing.T, w, h int) []byte {
@@ -43,7 +43,7 @@ func opaquePNG(t *testing.T, w, h int) []byte {
 	for i := 3; i < len(img.Pix); i += 4 {
 		img.Pix[i] = 0xff
 	}
-	return pngBytes(t, img)
+	return presentationPNG(t, img)
 }
 
 // ref stages content in the CAS and returns its object reference as JSON.
@@ -181,9 +181,9 @@ func TestPresentationArtworkAndLogoValidation(t *testing.T) {
 		{"logo rgba ok", `{"logo":` + env.ref(transparentPNG(t, 200, 80), "image/png") + `}`, "", 200},
 		{"logo min size ok", `{"logo":` + env.ref(transparentPNG(t, 64, 32), "image/png") + `}`, "", 200},
 		{"logo max size ok", `{"logo":` + env.ref(transparentPNG(t, 1600, 800), "image/png") + `}`, "", 200},
-		{"logo palette with tRNS ok", `{"logo":` + env.ref(pngBytes(t, paletted), "image/png") + `}`, "", 200},
+		{"logo palette with tRNS ok", `{"logo":` + env.ref(presentationPNG(t, paletted), "image/png") + `}`, "", 200},
 		{"logo opaque rgb", `{"logo":` + env.ref(opaquePNG(t, 200, 80), "image/png") + `}`, "invalid_logo", 422},
-		{"logo opaque palette", `{"logo":` + env.ref(pngBytes(t, opaquePalette), "image/png") + `}`, "invalid_logo", 422},
+		{"logo opaque palette", `{"logo":` + env.ref(presentationPNG(t, opaquePalette), "image/png") + `}`, "invalid_logo", 422},
 		{"logo too narrow", `{"logo":` + env.ref(transparentPNG(t, 63, 80), "image/png") + `}`, "invalid_logo", 422},
 		{"logo too short", `{"logo":` + env.ref(transparentPNG(t, 200, 31), "image/png") + `}`, "invalid_logo", 422},
 		{"logo too wide", `{"logo":` + env.ref(transparentPNG(t, 1601, 80), "image/png") + `}`, "invalid_logo", 422},
@@ -209,7 +209,7 @@ func TestPresentationInheritsThroughThreeLevelsWithReplacement(t *testing.T) {
 	grand.Base = &pin
 	env.publishAdmin(grand)
 
-	icon := env.ref(pngBytes(t, image.NewRGBA(image.Rect(0, 0, 16, 16))), "image/png")
+	icon := env.ref(presentationPNG(t, image.NewRGBA(image.Rect(0, 0, 16, 16))), "image/png")
 	art := env.artwork(jpegBytes(t, 1920, 760), "image/jpeg", "Autora")
 	logo := env.ref(transparentPNG(t, 200, 80), "image/png")
 	if rec := env.put("profile_root", `{"icon":`+icon+`,"artwork":`+art+`,"logo":`+logo+`}`); rec.Code != 200 {
@@ -271,7 +271,7 @@ func TestPresentationInheritsThroughThreeLevelsWithReplacement(t *testing.T) {
 
 func TestPresentationOwnIconIncludesSignedIconAndInheritsIt(t *testing.T) {
 	env := newTestEnv(t, TestQuotas{})
-	iconBytes := pngBytes(t, image.NewRGBA(image.Rect(0, 0, 8, 8)))
+	iconBytes := presentationPNG(t, image.NewRGBA(image.Rect(0, 0, 8, 8)))
 	digest, size := env.stageAdmin(string(iconBytes))
 	modDigest, modSize := env.stageAdmin("mod bytes")
 	var root revision.Manifest
