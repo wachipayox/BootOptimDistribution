@@ -148,7 +148,6 @@ func (a *API) handleProfileSummaries(w http.ResponseWriter, r *http.Request, adm
 			revisionRef: revisionRef{RevisionID: ch.RevisionID, Sequence: ch.Sequence, ManifestSHA256: ch.ManifestSHA256},
 		})
 	}
-	presentation, hasPresentation := a.store.(presentationStore)
 	views := make([]profileView, 0)
 	truncated := false
 	for _, summary := range summaries {
@@ -176,27 +175,16 @@ func (a *API) handleProfileSummaries(w http.ResponseWriter, r *http.Request, adm
 			LatestRevision: revisionRef{RevisionID: item.RevisionID, Sequence: item.Sequence, ManifestSHA256: item.ManifestSHA256},
 			Channels:       profileChannels,
 		}
-		if hasPresentation {
-			raw, err := presentation.ProfilePresentation(r.Context(), item.ProfileID)
-			if err != nil {
-				a.writeError(w, 500, "storage_error", "profile presentation unavailable")
-				return
-			}
-			if len(raw) > 0 {
-				var p profilePresentation
-				if json.Unmarshal(raw, &p) != nil {
-					a.writeError(w, 500, "storage_error", "invalid stored presentation")
-					return
-				}
-				view.Presentation, view.Name, view.Description, view.Icon = &p, p.Name, p.Description, p.Icon
-			}
-		}
 		if admin {
 			view.PublishedCount = int(summary.RevisionCount)
 		}
 		views = append(views, view)
 	}
-	a.writeJSON(w, http.StatusOK, struct {
+	if err := a.applyPresentations(r.Context(), views, admin); err != nil {
+		a.writeError(w, 500, "storage_error", "profile presentation unavailable")
+		return
+	}
+	a.writeCatalog(w, r, admin, struct {
 		SchemaVersion   int           `json:"schema_version"`
 		ProtocolVersion int           `json:"protocol_version"`
 		Profiles        []profileView `json:"profiles"`
