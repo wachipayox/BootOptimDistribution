@@ -89,6 +89,9 @@ GET /v1/signing-keys  # schema_version: 1, keys: {id: base64url public key}
 GET /v1/profiles      # test profiles hidden unless ?include_test=1
 GET /v1/profiles/{profile_id}/revisions/{revision_id}   # any profile, test or not
 GET /v1/objects/sha256/{sha256}
+GET /v1/news                                     # 0.4.0, «Diseño de los launchers»
+GET /v1/profiles/{profile_id}/changelog          # 0.4.0
+GET /v1/launcher/{app}/releases                  # 0.4.0
 ```
 
 `GET /v1/profiles` lists every live profile (since 0.3.0 it no longer truncates
@@ -218,6 +221,10 @@ existing immutable revision. Promoting the stable revision remains an explicit s
 operation; a launcher following `stable` sees the edit after promotion.
 
 ## Mutable profile presentation (2026-10-01)
+
+> 0.4.0: el cuerpo de la escritura (actualización parcial, artwork, logo,
+> `android_compatible`) y la forma del catálogo cambian; ver «Diseño de los
+> launchers», apartado 2.
 
 `PUT /v1/admin/profiles/{profile_id}/presentation` uses the existing authenticated
 admin session, LAN policy and CSRF protection. Body: `{name, description, icon}`;
@@ -539,3 +546,467 @@ El margen de disco es el límite real: si se acerca, el admin borra perfiles de
 prueba viejos y, si hace falta espacio físico, lo trata como una tarea de
 mantenimiento del CAS (fuera de este cambio). Criterio para reabrir: el disco
 llega al aviso del 80 % con los perfiles de prueba ya borrados.
+
+## Diseño de los launchers (0.4.0, contrato)
+
+Backend del rediseño de Pandora y del launcher Android. Este apartado es el
+contrato que implementan los clientes; donde lo dice, sustituye rutas y campos
+anteriores. No hay compatibilidad con clientes antiguos: no se ha distribuido
+ninguno.
+
+Reglas comunes:
+
+- **Lo cosmético es mutable y sin firma** (noticias, artwork, logo, texto del
+  changelog, marca Android), como la presentación de 2026-10-01: el launcher
+  confía en HTTPS. Lo que afecta a la instalación sigue en revisiones firmadas
+  inmutables, con CAS SHA-256, anti-rollback y sin escaneo al arrancar; nada
+  de eso cambia. La única pieza nueva con firma es el binario del launcher.
+- **Lecturas públicas** (`GET`/`HEAD` sin autenticación, también fuera de la
+  LAN en modo HTTPS). **Escrituras solo por `/v1/admin/…`** (LAN, sesión de
+  admin y CSRF), salvo la presentación de perfiles de prueba por `/v1/test/`.
+  La API de prueba no escribe noticias, changelogs ni versiones del launcher.
+- **Imágenes y binarios = objetos CAS.** El panel sube los bytes con
+  `POST /v1/admin/objects/sha256/{sha256}` y los referencia como
+  `{sha256, size, media_type}`. El servidor comprueba hash, tamaño, tipo real
+  (cabecera decodificada, no la extensión) y dimensiones antes de aceptar la
+  referencia. Mientras algo los referencie se sirven en
+  `GET /v1/objects/sha256/{sha256}` (inmutables); al dejar de referenciarse
+  dejan de servirse, como el icono.
+- **Caché del cliente:** imágenes guardadas por `sha256` y verificadas antes
+  de decodificar; nunca hay que volver a bajarlas. Los documentos JSON nuevos
+  y el catálogo llevan `ETag` y aceptan `If-None-Match` (`304`). Sin conexión,
+  el launcher muestra lo último que guardó.
+- Fechas en RFC 3339 UTC (`2026-10-19T18:30:00Z`). Límites en bytes UTF-8.
+  Errores con la forma de siempre: `{"error":{"code","message"}}`.
+- **Texto plano** (changelogs de revisión y de launcher): una línea en blanco
+  separa párrafos; un salto simple es salto de línea; sin marcado. El cliente
+  puede convertir en enlace una URL `https://` suelta. Las noticias usan
+  Markdown restringido (apartado 1).
+
+### 1. Noticias
+
+#### Modelo
+
+Categoría (datos del servidor, nunca constantes en código; el operador crea
+las suyas en el panel):
+
+```json
+{ "id": "cat_3k9x2", "name": "Mantenimiento", "order": 20 }
+```
+
+| Campo | Regla |
+|---|---|
+| `id` | Lo genera el servidor (`cat_` + 5–16 `[a-z0-9]`). Estable aunque cambie el nombre. |
+| `name` | 1–32 bytes, una línea, único sin distinguir mayúsculas. |
+| `order` | Entero. La lista se ordena por `order` y después por `name`. |
+
+Máximo 32 categorías. Una categoría con noticias no se borra
+(`409 category_in_use`): se renombra o se mueven antes sus noticias.
+
+Noticia:
+
+```json
+{
+  "id": "news_8f2k1q0z",
+  "title": "Mantenimiento del servidor el sábado",
+  "body": "Primer párrafo con **negrita**.\n\n## Novedades\n\n- Uno\n- Dos\n\n![Captura](https://example.com/captura.png)\n\nhttps://youtu.be/dQw4w9WgXcQ",
+  "image": { "url": "https://example.com/portada.jpg" },
+  "author": "Equipo",
+  "category_id": "cat_3k9x2",
+  "target_profile_id": null,
+  "pinned": true,
+  "published_at": "2026-10-19T18:30:00Z",
+  "updated_at": "2026-10-20T09:00:00Z",
+  "expires_at": "2026-10-26T00:00:00Z",
+  "linked_revision": { "profile_id": "profile_example", "revision_id": "rev_…" }
+}
+```
+
+| Campo | Regla |
+|---|---|
+| `id` | Lo genera el servidor (`news_` + 8–16 `[a-z0-9]`). |
+| `title` | 1–160 bytes, una línea. |
+| `body` | 0–65536 bytes de **Markdown restringido** (ver «Cuerpo de la noticia»). |
+| `image` | Portada. `null`, una referencia CAS subida desde el panel (`{sha256, size, media_type}`: JPEG/PNG 16:9 con tolerancia 1 %, ancho 640–3840, ≤ 4 MiB; el panel recorta y convierte a 1600 × 900 JPEG) o una imagen externa `{url}` (`https://`, ≤ 2048 bytes). La externa no la comprueba el servidor: el cliente la recorta a 16:9. |
+| `author` | 1–64 bytes, una línea. Texto libre, no una cuenta. |
+| `category_id` | Una categoría existente. |
+| `target_profile_id` | `null` = **General**. Si no, un perfil global: la noticia es para ese perfil y **todos sus descendientes** (su familia). |
+| `pinned` | Varias pueden estar fijadas a la vez. |
+| `published_at` | Lo pone el servidor al crear; no se edita (no hay publicación programada). |
+| `updated_at` | Última edición. |
+| `expires_at` | `null` = permanente. Si es una fecha, desde ella la noticia pasa al historial. Posterior a `published_at`. |
+| `linked_revision` | `null` o una revisión existente; el cliente abre su changelog (apartado 3, `?revision=`). |
+
+#### Cuerpo de la noticia
+
+Subconjunto de CommonMark. El servidor lo valida al guardar (`422
+invalid_news_body`, con la línea en `message`) y los dos launchers deben
+aceptar y pintar exactamente lo mismo: casos compartidos en
+[`news-markdown-vectors.json`](news-markdown-vectors.json), que cada cliente
+copia tal cual a sus tests.
+
+| Se admite | Sintaxis |
+|---|---|
+| Párrafos y saltos de línea | Línea en blanco / salto simple |
+| Títulos | `##` y `###` (el `#` es el titular de la noticia; `#`, `####`… se rechazan) |
+| Énfasis | `**negrita**`, `*cursiva*` |
+| Listas | `- ` o `* ` con viñetas, `1. ` numeradas; hasta 2 niveles |
+| Cita | `> ` |
+| Separador | `---` en su propia línea |
+| Enlace | `[texto](https://…)` o una URL `https://` suelta |
+| Imagen | `![alt](https://…)` (externa, p. ej. Imgur) o `![alt](cas:<sha256>)` (subida desde el panel; el servidor comprueba que existe) |
+| Vídeo de YouTube | Un párrafo que es **solo** un enlace a YouTube: `https://www.youtube.com/watch?v=<id>`, `https://youtu.be/<id>` o `https://www.youtube.com/shorts/<id>`, con `<id>` = `[A-Za-z0-9_-]{11}` (se ignoran otros parámetros) |
+
+Se rechaza: HTML (en bloque o en línea), tablas, bloques y spans de código,
+imágenes o enlaces que no sean `https:` (o `cas:` en imágenes), títulos de
+nivel 1 o 4–6, listas de más de 2 niveles, notas al pie y referencias de
+enlace (`[x][1]`). Como máximo 50 imágenes y 10 vídeos por noticia; cada URL
+≤ 2048 bytes.
+
+El cliente:
+
+- Descarga las imágenes externas sin cookies ni credenciales, solo por
+  `https:` (también tras redirecciones, como mucho 3), ≤ 10 MiB y ≤ 4096 px
+  por lado; si fallan, pinta el texto `alt`. Las cachea por URL.
+- Pinta un vídeo como tarjeta con la miniatura
+  `https://i.ytimg.com/vi/<id>/hqdefault.jpg` y un botón de reproducir que
+  abre `https://www.youtube.com/watch?v=<id>` en el navegador del sistema.
+  No incrusta un reproductor.
+- Abre los enlaces en el navegador del sistema, nunca dentro del launcher.
+
+Las imágenes externas y las miniaturas de YouTube hacen que el launcher
+contacte con esos servidores (ven la IP del jugador). Es aceptable en una
+comunidad cerrada; decisión del usuario 2026-10-23, para no gastar disco del
+servidor.
+
+Reglas para el cliente:
+
+- **Recientes** = `expires_at` nulo o futuro. **Historial** = caducadas. Una
+  caducada deja de contar como fijada aunque tenga `pinned: true`. Compara con
+  `server_time` de la respuesta, no con el reloj local.
+- **Destino:** una instancia ve las General (con su interruptor) y las de su
+  perfil y de cada **madre** de ese perfil (`parent_profile_id`, apartado 2),
+  nunca las de sus hijas. El filtro por familia usa el mismo árbol.
+- «Nueva», «Guardada» y el tiempo de lectura son locales del launcher.
+- Una noticia borrada en el servidor se borra también en local **aunque
+  estuviera guardada**.
+- Un `target_profile_id` que ya no está en el catálogo no lo ve ninguna
+  instancia; el cliente no falla por ello.
+
+#### Lectura y sincronización incremental
+
+```text
+GET /v1/news[?since=<cursor>]
+```
+
+```json
+{
+  "schema_version": 1,
+  "server_time": "2026-10-23T10:00:00Z",
+  "cursor": "n1.4821",
+  "full": false,
+  "categories": [ { "id": "cat_…", "name": "Actualización", "order": 10 } ],
+  "items": [ { "id": "news_…", "…": "forma completa" } ],
+  "deleted": [ "news_…" ]
+}
+```
+
+- Sin `since`, o con un `since` desconocido o más antiguo que la retención de
+  borradas: `full: true`, `items` = todas las vivas y `deleted` vacío. El
+  cliente **sustituye** su caché y conserva la marca «guardada» solo de los ids
+  que siguen existiendo.
+- Con `since` válido: `full: false`, `items` = creadas o editadas después del
+  cursor (forma completa) y `deleted` = ids borrados después del cursor.
+- `categories` va siempre completa y sustituye a la local.
+- `cursor` es opaco: el cliente guarda el último y lo devuelve tal cual. Las
+  lápidas se guardan al menos 180 días.
+- `ETag` = cursor; `If-None-Match` igual → `304`. El launcher sincroniza al
+  abrirse y, como mucho, cada 5 minutos mientras está abierto.
+- Sin paginación: hasta 2000 noticias vivas (`409 news_limit_reached` al crear
+  más); el operador borra las viejas.
+
+#### Panel
+
+```text
+GET    /v1/admin/news                 # todas, con caducadas
+POST   /v1/admin/news                 # crear
+PUT    /v1/admin/news/{id}            # editar: sustituye todos los campos editables
+DELETE /v1/admin/news/{id}            # borrar (lápida para la sincronización)
+GET    /v1/admin/news-categories
+PUT    /v1/admin/news-categories      # sustituye la lista: [{id?, name, order}]; sin id = nueva
+```
+
+Campos editables: `title`, `body`, `image`, `author`, `category_id`,
+`target_profile_id`, `pinned`, `expires_at`, `linked_revision`. Errores:
+`422 invalid_news` (campo en `message`), `422 invalid_image`,
+`404 news_not_found`, `409 category_in_use`.
+
+### 2. Presentación del perfil: artwork, logo, herencia y marca Android
+
+Sustituye a «Mutable profile presentation» en el cuerpo de la escritura y en
+la forma del catálogo.
+
+#### Escritura
+
+```text
+PUT /v1/admin/profiles/{profile_id}/presentation
+PUT /v1/test/profiles/{profile_id}/presentation      # solo perfiles de prueba
+```
+
+```json
+{
+  "name": "Example",
+  "description": "…",
+  "icon":    { "sha256": "…", "size": 40211, "media_type": "image/png" },
+  "artwork": { "image": { "sha256": "…", "size": 812345, "media_type": "image/jpeg" }, "author": "Autora" },
+  "logo":    { "sha256": "…", "size": 91022, "media_type": "image/png" },
+  "android_compatible": true
+}
+```
+
+- **Campo ausente = sin cambios; `null` = quitar el valor propio** (vuelve a
+  heredar). Antes el cuerpo sustituía todo; ahora es una actualización parcial.
+- `icon`: como hasta ahora (PNG, ≤ 2 MiB, 1–1024 px por lado).
+- `artwork.image`: JPEG o PNG de **exactamente 1920 × 760**, ≤ 6 MiB (el
+  panel recorta y escala). `artwork.author`: 1–64 bytes, obligatorio.
+- `logo`: PNG **con alfa** (RGBA, gris+alfa o `tRNS`), ancho 64–1600 y alto
+  32–800, ≤ 2 MiB. El panel no lo recomprime.
+- `android_compatible`: booleano, por defecto `false`.
+- Respuesta: la presentación propia guardada.
+
+#### Herencia
+
+La madre de un perfil es el perfil de la `base` de su **última** revisión
+(`parent_profile_id`; `null` en una raíz). El valor efectivo de `icon`,
+`artwork` y `logo` es el propio si existe; si no, el efectivo de la madre,
+recursivamente (hasta 8 niveles; se sigue la cadena aunque una madre esté
+borrada). Para `icon`, «propio» incluye el icono firmado de la última
+revisión, como hasta ahora. Así el Beta muestra icono, artwork y logo de su
+madre mientras no tenga los suyos. `name`, `description` y
+`android_compatible` **no** se heredan.
+
+#### Catálogo
+
+`GET /v1/profiles` añade a cada perfil lo siguiente y quita el subobjeto
+`presentation` (los valores propios pasan a `/v1/admin/profiles` como
+`own_presentation`):
+
+```json
+{
+  "profile_id": "profile_example-beta",
+  "name": "Example Beta",
+  "parent_profile_id": "profile_example",
+  "android_compatible": false,
+  "icon": { "sha256": "…", "size": 40211, "media_type": "image/png" },
+  "artwork": { "image": { "sha256": "…", "size": 812345, "media_type": "image/jpeg" }, "author": "Autora" },
+  "logo": null,
+  "inherited_from": { "icon": "profile_example", "artwork": "profile_example", "logo": null }
+}
+```
+
+(más `description`, `minecraft`, `neoforge`, `loader`, `latest_revision` y
+`channels` como hasta ahora). `inherited_from.<campo>` es el perfil del que
+viene el valor, o `null` si es propio o no hay. Sin `logo` el launcher pinta el
+nombre del perfil; sin `artwork`, el «Vanilla» que lleva dentro.
+
+### 3. Changelog de revisiones
+
+#### Texto
+
+Cada revisión tiene un changelog mutable:
+
+```json
+{
+  "title": "Actualización de Create",
+  "description": "Por qué se hizo esta revisión, en texto plano.",
+  "changes": [ "Create actualizado a 6.0.1", "Arreglado el crasheo al abrir el mapa" ]
+}
+```
+
+| Campo | Regla |
+|---|---|
+| `title` | 0–120 bytes, una línea. |
+| `description` | 0–8192 bytes de texto plano (párrafos). |
+| `changes` | 0–100 cambios; cada uno 1–300 bytes, una línea, texto plano. El cliente los pinta como viñetas. |
+
+Los mods añadidos, quitados y actualizados no se escriben aquí: van aparte en
+`mods`, calculados. Si el operador nunca editó el changelog, se deriva de
+`release_notes` firmado: la primera línea → `title`; las líneas que empiezan
+por `- ` → `changes` (sin el guion); el resto → `description`. Las notas
+automáticas `auto: sigue a …` no se muestran (ver «Origen»). La fecha es
+`revision.created_at` del manifiesto firmado.
+
+```text
+PUT /v1/admin/revisions/{revision_id}/changelog      # {title, description, changes}
+```
+
+#### Origen
+
+El origen de una revisión es la revisión que introdujo el cambio:
+
+- Si su contenido propio (mods, configs, ajustes, opciones JVM, permisos y
+  borrados) es igual al de la revisión anterior del mismo perfil **y** cambió
+  la `base`, el origen es el origen de la revisión de la madre a la que ahora
+  apunta (caso del auto-follow; recursivo).
+- Si no, el origen es ella misma.
+
+Se calcula sobre datos firmados: vale para todas las revisiones existentes sin
+migración.
+
+#### Lectura
+
+```text
+GET /v1/profiles/{profile_id}/changelog[?limit=50][&cursor=…]   # historial
+GET /v1/profiles/{profile_id}/changelog?after=<rev>[&until=<rev>] # diálogo de actualización
+GET /v1/profiles/{profile_id}/changelog?revision=<rev>           # una entrada (noticia enlazada)
+```
+
+```json
+{
+  "schema_version": 1,
+  "profile_id": "profile_example-beta",
+  "lineage": [
+    { "profile_id": "profile_example-beta", "name": "Example Beta", "depth": 0 },
+    { "profile_id": "profile_example",      "name": "Example",      "depth": 1 }
+  ],
+  "entries": [
+    {
+      "origin":   { "profile_id": "profile_example", "revision_id": "rev_…", "sequence": 44 },
+      "revision": { "revision_id": "rev_…", "sequence": 12 },
+      "created_at": "2026-10-19T18:30:00Z",
+      "title": "Actualización de Create",
+      "description": "…",
+      "changes": [ "Create actualizado a 6.0.1" ],
+      "mods": {
+        "added":   [ { "id": "example-mod", "file": "example-mod-1.2.jar" } ],
+        "removed": [ { "id": "old-mod", "file": "old-mod-0.9.jar" } ],
+        "updated": [ { "id": "create", "from": "create-6.0.0.jar", "to": "create-6.0.1.jar" } ]
+      }
+    }
+  ],
+  "next_cursor": null
+}
+```
+
+- De la más nueva a la más antigua. **Una entrada por origen**: un cambio de la
+  madre que llegó por auto-follow aparece una vez, atribuido a la madre
+  (`origin`), con la revisión del perfil pedido que lo trajo (`revision`).
+- **Historial** (sin `after`): las revisiones del perfil y, debajo, las de sus
+  madres **anteriores a la creación del perfil**, hasta la revisión que fijó
+  su primera revisión (recursivo); esas entradas llevan `revision: null`.
+  Nunca aparecen revisiones de hijas. `lineage` es la leyenda: perfil pedido y
+  madres; el color lo elige el cliente.
+- **Diálogo de actualización** (`after` = revisión local; `until` = la nueva,
+  por defecto la última): solo entradas con `revision.sequence` en
+  `(after, until]`. Si `after`/`until` no son del perfil → `422
+  revision_not_in_profile`.
+- `mods`: diferencia del conjunto efectivo de mods (cadena resuelta) entre esa
+  revisión y la anterior **del perfil pedido** (con `revision: null`, del
+  perfil de origen). `id` es el id del manifiesto y `file` el nombre del
+  archivo. Listas vacías si no hay cambios de mods.
+- `limit` 1–200 (50 por defecto); `next_cursor` lleva a la página siguiente.
+- `ETag` y `304` como el resto: las revisiones no cambian, solo el texto.
+
+### 4. Marca «compatible con Android»
+
+`android_compatible` (apartado 2): propia de cada perfil, también de cada rama
+hija; no se hereda. Se edita en «Editar perfil» del panel y sale en el
+catálogo. El launcher Android, en «Desde el servidor», filtra por ella
+(activado por defecto) y muestra en gris con «no Android» un perfil principal
+que no la tenga. Es ayuda de catálogo, no garantía de instalación: la revisión
+firmada sigue mandando. Los perfiles existentes empiezan en `false`; el
+operador marca los compatibles al desplegar.
+
+### 5. Actualizaciones del propio launcher
+
+#### Lectura
+
+```text
+GET /v1/launcher/{app}/releases?platform=<p>[&channel=player|developer][&after=<versión>]
+```
+
+`app` ∈ `pandora`, `android`. `platform` (obligatorio), lista abierta
+`[a-z0-9_-]{1,32}`; previstas `windows-x86_64`, `linux-x86_64`,
+`macos-aarch64` (Pandora) y `android-universal` (Android). `channel` por
+defecto `player`; `developer` ve también las de `player`.
+
+```json
+{
+  "schema_version": 1,
+  "app": "pandora",
+  "latest": { "…": "la primera de releases, o null" },
+  "releases": [
+    {
+      "version": "1.4.0",
+      "channel": "player",
+      "published_at": "2026-10-23T10:00:00Z",
+      "notes": "Texto plano.",
+      "artifact": {
+        "platform": "windows-x86_64",
+        "file_name": "example-launcher-1.4.0.exe",
+        "url": "/v1/objects/sha256/<sha256>",
+        "sha256": "…",
+        "size": 41234567,
+        "statement": "<base64url del JSON canónico>",
+        "signature": { "key_id": "…", "algorithm": "Ed25519", "value": "<base64url>" }
+      }
+    }
+  ]
+}
+```
+
+- `releases`: versiones con artefacto para esa plataforma, del canal pedido y
+  mayores que `after`, de la más nueva a la más antigua (para mostrar los
+  changelogs de todas las versiones saltadas).
+- `version`: SemVer 2.0 (`MAJOR.MINOR.PATCH[-pre]`), comparado con la
+  precedencia de SemVer. Única por `app`: una vez publicada no cambia de bytes
+  ni se reutiliza (`409 release_exists`).
+- `url` es relativa al origen HTTPS configurado. Los binarios viven en el CAS
+  (el repo de Android es privado y no se puede bajar de sus releases).
+
+#### Firma
+
+`statement` es el JSON canónico (RFC 8785) de
+
+```json
+{ "type": "wbombo.launcher-artifact.v1", "app": "pandora", "version": "1.4.0",
+  "platform": "windows-x86_64", "sha256": "…", "size": 41234567,
+  "issued_at": "2026-10-23T10:00:00Z" }
+```
+
+firmado con Ed25519 por la clave de publicación del servidor (la de
+`/v1/signing-keys`; `type` impide confundirlo con un manifiesto). Antes de
+instalar, el cliente:
+
+1. Verifica la firma con una clave conocida (mismas reglas que para las
+   revisiones: descubrimiento por `/v1/signing-keys` y nunca contra una clave
+   fijada distinta).
+2. Comprueba que `app`, `platform` y `version` del statement son los que pidió
+   y que la versión es **mayor** que la instalada (nunca baja).
+3. Descarga, comprueba `size` y `sha256` del statement y solo entonces
+   instala. En Android el sistema exige además el mismo certificado del APK.
+
+`notes` y `channel` no van firmados (cosméticos).
+
+#### Panel
+
+```text
+GET    /v1/admin/launcher-releases
+POST   /v1/admin/launcher-releases                    # {app, version, channel, notes, artifacts:[{platform, file_name, object:{sha256,size}}]}
+PUT    /v1/admin/launcher-releases/{app}/{version}    # {channel?, notes?}
+DELETE /v1/admin/launcher-releases/{app}/{version}    # retirar: deja de ofrecerse
+```
+
+El binario se sube antes por `POST /v1/admin/objects/sha256/{sha256}` (límite
+del CAS, 2 GiB). Al crear, el servidor firma un statement por artefacto. Una
+versión retirada no vuelve a publicarse con el mismo número; quien ya la tenga
+no baja de versión.
+
+### 6. Jugadores conectados (decisión: lado cliente)
+
+No va en Distribution. El launcher ya hace Server List Ping: la respuesta trae
+conectados, máximo y una muestra de nombres con UUID (hasta 12 en un servidor
+vanilla), suficiente para las caras. Pasarlo por Distribution añadiría un
+intermediario y un punto de fallo sin datos mejores. El servidor «principal»
+de la instancia (tarjeta y «Entrar al servidor») es la primera entrada de su
+`servers.dat`. Distribution no implementa nada para esto.
