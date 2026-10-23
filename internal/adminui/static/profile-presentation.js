@@ -5,7 +5,7 @@
 const ARTWORK_WIDTH = 1920;
 const ARTWORK_HEIGHT = 760;
 const ARTWORK_MAX_BYTES = 6 * 1024 * 1024;
-const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+const LOGO_MAX_BYTES = 16 * 1024 * 1024;
 
 // Rectángulo de origen que cubre el lienzo 1920 x 760 sin deformar la imagen.
 function artworkCoverRect(width, height) {
@@ -28,8 +28,8 @@ function artworkAuthorError(text) {
 
 function logoFileError(type, size, width, height) {
   if (type !== 'image/png') return 'El logo debe ser un PNG con fondo transparente.';
-  if (size > LOGO_MAX_BYTES) return 'El logo pesa más de 2 MiB.';
-  if (width < 64 || width > 1600 || height < 32 || height > 800) return 'El logo debe medir entre 64 y 1600 píxeles de ancho y entre 32 y 800 de alto.';
+  if (size > LOGO_MAX_BYTES) return 'El logo pesa más de 16 MiB.';
+  if (width < 16 || width > 8192 || height < 16 || height > 8192) return 'El logo debe medir entre 16 y 8192 píxeles por lado.';
   return '';
 }
 
@@ -108,7 +108,7 @@ async function editProfilePresentation(profile) {
 
   const icon = block('Icono', 'image/png,image/jpeg,image/webp', profile.icon, own.icon, 64);
   const artwork = block('Artwork (1920 × 760, se recorta al elegirlo)', 'image/png,image/jpeg,image/webp', profile.artwork && profile.artwork.image, own.artwork, 240);
-  const logo = block('Logo (PNG transparente, 64–1600 × 32–800)', 'image/png', profile.logo, own.logo, 160);
+  const logo = block('Logo (PNG transparente, hasta 8192 × 8192)', 'image/png', profile.logo, own.logo, 160);
   const author = make('input'); author.maxLength = 64; author.value = (own.artwork && own.artwork.author) || '';
   const authorField = field('Autor del artwork', author);
 

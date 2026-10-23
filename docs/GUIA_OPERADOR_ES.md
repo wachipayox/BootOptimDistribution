@@ -108,7 +108,7 @@ tuviera guardada.
 
 **Artwork, logo e icono del perfil.** **Perfiles globales → Editar perfil**.
 El artwork (se recorta a 1920 × 760, con su autor) y el logo (PNG con fondo
-transparente) se heredan a los perfiles hijos que no tengan los suyos, igual
+transparente, hasta 8192 × 8192 px y 16 MiB) se heredan a los perfiles hijos que no tengan los suyos, igual
 que el icono: el formulario indica «Heredado de …». **Quitar** en un hijo
 vuelve a usar el de su madre.
 
@@ -117,7 +117,9 @@ vuelve a usar el de su madre.
 funcione en Android. Los perfiles empiezan desmarcados, y el launcher Android
 oculta por defecto los no marcados.
 
-**Changelog de una revisión.** En el historial del perfil, botón
+**Changelog de una revisión.** Al publicar, rellena **Changelog de esta
+versión** en «Subir y publicar» (opcional). Para una revisión ya publicada:
+en el historial del perfil, botón
 **Changelog** de la revisión: título, descripción y un cambio por línea. Los
 mods añadidos y quitados los calcula el servidor. Sin editarlo, se usan las
 notas de la publicación (primera línea = título, líneas con `- ` = cambios).
