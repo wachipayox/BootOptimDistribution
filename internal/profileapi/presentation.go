@@ -43,6 +43,8 @@ type profilePresentation struct {
 	Icon        *revision.ObjectRef `json:"icon"`
 	Artwork     *artworkRef         `json:"artwork"`
 	Logo        *revision.ObjectRef `json:"logo"`
+	// AndroidCompatible is own and never inherited (default false).
+	AndroidCompatible bool `json:"android_compatible"`
 }
 
 type inheritedFrom struct {
@@ -68,6 +70,8 @@ type presentationRequest struct {
 	Icon        json.RawMessage `json:"icon"`
 	Artwork     json.RawMessage `json:"artwork"`
 	Logo        json.RawMessage `json:"logo"`
+	// AndroidCompatible must be a JSON boolean when present.
+	AndroidCompatible json.RawMessage `json:"android_compatible"`
 }
 
 func isNull(raw json.RawMessage) bool { return string(bytes.TrimSpace(raw)) == "null" }
@@ -166,6 +170,14 @@ func (a *API) handlePresentation(w http.ResponseWriter, r *http.Request, id stri
 			a.writeError(w, 422, "invalid_logo", err.Error())
 			return
 		}
+	}
+	if req.AndroidCompatible != nil {
+		var flag bool
+		if string(bytes.TrimSpace(req.AndroidCompatible)) != "true" && string(bytes.TrimSpace(req.AndroidCompatible)) != "false" || json.Unmarshal(req.AndroidCompatible, &flag) != nil {
+			a.writeError(w, 422, "invalid_presentation", "android_compatible must be a boolean")
+			return
+		}
+		p.AndroidCompatible = flag
 	}
 	icon := ""
 	if p.Icon != nil {
@@ -409,6 +421,7 @@ func (r *presentationResolver) apply(view *profileView, admin bool) error {
 				view.Name = own.Name
 			}
 			view.Description = own.Description
+			view.AndroidCompatible = own.AndroidCompatible
 			if admin {
 				view.OwnPresentation = own
 			}
