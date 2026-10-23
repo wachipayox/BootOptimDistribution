@@ -44,6 +44,11 @@ physical check and the transaction commits. Schema triggers reject update or
 delete of published revisions, their object edges, and published object rows.
 There is no revision/object GC in v1.
 
+News (0.4.0) live in the same `metadata.sqlite3`: `news_categories`, `news_items`
+(public JSON payload), `news_changes` (append-only change log; its AUTOINCREMENT id is the sync cursor and
+delete rows are the tombstones, kept forever) and `news_objects` (CAS objects a live news item references;
+they are served publicly only while a row exists).
+
 ## Default layout and permissions
 
 The deployment default remains the PR #35 layout:
@@ -91,6 +96,15 @@ SQLite itself still enforces database constraints. Deploy exactly one writer
 process per state directory. There is no multi-process filesystem/SQLite commit
 protocol and no GC process in this cut.
 
+## Launcher releases (0.4.0)
+
+`launcher_releases` (app, version, channel, notes, published_at, withdrawn_at)
+and `launcher_artifacts` (app, version, platform, file_name, sha256, size,
+statement, key_id, signature) live in `metadata.sqlite3`. Artifacts are
+immutable (triggers), releases are never deleted and `(app, version)` is unique
+by SemVer precedence forever. Binaries are ordinary CAS objects, served
+publicly only while a non-withdrawn release references them.
+
 ## Dependency and test scope
 
 New direct dependency: `modernc.org/sqlite v1.20.4`, a CGo-free SQLite driver,
@@ -106,3 +120,16 @@ same-sequence concurrent publication. Missing coverage is deliberate fault
 injection for kernel/fsync/ENOSPC/power-loss behavior, hostile concurrent state
 mutation by another process, multi-process writers, and any future GC. Those
 need dedicated integration/fault tests rather than simulated success claims.
+
+## Profile presentation assets (0.4.0)
+
+`profile_presentation_assets(profile_id, kind, sha256, size)` lives in
+`metadata.sqlite3` and lists the artwork and logo objects a profile's own
+presentation references. `PublishedObject` serves them while a row exists.
+
+## Revision changelog text
+
+`revision_changelog(revision_id, title, description, changes JSON, updated_at)`
+lives in `metadata.sqlite3` and holds the mutable, unsigned operator text of a
+revision (created idempotently on first use). Everything else of the changelog
+(origin, mod differences, dates) is derived from the signed manifests.

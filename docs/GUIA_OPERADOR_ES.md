@@ -13,6 +13,7 @@ Guía práctica para administrar el servicio privado de distribución de perfile
 1. [Qué hace el servicio](#qué-hace-el-servicio)
 2. [Rutas y accesos actuales](#rutas-y-accesos-actuales)
 3. [Uso del panel y publicación](#uso-del-panel-y-publicación)
+   - [Contenido de los launchers (0.4.0)](#contenido-de-los-launchers-040)
 4. [Las credenciales que no hay que confundir](#las-credenciales-que-no-hay-que-confundir)
 5. [Copia, recuperación y rotación de la clave de firma](#copia-recuperación-y-rotación-de-la-clave-de-firma)
 6. [Administrar el servicio Linux](#administrar-el-servicio-linux)
@@ -77,6 +78,58 @@ historial firmado para no romper referencias heredadas, y reserva su ID para
 que no pueda reutilizarse accidentalmente. Este botón no borra mundos ni
 archivos locales. No hay un botón de restauración en esta versión; conserva
 las copias de seguridad completas del servicio.
+
+### Contenido de los launchers (0.4.0)
+
+Todo esto es contenido cosmético: se cambia al momento, sin publicar una
+revisión del juego ni firmar nada (salvo los binarios del launcher, que firma
+el servidor solo). Los launchers lo recogen en su siguiente sincronización.
+
+**Publicar una noticia.** Menú **Noticias**.
+
+1. La primera vez, crea las categorías en **Categorías** (por ejemplo
+   Actualización, Mantenimiento, Evento activo, Evento inactivo) y su orden. Los
+   launchers no traen ninguna fija. Una categoría con noticias no se puede
+   borrar: mueve antes sus noticias.
+2. **Nueva noticia**: título, autor, categoría y cuerpo. El cuerpo admite
+   `##`/`###`, `**negrita**`, `*cursiva*`, listas, citas `>`, `---`, enlaces
+   `https://`, imágenes `![texto](https://…)` (por ejemplo de Imgur) y vídeos de
+   YouTube pegando el enlace solo en su propio párrafo. HTML, tablas y código
+   se rechazan al guardar con la línea del fallo.
+3. Portada opcional: sube una imagen (se recorta a 16:9) o pega una URL.
+4. **Destino**: General (todos) o un perfil global; un perfil incluye a sus
+   hijos (por ejemplo, el Beta ve las del perfil principal).
+5. **Fijada** (pueden ser varias) y **Caducidad**: permanente o hasta una
+   fecha; después pasa al historial del launcher.
+6. **Revisión enlazada** opcional: el launcher muestra su changelog.
+
+Borrar una noticia la quita también de los launchers, aunque un jugador la
+tuviera guardada.
+
+**Artwork, logo e icono del perfil.** **Perfiles globales → Editar perfil**.
+El artwork (se recorta a 1920 × 760, con su autor) y el logo (PNG con fondo
+transparente) se heredan a los perfiles hijos que no tengan los suyos, igual
+que el icono: el formulario indica «Heredado de …». **Quitar** en un hijo
+vuelve a usar el de su madre.
+
+**Marcar un perfil como compatible con Android.** En **Editar perfil**, casilla
+**Compatible con Android**. No se hereda: márcala en cada perfil o rama que
+funcione en Android. Los perfiles empiezan desmarcados, y el launcher Android
+oculta por defecto los no marcados.
+
+**Changelog de una revisión.** En el historial del perfil, botón
+**Changelog** de la revisión: título, descripción y un cambio por línea. Los
+mods añadidos y quitados los calcula el servidor. Sin editarlo, se usan las
+notas de la publicación (primera línea = título, líneas con `- ` = cambios).
+Las revisiones que un hijo recibe de su madre muestran el texto de la madre:
+edítalo en la revisión de la madre.
+
+**Publicar una versión del launcher.** Menú **Versiones del launcher →
+Publicar**: aplicación (Pandora o Android), versión (`1.4.0`), canal
+(`player` para todos, `developer` solo para el canal de desarrollo), notas y,
+por plataforma, el binario. El servidor lo firma. Un número de versión no se
+puede reutilizar nunca, ni aunque la retires; para corregir, publica la
+siguiente. **Retirar** deja de ofrecerla; quien ya la tenga no baja de versión.
 
 ### Comprobar servicio y catálogo
 

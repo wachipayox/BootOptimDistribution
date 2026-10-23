@@ -67,7 +67,7 @@ explícita para la prueba:
 curl http://127.0.0.1:8088/v1/meta/version
 ```
 
-## Endpoints actuales (0.3.0)
+## Endpoints actuales (0.4.0)
 
 Acceso en modo HTTPS (`--admin-ui-https`): las lecturas públicas (desde
 0.2.25) y la API de perfiles de prueba (0.3.0, con token) se sirven a cualquier
@@ -85,6 +85,15 @@ Públicos, sin autenticación:
   `?include_test=1`.
 - `GET /v1/profiles/{id}/revisions/{rev}` y `GET|HEAD /v1/objects/sha256/{d}` —
   revisiones firmadas y objetos publicados de cualquier perfil.
+- `GET /v1/news[?since=]` — noticias con sincronización incremental (0.4.0).
+- `GET /v1/profiles/{id}/changelog` — changelog de revisiones con origen y
+  mods (0.4.0).
+- `GET /v1/launcher/{app}/releases?platform=` — versiones firmadas de Pandora y
+  del launcher Android (0.4.0).
+
+  Contrato de estas rutas y del catálogo (artwork, logo, herencia y
+  `android_compatible`): «Diseño de los launchers» en
+  `docs/PROFILE_PROTOCOL.md`.
 
 Perfiles de prueba, con el token compartido (`Authorization: Bearer`):
 

@@ -4,6 +4,7 @@ go 1.21
 
 require (
 	github.com/gowebpki/jcs v1.0.1
+	github.com/yuin/goldmark v1.7.4
 	modernc.org/sqlite v1.20.4
 )
 

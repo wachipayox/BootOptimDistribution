@@ -519,6 +519,7 @@ function renderProfileRevisions(profileIdValue, container, revisions) {
       });
       promoteRow.appendChild(promoteButton);
       card.append(promoteRow, promoteStatus);
+      if (typeof renderRevisionChangelog === 'function') card.appendChild(renderRevisionChangelog(profileIdValue, revisionIdentifier));
     }
     fragment.appendChild(card);
   });
@@ -633,7 +634,7 @@ async function waitForServiceRestart(previousCommit, targetVersion) {
 }
 
 function route() {
-  const allowed = ['resumen', 'perfiles', 'crear', 'servicio', 'perfil'];
+  const allowed = ['resumen', 'perfiles', 'crear', 'servicio', 'perfil', 'noticias', 'launcher'];
   const requested = window.location.hash.replace(/^#/, '');
   const root = requested.split('/')[0];
   const target = allowed.includes(root) ? root : 'resumen';
@@ -2557,45 +2558,7 @@ qs('#remove-profile-icon').addEventListener('click', () => {
   qs('#profile-icon-status').textContent = 'Sin icono'; invalidatePrepared();
 });
 
-async function editProfilePresentation(profile) {
-  const dialog = make('dialog', 'profile-presentation-dialog');
-  const content = make('div', 'panel');
-  const current = profile.presentation || {};
-  const name = make('input'); name.value = current.name || profileName(profile); name.maxLength = 96;
-  const description = make('textarea'); description.value = current.description ?? profile.description ?? ''; description.maxLength = 8192; description.rows = 4;
-  const picker = make('input'); picker.type = 'file'; picker.accept = 'image/png,image/jpeg,image/webp';
-  const preview = make('img'); preview.width = preview.height = 64; preview.hidden = true;
-  const remove = make('button', 'button button-secondary', 'Quitar icono'); remove.type='button';
-  const save = make('button', 'button button-primary', 'Guardar cambios'); save.type='button';
-  const close = make('button', 'button button-secondary', 'Cancelar'); close.type='button';
-  const status = make('p', 'inline-status'); status.setAttribute('role','status');
-  function field(text,input) { const label=make('label'); label.append(make('span','',text),input); return label; }
-  content.append(make('h3','','Editar perfil'),field('Nombre',name),field('Descripción',description),field('Icono',picker),preview,remove,status,save,close);
-  dialog.append(content); document.body.append(dialog); dialog.showModal();
-  let icon=null, iconURL=null, currentIcon=current.icon ?? profile.icon ?? null;
-  if(currentIcon?.sha256) { preview.src='/v1/objects/sha256/'+encodeURIComponent(currentIcon.sha256); preview.hidden=false; }
-  picker.addEventListener('change',async()=>{
-    if(!picker.files.length) return;
-    save.disabled=true;
-    try { icon=await normalizedProfileIcon(picker.files[0]); if(iconURL) URL.revokeObjectURL(iconURL); iconURL=URL.createObjectURL(icon.file); preview.src=iconURL; preview.hidden=false; status.textContent=''; }
-    catch(error) { status.textContent=describeError(error); }
-    finally { save.disabled=false; }
-  });
-  remove.addEventListener('click',()=>{icon=null;currentIcon=null;picker.value='';preview.hidden=true;status.textContent='Sin icono';});
-  close.addEventListener('click',()=>dialog.close());
-  save.addEventListener('click',async()=>{
-    if(!name.value.trim()) { status.textContent='Escribe un nombre para el perfil.';name.focus();return; }
-    save.disabled=close.disabled=true;status.textContent='Guardando…';
-    try {
-      if(icon) { await uploadObject({local:{...icon,mediaType:'image/png'}}); currentIcon={sha256:icon.sha256,size:icon.file.size,media_type:'image/png'}; }
-      await request('/v1/admin/profiles/'+encodeURIComponent(profileId(profile))+'/presentation',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.value.trim(),description:description.value.trim(),icon:currentIcon})});
-      await loadProfiles();dialog.close();
-    } catch(error) { status.textContent=describeError(error); }
-    finally { save.disabled=close.disabled=false; }
-  });
-  dialog.addEventListener('close',()=>{if(iconURL) URL.revokeObjectURL(iconURL);dialog.remove();});
-}
-
+// editProfilePresentation vive en profile-presentation.js.
 
 function deleteGlobalProfile(profile) {
   const id = profileId(profile);

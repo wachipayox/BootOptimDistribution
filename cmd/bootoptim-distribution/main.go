@@ -214,7 +214,7 @@ func newHandlerWithConfig(cfg handlerConfig) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		capabilities := []string{"health", "build-version"}
 		if cfg.ProfileAPI != nil {
-			capabilities = append(capabilities, "signed-global-profiles", "admin-profile-publication", "signed-config-setting-rules-v1", "admin-automatic-publication", "auto-follow-parent", "signed-jvm-options-v1", "test-profiles-v1")
+			capabilities = append(capabilities, "signed-global-profiles", "admin-profile-publication", "signed-config-setting-rules-v1", "admin-automatic-publication", "auto-follow-parent", "signed-jvm-options-v1", "test-profiles-v1", "news-v1", "profile-presentation-v2", "revision-changelog-v1", "launcher-releases-v1")
 		}
 		if cfg.ServiceUpdate != nil {
 			capabilities = append(capabilities, "admin-service-update")
