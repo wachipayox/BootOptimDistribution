@@ -243,7 +243,7 @@ func serveStaticFile(w http.ResponseWriter, r *http.Request, assets http.Handler
 }
 
 func setHeaders(w http.ResponseWriter) {
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' blob: https:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
 	w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 	w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 	w.Header().Set("Referrer-Policy", "no-referrer")

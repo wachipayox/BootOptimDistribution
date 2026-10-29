@@ -96,7 +96,16 @@ el servidor solo). Los launchers lo recogen en su siguiente sincronización.
    `https://`, imágenes `![texto](https://…)` (por ejemplo de Imgur) y vídeos de
    YouTube pegando el enlace solo en su propio párrafo. HTML, tablas y código
    se rechazan al guardar con la línea del fallo.
-3. Portada opcional: sube una imagen (se recorta a 16:9) o pega una URL.
+   **Imágenes del cuerpo:** *Insertar imagen…* (o pegar una captura en el
+   cuadro) la sube y la inserta en su propio párrafo. Bajo el cuadro, cada
+   imagen tiene su **tamaño** (pequeña 180 px, mediana 300 px por defecto, grande
+   480 px, ancho completo) y su **alineación** (izquierda por defecto, centro);
+   se guardan en el título del Markdown, `![texto](cas:… "size=large align=center")`,
+   sin tocar el resto del texto. La vista previa se alterna entre **PC**,
+   **Móvil vertical** y **Móvil horizontal** (contenedor de 960, 360 y 740 px) y
+   nunca recorta las imágenes.
+3. Portada opcional: sube una imagen (se recorta a 16:9: es una tarjeta) o pega
+   una URL.
 4. **Destino**: General (todos) o un perfil global; un perfil incluye a sus
    hijos (por ejemplo, el Beta ve las del perfil principal).
 5. **Fijada** (pueden ser varias) y **Caducidad**: permanente o hasta una
