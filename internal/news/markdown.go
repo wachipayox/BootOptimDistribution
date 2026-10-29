@@ -46,6 +46,10 @@ type Block struct {
 	Alt     string  `json:"alt,omitempty"`
 	Src     string  `json:"src,omitempty"`
 	ID      string  `json:"id,omitempty"`
+	// Size and Align are the image presentation hints from the CommonMark
+	// title ("size=medium align=center"); empty when absent or unknown.
+	Size  string `json:"size,omitempty"`
+	Align string `json:"align,omitempty"`
 }
 
 // Item is one list item.
@@ -248,7 +252,8 @@ func (v *validator) paragraph(p ast.Node) Block {
 	v.inlineChecks(p)
 	if only := p.FirstChild(); only != nil && only.NextSibling() == nil {
 		if img, ok := only.(*ast.Image); ok {
-			return Block{Type: "image", Alt: v.plain(img), Src: string(img.Destination)}
+			size, align := ImageHints(string(img.Title))
+			return Block{Type: "image", Alt: v.plain(img), Src: string(img.Destination), Size: size, Align: align}
 		}
 	}
 	return Block{Type: "paragraph", Text: v.plain(p)}
@@ -370,6 +375,34 @@ func (v *validator) checkURL(n ast.Node, dest string, image bool) {
 		v.seenLinks[dest] = true
 		v.info.Links = append(v.info.Links, dest)
 	}
+}
+
+var (
+	imageSizes  = map[string]bool{"small": true, "medium": true, "large": true, "full": true}
+	imageAligns = map[string]bool{"left": true, "center": true}
+)
+
+// ImageHints reads the presentation hints of an image from its CommonMark
+// title: whitespace-separated size=<small|medium|large|full> and
+// align=<left|center> tokens. The last token of each key wins; an unknown
+// value or key is ignored (the result for that key is empty, which clients
+// render with the defaults medium and left). It never fails.
+func ImageHints(title string) (size, align string) {
+	for _, token := range strings.Fields(title) {
+		switch {
+		case strings.HasPrefix(token, "size="):
+			size = token[len("size="):]
+			if !imageSizes[size] {
+				size = ""
+			}
+		case strings.HasPrefix(token, "align="):
+			align = token[len("align="):]
+			if !imageAligns[align] {
+				align = ""
+			}
+		}
+	}
+	return size, align
 }
 
 // CheckHTTPSURL accepts only absolute https URLs with a host, no credentials

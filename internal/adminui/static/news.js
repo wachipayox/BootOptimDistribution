@@ -8,6 +8,10 @@
 
 const NEWS_COVER_WIDTH = 1600;
 const NEWS_COVER_HEIGHT = 900;
+const NEWS_STAGE_PAD = 10;
+// Imágenes recién subidas: el servidor las oculta hasta que una noticia las
+// referencia, así que la vista previa usa la copia local (blob:) de esta sesión.
+const newsLocalImages = new Map();
 const newsState = { items: [], categories: [], loading: false };
 
 // ---- vista previa del Markdown (pura, comprobable con node) ----
@@ -35,6 +39,67 @@ function newsYoutubeID(text) {
   return '';
 }
 
+// Imagen y enlace con título CommonMark opcional ("…", '…' o (…)). El título
+// nunca forma parte de la URL: ahí van size= y align= de las imágenes.
+const NEWS_TITLE_SRC = '"(?:[^"\\\\]|\\\\.)*"|\'(?:[^\'\\\\]|\\\\.)*\'|\\([^()]*\\)';
+const NEWS_DEST_SRC = '[^)\\s<]+|<[^>\\s]*>';
+const NEWS_IMAGE_SRC = '!\\[(?<alt>[^\\]]*)\\]\\(\\s*(?<dest>' + NEWS_DEST_SRC + ')(?:(?<gap>\\s+)(?<title>' + NEWS_TITLE_SRC + '))?\\s*\\)';
+const NEWS_IMAGE_START = new RegExp('^' + NEWS_IMAGE_SRC);
+const NEWS_LINK_START = new RegExp('^\\[(?<text>[^\\]]+)\\]\\(\\s*(?<dest>' + NEWS_DEST_SRC + ')(?:\\s+(?:' + NEWS_TITLE_SRC + '))?\\s*\\)');
+
+const NEWS_IMAGE_SIZES = ['small', 'medium', 'large', 'full'];
+const NEWS_IMAGE_ALIGNS = ['left', 'center'];
+// Topes de ancho en píxeles lógicos; 0 = ancho completo del contenedor.
+const NEWS_IMAGE_CAPS = { small: 180, medium: 300, large: 480, full: 0 };
+
+function newsDestination(dest) {
+  return dest.startsWith('<') && dest.endsWith('>') ? dest.slice(1, -1) : dest;
+}
+
+function newsTitleInner(title) {
+  return title ? title.slice(1, -1) : '';
+}
+
+// Lee size= y align= del título. Igual que el validador Go: gana el último
+// token de cada campo y un valor desconocido deja el campo vacío.
+function newsImageHints(title) {
+  let size = '';
+  let align = '';
+  String(title || '').split(/\s+/).forEach(function (token) {
+    if (token.startsWith('size=')) { size = token.slice(5); if (!NEWS_IMAGE_SIZES.includes(size)) size = ''; }
+    else if (token.startsWith('align=')) { align = token.slice(6); if (!NEWS_IMAGE_ALIGNS.includes(align)) align = ''; }
+  });
+  return { size: size, align: align };
+}
+
+function newsImageNode(groups) {
+  const hints = newsImageHints(newsTitleInner(groups.title));
+  return { t: 'image', alt: groups.alt, url: newsDestination(groups.dest), size: hints.size, align: hints.align };
+}
+
+// Ancho y posición de una imagen: medium y left por defecto.
+function newsImageLayout(size, align) {
+  const cap = NEWS_IMAGE_CAPS[NEWS_IMAGE_SIZES.includes(size) ? size : 'medium'];
+  return { width: cap ? 'min(' + cap + 'px, 100%)' : '100%', center: align === 'center' };
+}
+
+// Modos de la vista previa: ancho del contenedor de contenido en píxeles lógicos.
+const NEWS_VIEW_MODES = [
+  { id: 'pc', label: 'PC', width: 960 },
+  { id: 'portrait', label: 'Móvil vertical', width: 360 },
+  { id: 'landscape', label: 'Móvil horizontal', width: 740 }
+];
+
+function newsViewMode(id) {
+  return NEWS_VIEW_MODES.find(function (mode) { return mode.id === id; }) || NEWS_VIEW_MODES[0];
+}
+
+// Escala para que un marco de frameWidth quepa en availableWidth (nunca agranda).
+function newsFitScale(availableWidth, frameWidth) {
+  if (!(availableWidth > 0) || !(frameWidth > 0)) return 1;
+  return Math.min(1, availableWidth / frameWidth);
+}
+
 // Devuelve nodos {t:'text'|'strong'|'em'|'link'|'image'|'br', ...}.
 function newsParseInline(text) {
   const out = [];
@@ -45,11 +110,11 @@ function newsParseInline(text) {
     const rest = text.slice(i);
     let match;
     if (rest[0] === '\n') { flush(); out.push({ t: 'br' }); i += 1; continue; }
-    if ((match = /^!\[([^\]]*)\]\(([^)\s]+)\)/.exec(rest))) {
-      flush(); out.push({ t: 'image', alt: match[1], url: match[2] }); i += match[0].length; continue;
+    if ((match = NEWS_IMAGE_START.exec(rest))) {
+      flush(); out.push(newsImageNode(match.groups)); i += match[0].length; continue;
     }
-    if ((match = /^\[([^\]]+)\]\(([^)\s]+)\)/.exec(rest))) {
-      flush(); out.push({ t: 'link', children: newsParseInline(match[1]), url: match[2] }); i += match[0].length; continue;
+    if ((match = NEWS_LINK_START.exec(rest))) {
+      flush(); out.push({ t: 'link', children: newsParseInline(match.groups.text), url: newsDestination(match.groups.dest) }); i += match[0].length; continue;
     }
     if (rest.startsWith('**')) {
       const end = rest.indexOf('**', 2);
@@ -71,14 +136,16 @@ function newsParseInline(text) {
 
 const NEWS_LIST_LINE = /^( *)([-*]|\d+\.)\s+(.*)$/;
 
+function newsStartsBlock(line) {
+  return /^ {0,3}#{1,6}\s/.test(line) || /^ {0,3}---+\s*$/.test(line) || /^ {0,3}>/.test(line) || NEWS_LIST_LINE.test(line);
+}
+
 // Devuelve bloques {type, ...}. No valida: solo da forma a lo que se ve.
 function parseNewsBlocks(source) {
   const lines = String(source || '').replace(/\r\n?/g, '\n').split('\n');
   const blocks = [];
   let i = 0;
-  const startsBlock = function (line) {
-    return /^ {0,3}#{1,6}\s/.test(line) || /^ {0,3}---+\s*$/.test(line) || /^ {0,3}>/.test(line) || NEWS_LIST_LINE.test(line);
-  };
+  const startsBlock = newsStartsBlock;
   while (i < lines.length) {
     const line = lines[i];
     if (!line.trim()) { i += 1; continue; }
@@ -116,10 +183,70 @@ function parseNewsBlocks(source) {
       if (single && single.t === 'link') video = newsYoutubeID(single.url);
     }
     if (video) blocks.push({ type: 'youtube', id: video });
-    else if (single && single.t === 'image') blocks.push({ type: 'image', alt: single.alt, url: single.url });
+    else if (single && single.t === 'image') blocks.push({ type: 'image', alt: single.alt, url: single.url, size: single.size, align: single.align });
     else blocks.push({ type: 'paragraph', children: nodes });
   }
   return blocks;
+}
+
+// Imágenes que son solas un párrafo (las únicas donde size/align valen), con
+// los desplazamientos exactos de su título para reescribirlo sin tocar el resto.
+function newsImageOccurrences(source) {
+  const text = String(source || '');
+  const lines = [];
+  const starts = [];
+  const breaks = /\r\n?|\n/g;
+  let from = 0;
+  let match;
+  while ((match = breaks.exec(text))) { lines.push(text.slice(from, match.index)); starts.push(from); from = match.index + match[0].length; }
+  lines.push(text.slice(from)); starts.push(from);
+  const whole = new RegExp('^' + NEWS_IMAGE_SRC + '\\s*$');
+  const edge = function (line) { return line === undefined || !line.trim() || newsStartsBlock(line); };
+  const found = [];
+  lines.forEach(function (line, index) {
+    const prefix = /^(?:>\s?|[-*]\s+|\d+\.\s+| )*/.exec(line)[0];
+    const m = whole.exec(line.slice(prefix.length));
+    if (!m || !edge(lines[index - 1]) || !edge(lines[index + 1])) return;
+    const image = m[0].replace(/\s+$/, '');
+    const base = starts[index] + prefix.length;
+    const closeAt = base + image.length - /\s*\)$/.exec(image)[0].length;
+    const title = m.groups.title;
+    const hints = newsImageHints(newsTitleInner(title));
+    found.push({
+      line: index + 1, alt: m.groups.alt, url: newsDestination(m.groups.dest), size: hints.size, align: hints.align,
+      title: title || '', titleStart: title ? closeAt - title.length : closeAt, titleEnd: closeAt,
+      gapStart: title ? closeAt - title.length - m.groups.gap.length : closeAt
+    });
+  });
+  return found;
+}
+
+// Devuelve el Markdown con size/align de una imagen cambiados. Los valores por
+// defecto (medium, left) no se escriben; el resto del título se conserva.
+function newsSetImageHints(source, occurrence, hints) {
+  const text = String(source || '');
+  const size = NEWS_IMAGE_SIZES.includes(hints.size) && hints.size !== 'medium' ? hints.size : '';
+  const align = hints.align === 'center' ? 'center' : '';
+  const open = occurrence.title ? occurrence.title[0] : '"';
+  const close = open === '(' ? ')' : open;
+  const kept = newsTitleInner(occurrence.title).split(/\s+/).filter(function (token) {
+    return token && !token.startsWith('size=') && !token.startsWith('align=');
+  });
+  const tokens = kept.concat(size ? ['size=' + size] : [], align ? ['align=' + align] : []);
+  if (!tokens.length) return text.slice(0, occurrence.gapStart) + text.slice(occurrence.titleEnd);
+  const title = open + tokens.join(' ') + close;
+  if (occurrence.title) return text.slice(0, occurrence.titleStart) + title + text.slice(occurrence.titleEnd);
+  return text.slice(0, occurrence.titleEnd) + ' ' + title + text.slice(occurrence.titleEnd);
+}
+
+// Inserta un bloque Markdown en su propio párrafo (líneas en blanco alrededor).
+function newsInsertBlock(value, start, end, block) {
+  const before = value.slice(0, start);
+  const after = value.slice(end);
+  const lead = !before ? '' : before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+  const trail = !after ? '' : after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+  const inserted = lead + block + trail;
+  return { value: before + inserted + after, caret: before.length + inserted.length };
 }
 
 // Avisos rápidos de lo que el servidor rechazará. El servidor decide.
@@ -161,22 +288,27 @@ function newsRenderInline(nodes, parent) {
       const link = make('a'); link.href = href; link.target = '_blank'; link.rel = 'noopener noreferrer';
       newsRenderInline(node.children, link); parent.append(link);
     } else if (node.t === 'image') {
-      parent.append(newsRenderImage(node));
+      parent.append(newsRenderImage(node, false));
     }
   });
 }
 
-function newsRenderImage(node) {
-  const src = newsSafeURL(node.url, true);
-  const holder = make('span', 'news-preview-image');
-  if (src.startsWith('/v1/objects/')) {
-    const image = make('img'); image.src = src; image.alt = node.alt;
-    image.addEventListener('error', function () { holder.textContent = 'Imagen: ' + (node.alt || 'sin descripción'); });
-    holder.append(image);
-  } else {
-    // El panel no carga imágenes externas (CSP); el launcher sí lo hará.
-    holder.textContent = 'Imagen externa: ' + (node.alt || node.url);
-  }
+// Una imagen de la vista previa: cas: o https. Ocupa el ancho de su tope (o el
+// del contenedor si es menor) con su proporción real: nunca se recorta. Si no
+// carga, queda el texto de reserva.
+function newsRenderImage(node, block) {
+  const cas = /^cas:([0-9a-f]{64})$/.exec(node.url);
+  const src = (cas && newsLocalImages.get(cas[1])) || newsSafeURL(node.url, true);
+  const layout = newsImageLayout(node.size, node.align);
+  const holder = make('span', block ? 'news-preview-image' : 'news-preview-image news-preview-image-inline');
+  holder.style.width = layout.width;
+  if (block && layout.center) holder.classList.add('news-preview-image-center');
+  const fallback = function (text) { holder.classList.add('news-preview-image-failed'); holder.style.width = ''; holder.textContent = text; };
+  if (!src) { fallback('Imagen no válida: ' + (node.alt || node.url)); return holder; }
+  const image = make('img'); image.alt = node.alt; image.referrerPolicy = 'no-referrer'; image.decoding = 'async';
+  image.addEventListener('error', function () { fallback('Imagen: ' + (node.alt || 'sin descripción')); });
+  image.src = src;
+  holder.append(image);
   return holder;
 }
 
@@ -192,7 +324,10 @@ function newsRenderBlocks(blocks, parent) {
       let root = null; let last = null; let sub = null;
       block.items.forEach(function (item) {
         const tag = item.ordered ? 'ol' : 'ul';
-        const li = make('li'); newsRenderInline(newsParseInline(item.text), li);
+        const li = make('li');
+        const nodes = newsParseInline(item.text);
+        if (nodes.length === 1 && nodes[0].t === 'image') li.append(newsRenderImage(nodes[0], true));
+        else newsRenderInline(nodes, li);
         if (item.level === 0 || !last) {
           if (!root) { root = make(tag); parent.append(root); }
           root.append(li); last = li; sub = null;
@@ -206,17 +341,39 @@ function newsRenderBlocks(blocks, parent) {
       card.append(make('strong', '', 'Vídeo de YouTube'), make('span', '', block.id));
       parent.append(card);
     } else if (block.type === 'image') {
-      const figure = make('p'); figure.append(newsRenderImage(block)); parent.append(figure);
+      parent.append(newsRenderImage(block, true));
     } else {
       const paragraph = make('p'); newsRenderInline(block.children, paragraph); parent.append(paragraph);
     }
   });
 }
 
-function renderNewsPreview(source, container) {
+// Pinta la vista previa dentro de un marco con el ancho de contenedor del modo
+// (PC, móvil vertical u horizontal) y lo reduce para que quepa en el panel.
+function renderNewsPreview(source, container, modeId) {
+  const mode = newsViewMode(modeId);
   container.replaceChildren();
-  if (!String(source || '').trim()) { container.append(make('p', 'microcopy', 'La vista previa aparece aquí.')); return; }
-  newsRenderBlocks(parseNewsBlocks(source), container);
+  const stage = make('div', 'news-stage');
+  const frame = make('div', 'news-frame news-frame-' + mode.id);
+  frame.style.width = mode.width + 'px';
+  stage.append(frame);
+  container.append(stage);
+  if (!String(source || '').trim()) frame.append(make('p', 'microcopy', 'La vista previa aparece aquí.'));
+  else newsRenderBlocks(parseNewsBlocks(source), frame);
+  const caption = make('p', 'microcopy news-frame-caption');
+  container.append(caption);
+  const fit = function () {
+    const scale = newsFitScale(container.clientWidth - 2 * NEWS_STAGE_PAD, mode.width);
+    frame.style.transform = 'scale(' + scale + ')';
+    stage.style.height = Math.ceil(frame.offsetHeight * scale + 2 * NEWS_STAGE_PAD) + 'px';
+    caption.textContent = 'Contenedor de ' + mode.width + ' px' + (scale < 1 ? ' · reducido al ' + Math.round(scale * 100) + ' % para caber' : '');
+  };
+  fit();
+  if (typeof ResizeObserver !== 'undefined') {
+    const observer = new ResizeObserver(fit);
+    observer.observe(container); observer.observe(frame);
+    container.newsObserver = observer;
+  }
 }
 
 // ---- datos ----
@@ -424,7 +581,7 @@ function openNewsEditor(item) {
     coverFile.hidden = coverMode.value !== 'upload';
     coverURL.hidden = coverMode.value !== 'url';
     coverPreview.hidden = !(coverMode.value === 'upload' && cover.converted);
-    if (coverMode.value === 'url') coverNote.textContent = 'El panel no carga imágenes externas. El launcher la recorta a 16:9.';
+    if (coverMode.value === 'url') coverNote.textContent = 'El launcher la recorta a 16:9; aquí no se previsualiza.';
     else if (coverMode.value === 'upload') coverNote.textContent = 'Se recorta al centro en 16:9 y se convierte a 1600 × 900 JPEG.';
     else if (coverMode.value === 'keep') coverNote.textContent = 'Se conserva la imagen ya subida.';
     else coverNote.textContent = '';
@@ -470,8 +627,59 @@ function openNewsEditor(item) {
   const body = make('textarea', 'news-body'); body.rows = 14; body.value = current.body || ''; body.spellcheck = true;
   const preview = make('div', 'news-preview'); preview.setAttribute('aria-live', 'polite');
   const warnings = make('ul', 'news-warnings');
+  let viewMode = 'pc';
+  try { viewMode = newsViewMode(window.localStorage.getItem('news-preview-mode')).id; } catch (_) { /* sin almacenamiento */ }
+  const modeBar = make('div', 'news-mode-bar'); modeBar.setAttribute('role', 'group'); modeBar.setAttribute('aria-label', 'Tamaño de la vista previa');
+  const modeButtons = NEWS_VIEW_MODES.map(function (mode) {
+    const button = make('button', 'button button-secondary button-small', mode.label); button.type = 'button';
+    button.title = 'Contenedor de ' + mode.width + ' px';
+    button.addEventListener('click', function () {
+      viewMode = mode.id;
+      try { window.localStorage.setItem('news-preview-mode', mode.id); } catch (_) { /* sin almacenamiento */ }
+      refreshPreview();
+    });
+    modeBar.append(button);
+    return { mode: mode, button: button };
+  });
+  const imageList = make('div', 'news-image-list');
+  function imageLabel(occurrence, index) {
+    return 'Imagen ' + (index + 1) + ' · línea ' + occurrence.line + ' · ' + (occurrence.alt || occurrence.url).slice(0, 40);
+  }
+  function syncImageList() {
+    const occurrences = newsImageOccurrences(body.value);
+    if (imageList.children.length !== occurrences.length) {
+      imageList.replaceChildren();
+      occurrences.forEach(function (occurrence, index) {
+        const row = make('div', 'news-image-row');
+        const size = make('select'); size.setAttribute('aria-label', 'Tamaño de la imagen ' + (index + 1));
+        [['small', 'Pequeña (180 px)'], ['medium', 'Mediana (300 px)'], ['large', 'Grande (480 px)'], ['full', 'Ancho completo']].forEach(function (o) { size.append(newsOption(o[0], o[1])); });
+        const align = make('select'); align.setAttribute('aria-label', 'Alineación de la imagen ' + (index + 1));
+        align.append(newsOption('left', 'Izquierda'), newsOption('center', 'Centro'));
+        const change = function () {
+          const current = newsImageOccurrences(body.value)[index];
+          if (!current) return;
+          body.value = newsSetImageHints(body.value, current, { size: size.value, align: align.value });
+          refreshPreview();
+        };
+        size.addEventListener('change', change); align.addEventListener('change', change);
+        row.append(make('span', 'news-image-name'), size, align);
+        imageList.append(row);
+      });
+    }
+    occurrences.forEach(function (occurrence, index) {
+      const row = imageList.children[index];
+      row.querySelector('.news-image-name').textContent = imageLabel(occurrence, index);
+      const selects = row.querySelectorAll('select');
+      selects[0].value = occurrence.size || 'medium';
+      selects[1].value = occurrence.align || 'left';
+    });
+    imageList.hidden = occurrences.length === 0;
+  }
   function refreshPreview() {
-    renderNewsPreview(body.value, preview);
+    if (preview.newsObserver) preview.newsObserver.disconnect();
+    renderNewsPreview(body.value, preview, viewMode);
+    modeButtons.forEach(function (entry) { entry.button.setAttribute('aria-pressed', String(entry.mode.id === viewMode)); });
+    syncImageList();
     warnings.replaceChildren.apply(warnings, newsBodyWarnings(body.value).map(function (w) { return make('li', '', w); }));
     bodyCount.textContent = new TextEncoder().encode(body.value).length + ' de 65536 bytes';
   }
@@ -484,18 +692,30 @@ function openNewsEditor(item) {
   const insertImage = make('button', 'button button-secondary button-small', 'Insertar imagen…'); insertImage.type = 'button';
   const insertFile = make('input'); insertFile.type = 'file'; insertFile.accept = 'image/png,image/jpeg,image/webp'; insertFile.hidden = true;
   insertImage.addEventListener('click', function () { insertFile.click(); });
-  insertFile.addEventListener('change', async function () {
-    if (!insertFile.files.length) return;
+  async function uploadAndInsert(file) {
     setStatus(status, 'Subiendo imagen…');
     try {
-      const converted = await newsImageToBlob(insertFile.files[0], NEWS_COVER_WIDTH, 0, false);
+      const converted = await newsImageToBlob(file, NEWS_COVER_WIDTH, 0, false);
       await newsUploadImage(converted);
-      const markdown = '![Descripción](cas:' + converted.sha256 + ')';
+      if (!newsLocalImages.has(converted.sha256)) newsLocalImages.set(converted.sha256, URL.createObjectURL(converted.blob));
       const at = body.selectionStart === undefined ? body.value.length : body.selectionStart;
-      body.value = body.value.slice(0, at) + markdown + body.value.slice(body.selectionEnd);
-      refreshPreview(); setStatus(status, 'Imagen subida e insertada; cambia la descripción.', 'success');
+      const end = body.selectionEnd === undefined ? at : body.selectionEnd;
+      const inserted = newsInsertBlock(body.value, at, end, '![Descripción](cas:' + converted.sha256 + ')');
+      body.value = inserted.value; body.setSelectionRange(inserted.caret, inserted.caret);
+      refreshPreview(); setStatus(status, 'Imagen subida e insertada; cambia la descripción y elige su tamaño.', 'success');
     } catch (error) { setStatus(status, describeError(error), 'error'); }
+  }
+  insertFile.addEventListener('change', async function () {
+    if (!insertFile.files.length) return;
+    await uploadAndInsert(insertFile.files[0]);
     insertFile.value = '';
+  });
+  body.addEventListener('paste', function (event) {
+    const files = event.clipboardData ? Array.from(event.clipboardData.files || []) : [];
+    const image = files.find(function (file) { return file.type.startsWith('image/'); });
+    if (!image) return;
+    event.preventDefault();
+    uploadAndInsert(image);
   });
 
   const status = make('p', 'inline-status'); status.setAttribute('role', 'status');
@@ -511,8 +731,9 @@ function openNewsEditor(item) {
   const link = make('div', 'news-link'); link.append(linkProfile, linkRevision);
   const bodyHead = make('div', 'news-body-head'); bodyHead.append(make('span', '', 'Cuerpo (Markdown)'), insertImage, insertFile, bodyCount);
   const editor = make('div', 'news-editor');
-  const bodyBox = make('div', 'news-body-box'); bodyBox.append(bodyHead, body, warnings);
-  const previewBox = make('div', 'news-preview-box'); previewBox.append(make('span', '', 'Vista previa'), preview);
+  const bodyBox = make('div', 'news-body-box'); bodyBox.append(bodyHead, body, warnings, imageList);
+  const previewHead = make('div', 'news-body-head'); previewHead.append(make('span', '', 'Vista previa'), modeBar);
+  const previewBox = make('div', 'news-preview-box'); previewBox.append(previewHead, preview);
   editor.append(bodyBox, previewBox);
 
   form.append(make('h3', '', editing ? 'Editar noticia' : 'Nueva noticia'), grid,
@@ -525,7 +746,12 @@ function openNewsEditor(item) {
   syncCover(); refreshPreview();
 
   cancel.addEventListener('click', function () { dialog.close(); });
-  dialog.addEventListener('close', function () { dialog.remove(); });
+  dialog.addEventListener('close', function () {
+    if (preview.newsObserver) preview.newsObserver.disconnect();
+    newsLocalImages.forEach(function (url) { URL.revokeObjectURL(url); });
+    newsLocalImages.clear();
+    dialog.remove();
+  });
   form.addEventListener('submit', async function (event) {
     event.preventDefault();
     save.disabled = cancel.disabled = true;
@@ -623,5 +849,9 @@ if (typeof document !== 'undefined' && document.getElementById('news-root')) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { newsSafeURL, newsYoutubeID, newsParseInline, parseNewsBlocks, newsBodyWarnings, newsCoverCrop };
+  module.exports = {
+    newsSafeURL, newsYoutubeID, newsParseInline, parseNewsBlocks, newsBodyWarnings, newsCoverCrop,
+    newsImageHints, newsImageLayout, newsImageOccurrences, newsSetImageHints, newsInsertBlock,
+    newsViewMode, newsFitScale, NEWS_VIEW_MODES
+  };
 }

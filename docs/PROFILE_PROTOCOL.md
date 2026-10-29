@@ -654,8 +654,23 @@ copia tal cual a sus tests.
 | Cita | `> ` |
 | Separador | `---` en su propia línea |
 | Enlace | `[texto](https://…)` o una URL `https://` suelta |
-| Imagen | `![alt](https://…)` (externa, p. ej. Imgur) o `![alt](cas:<sha256>)` (subida desde el panel; el servidor comprueba que existe) |
+| Imagen | `![alt](https://…)` (externa, p. ej. Imgur) o `![alt](cas:<sha256>)` (subida desde el panel; el servidor comprueba que existe). Opcional: tamaño y alineación en el título, `![alt](cas:<sha256> "size=medium align=center")` (ver «Tamaño y alineación de imágenes») |
 | Vídeo de YouTube | Un párrafo que es **solo** un enlace a YouTube: `https://www.youtube.com/watch?v=<id>`, `https://youtu.be/<id>` o `https://www.youtube.com/shorts/<id>`, con `<id>` = `[A-Za-z0-9_-]{11}` (se ignoran otros parámetros) |
+
+Tamaño y alineación de imágenes: van en el título estándar de CommonMark
+(comillas dobles o simples), como `campo=valor` separados por espacios. Los
+valores desconocidos, los campos desconocidos y un título sin estos campos se
+ignoran sin error; una noticia sin título se ve como antes. Si un campo se
+repite, vale el último. `src` (`Destination`) sigue siendo solo la URL o la
+referencia `cas:`.
+
+| Campo | Valores | Por defecto | Efecto |
+|---|---|---|---|
+| `size` | `small`, `medium`, `large`, `full` | `medium` | Tope de ancho en píxeles lógicos: 180, 300, 480 y ancho completo del contenedor. La imagen ocupa ese ancho (o el del contenedor, si es menor) con su proporción real, sin recortes. |
+| `align` | `left`, `center` | `left` | Posición de una imagen más estrecha que el contenedor. |
+
+El bloque `image` de los vectores compartidos expone `size` y `align` (cadena
+vacía = no indicado: el cliente aplica el valor por defecto).
 
 Se rechaza: HTML (en bloque o en línea), tablas, bloques y spans de código,
 imágenes o enlaces que no sean `https:` (o `cas:` en imágenes), títulos de
