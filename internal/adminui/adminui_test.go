@@ -53,6 +53,10 @@ func TestPageSecurityPolicyAndNoCrossOriginAccess(t *testing.T) {
 	if !strings.Contains(csp, "default-src 'none'") || !strings.Contains(csp, "form-action 'none'") {
 		t.Fatalf("unexpected CSP: %q", csp)
 	}
+	// The news preview shows external https images (the launchers load them too); nothing else is opened up.
+	if !strings.Contains(csp, "img-src 'self' blob: https:;") || !strings.Contains(csp, "connect-src 'self'") || !strings.Contains(csp, "script-src 'self'") {
+		t.Fatalf("unexpected CSP: %q", csp)
+	}
 }
 
 func TestStaticAssetsAreRevalidatedAndVersioned(t *testing.T) {
@@ -110,7 +114,7 @@ func TestNewsPanelIsLinked(t *testing.T) {
 	handler := NewHandler(EmptyReadModel{}, BuildInfo{Version: "test", Commit: "test"})
 	page := httptest.NewRecorder()
 	handler.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/admin/", nil))
-	for _, fragment := range []string{`data-nav="noticias"`, `data-view="noticias"`, `id="news-rows"`, `id="new-news"`, `id="edit-news-categories"`, "/admin/assets/news.js?refresh=admin-news-0400", "/admin/assets/news.css?refresh=admin-news-0400"} {
+	for _, fragment := range []string{`data-nav="noticias"`, `data-view="noticias"`, `id="news-rows"`, `id="new-news"`, `id="edit-news-categories"`, "/admin/assets/news.js?refresh=admin-news-0410", "/admin/assets/news.css?refresh=admin-news-0410"} {
 		if !strings.Contains(page.Body.String(), fragment) {
 			t.Errorf("Noticias is missing %q", fragment)
 		}

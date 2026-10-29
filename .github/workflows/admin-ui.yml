@@ -19,5 +19,5 @@ jobs:
         run: test -z "$(gofmt -l .)"
       - name: Test
         run: go test ./...
-      - name: Test panel JVM option rules against shared vectors
-        run: node --test internal/adminui/jstest/jvm_options.test.cjs
+      - name: Test panel scripts (JVM option rules, news preview and editor) against shared vectors
+        run: node --test internal/adminui/jstest/*.test.cjs

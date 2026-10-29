@@ -147,3 +147,22 @@ func TestCASImagesAreCollected(t *testing.T) {
 		t.Fatalf("info=%+v err=%v", info, err)
 	}
 }
+
+func TestImageHints(t *testing.T) {
+	cases := []struct{ title, size, align string }{
+		{"", "", ""},
+		{"size=large align=center", "large", "center"},
+		{"  align=center\tsize=full ", "full", "center"},
+		{"size=huge align=right", "", ""},
+		{"size=large size=huge", "", ""},
+		{"size=small size=large", "large", ""},
+		{"Size=large", "", ""},
+		{"una descripcion", "", ""},
+	}
+	for _, c := range cases {
+		size, align := ImageHints(c.title)
+		if size != c.size || align != c.align {
+			t.Errorf("%q: got %q/%q want %q/%q", c.title, size, align, c.size, c.align)
+		}
+	}
+}
