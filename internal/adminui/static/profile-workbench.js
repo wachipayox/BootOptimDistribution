@@ -33,6 +33,7 @@ function resetPublicationDraft() {
   nodes.stageButton.disabled = false;
   invalidatePrepared();
   refreshJvmOptionsPanel();
+  resetJavaRuntimeDraft();
 }
 
 async function startProfileUpdate(profile) {
@@ -82,6 +83,7 @@ async function startProfileUpdate(profile) {
     qs('#update-context-help').textContent = 'Los archivos actuales ya están cargados. «Añadir archivos» modifica solo lo elegido; «Importar carpeta» compara un pack completo. La madre global y las versiones anteriores se conservan.';
     nodes.publishButton.textContent = 'Publicar actualización';
     refreshJvmOptionsPanel();
+    loadJavaRuntimeDraft(resolved.manifest, base ? base.javaRuntime : null);
     setStatus(nodes.parentStatus, resolved.manifest.base ? 'Madre conservada: ' + resolved.manifest.base.profile_id + ' / ' + resolved.manifest.base.revision_id : 'Perfil raíz: la nueva versión seguirá siendo independiente.');
     setStatus(nodes.folderStatus, resolved.map.size + ' archivos publicados cargados. Puedes editar, reemplazar, añadir o quitar archivos.');
     await recomputeDiff();
@@ -134,6 +136,7 @@ function buildProfileUpdateManifest() {
   manifest.schema_version = manifest.config_settings.length ? 2 : 1;
   applyDraftJvmOptions(manifest);
   applyDraftLoader(manifest, minecraft, loaderKind, loaderVersion);
+  applyDraftJavaRuntime(manifest);
   return manifest;
 }
 

@@ -36,6 +36,8 @@ type Revision struct {
 type Profile struct {
 	Description string     `json:"description,omitempty"`
 	Icon        *ObjectRef `json:"icon,omitempty"`
+	// JavaRuntime is the optional, inheritable launcher Java choice (see java_runtime.go).
+	JavaRuntime *JavaRuntime `json:"java_runtime,omitempty"`
 	ID          string     `json:"id"`
 	Name        string     `json:"name"`
 	Official    bool       `json:"official"`
@@ -229,6 +231,7 @@ func cloneManifest(m Manifest) Manifest {
 		base := *m.Base
 		out.Base = &base
 	}
+	out.Profile.JavaRuntime = m.Profile.JavaRuntime.clone()
 	out.Mods = append([]ModEntry(nil), m.Mods...)
 	out.RemoveMods = append([]RemoveMod(nil), m.RemoveMods...)
 	out.Configs = append([]ConfigEntry(nil), m.Configs...)

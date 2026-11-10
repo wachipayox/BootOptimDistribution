@@ -419,6 +419,94 @@ Fabric y Forge además de NeoForge:
   rechazar la revisión con un mensaje claro (no instalar otro loader). Un
   launcher que no conozca el esquema 4 rechaza la revisión como hoy.
 
+## Java del perfil (`profile.java_runtime`, 2026-11-10)
+
+Decisión del usuario (2026-11-10): qué Java usa el launcher es un ajuste del
+perfil, no algo fijado en el código del launcher. Cada perfil elige, por
+plataforma:
+
+- **Java por defecto de Mojang**: la que pide el version manifest de esa
+  versión de Minecraft (`javaVersion`), sin forzar nada. Es el valor si nadie en
+  la cadena dice nada.
+- **Java recomendada por el perfil**: una versión mayor concreta (25, 21, 17…).
+
+### Forma
+
+Va **dentro del objeto firmado `profile`**, es opcional y vale en los esquemas
+1–4:
+
+```json
+"profile": {
+  "id": "profile_wachiland-elite", "name": "Wachiland Elite", "official": true,
+  "java_runtime": {
+    "pc":      { "source": "profile", "major": 25 },
+    "android": { "source": "mojang" }
+  }
+}
+```
+
+| Campo | Regla |
+|---|---|
+| `java_runtime` | Opcional. Si está, es un objeto con `pc` y/o `android` (al menos una). Ni `{}` ni `null`: para heredar se omite. |
+| `pc`, `android` | Opcionales e independientes. Cada launcher lee solo la suya. Otra clave se rechaza. |
+| `source` | `mojang` o `profile`. Otro valor se rechaza. |
+| `major` | Obligatorio con `profile`, prohibido con `mojang`. Entero 8–99 (*feature release* de Java). |
+
+Casos compartidos: [`java-runtime-vectors.json`](java-runtime-vectors.json)
+(aceptar, rechazar y resolver herencia). Cada cliente lo copia tal cual y sus
+tests deben dar lo mismo que `internal/revision/java_runtime.go`.
+
+**Por qué en `profile` y sin esquema nuevo.** El launcher Android 1.0.0 (ya en
+manos de jugadores) rechaza claves desconocidas en la raíz del manifiesto y
+cualquier `schema_version` > 4, pero no restringe las claves de `profile`.
+Como `profile_wachiland-elite-android` hereda de `profile_wachiland-elite`, un
+campo en la raíz o un esquema 5 en la madre le haría rechazar la cadena entera
+y los jugadores Android se quedarían sin actualizar. Dentro de `profile` lo
+ignora y sigue con su comportamiento de siempre. Las revisiones que no llevan
+el campo no cambian ni un byte (mismo digest y firma). Pandora deserializa
+`profile` con `deny_unknown_fields`, así que **debe** conocer el campo antes de
+que se publique en un perfil que use (Pandora aún no tiene versión publicada).
+
+**Por qué solo la versión mayor.** El nombre del componente
+(`java-runtime-epsilon`…) es un detalle de Mojang por plataforma y cambia entre
+versiones; el launcher Android no usa esos componentes sino sus propios
+runtimes. Cada launcher traduce la versión mayor a lo que tiene: Pandora busca
+en la lista de runtimes de Mojang de su plataforma el componente cuya versión
+empiece por esa mayor; Android, su runtime empaquetado de esa versión.
+
+### Herencia
+
+Por plataforma, del descendiente hacia la raíz: gana la primera revisión de la
+cadena que nombra esa plataforma; si ninguna lo hace, `mojang`. Un hijo hereda
+lo de su madre salvo que lo sobrescriba, y vuelve a la Java de Mojang con
+`{"source": "mojang"}` explícito. No hace falta permiso de la madre. El
+seguimiento automático de los hijos conserva la elección propia del hijo. El
+panel no emite el campo en un perfil raíz que elige Mojang (es lo mismo que
+omitirlo).
+
+### Contrato para los launchers
+
+1. Aceptar `profile.java_runtime` en los esquemas 1–4, validarlo como arriba
+   (una revisión con un valor inválido se rechaza) y resolver la plataforma
+   propia sobre la cadena verificada. Guardar el resultado en el estado
+   persistente de la instancia: lanzar no contacta con el servidor.
+2. Precedencia en cada arranque, de mayor a menor: Java elegida por el jugador
+   en la instancia o binario `java` personalizado → recuerdo de fallo de esta
+   instancia (punto 4) → `profile` del perfil → Java de Mojang. Los parámetros
+   que dependen de la Java (caché AOT, agentes, opciones con `java.min`) se
+   deciden con la Java que arranca de verdad.
+3. `profile` con una mayor que el launcher no puede obtener para su plataforma:
+   usa la de Mojang y registra
+   `[WBOMBO-COMPAT] FALLBACK project=<launcher> mechanism=java-runtime/<mayor> mod=java@<mayor> reason=<motivo>`
+   (WARN). Al aplicarla, `[WBOMBO-COMPAT] ACTIVE …` (INFO) con la versión real.
+4. Si un arranque con la Java recomendada falla (salida con error temprana,
+   criterio de cada launcher), la instancia **recuerda** el fallo con la mayor
+   que falló y usa la Java de Mojang en los arranques siguientes. El recuerdo se
+   descarta si el perfil pasa a recomendar otra mayor o a `mojang`, o si el
+   jugador lo borra desde la instancia.
+5. Un launcher que no conoce el campo (Android 1.0.0) usa la Java de Mojang o
+   la suya de siempre: es el valor por defecto documentado.
+
 ## Perfiles de prueba (0.3.0)
 
 Decisión del usuario (2026-10-21): los agentes crean, cambian, publican,
