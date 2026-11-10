@@ -38,9 +38,9 @@ type Profile struct {
 	Icon        *ObjectRef `json:"icon,omitempty"`
 	// JavaRuntime is the optional, inheritable launcher Java choice (see java_runtime.go).
 	JavaRuntime *JavaRuntime `json:"java_runtime,omitempty"`
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Official    bool       `json:"official"`
+	ID          string       `json:"id"`
+	Name        string       `json:"name"`
+	Official    bool         `json:"official"`
 }
 
 // Game pins the Minecraft version and its mod loader. Schema 1-3 manifests carry
