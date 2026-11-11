@@ -91,6 +91,8 @@ func TestPublishingParentAutoRepinsChildrenAndSkipsConflicts(t *testing.T) {
 	pinRoot := revision.ParentRef{ProfileID: "profile_root", RevisionID: r1.Revision.RevisionID, ManifestSHA256: r1.Revision.ManifestSHA256}
 	c1 := publish(child("profile_child", "rev_00000000000000c1", pinRoot, func(m *revision.Manifest) {
 		m.Configs = []revision.ConfigEntry{{Path: "config/own.toml", Object: revision.ObjectRef{SHA256: hashB, Size: int64(len(second))}, Policy: "enforced"}}
+		// The child's own Java choice must survive the automatic re-pin.
+		m.Profile.JavaRuntime = &revision.JavaRuntime{PC: &revision.JavaRuntimeChoice{Source: revision.JavaRuntimeSourceMojang}}
 	}))
 	pinChild := revision.ParentRef{ProfileID: "profile_child", RevisionID: c1.Revision.RevisionID, ManifestSHA256: c1.Revision.ManifestSHA256}
 	g1 := publish(child("profile_grandchild", "rev_00000000000000g1", pinChild, nil))
@@ -171,6 +173,9 @@ func TestPublishingParentAutoRepinsChildrenAndSkipsConflicts(t *testing.T) {
 	}
 	if len(cm.Configs) != 1 || cm.Configs[0].Object.SHA256 != hashB || !strings.HasPrefix(cm.Revision.ReleaseNotes, "auto: sigue a profile_root rev rev_0000000000000002") {
 		t.Fatalf("child own content or note changed: %+v", cm)
+	}
+	if jr := cm.Profile.JavaRuntime; jr == nil || jr.PC == nil || jr.PC.Source != revision.JavaRuntimeSourceMojang || jr.Android != nil {
+		t.Fatalf("child java_runtime not preserved: %+v", jr)
 	}
 	gm := manifestOf("profile_grandchild", byProfile["profile_grandchild"].Revision.RevisionID)
 	if gm.Base.ProfileID != "profile_child" || gm.Base.RevisionID != childRef.RevisionID || gm.Base.ManifestSHA256 != childRef.ManifestSHA256 {

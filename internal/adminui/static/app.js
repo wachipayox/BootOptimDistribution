@@ -1365,6 +1365,7 @@ async function resolveEffective(profile, revision, depth, seen) {
   let map = new Map();
   let configSettings = new Map();
   let jvmOptions = [];
+  let javaChain = [];
   let inheritanceDepth = 0;
   let ancestors = [];
   if (manifest.base) {
@@ -1381,12 +1382,14 @@ async function resolveEffective(profile, revision, depth, seen) {
     map = new Map(inherited.map);
     configSettings = new Map(inherited.configSettings);
     jvmOptions = inherited.jvmOptions;
+    javaChain = inherited.javaChain;
     inheritanceDepth = inherited.inheritanceDepth + 1;
     ancestors = [inherited].concat(inherited.ancestors || []);
   }
 
   applyManifest(map, manifest, configSettings);
   jvmOptions = applyJvmManifest(jvmOptions, manifest);
+  javaChain = [{ profile_id: manifest.profile && manifest.profile.id, java_runtime: manifest.profile && manifest.profile.java_runtime }].concat(javaChain);
   seen.delete(key);
 
   const manifestProfile = manifest.profile && valueText(manifest.profile.id, profile);
@@ -1395,6 +1398,8 @@ async function resolveEffective(profile, revision, depth, seen) {
     map: map,
     configSettings: configSettings,
     jvmOptions: jvmOptions,
+    javaChain: javaChain,
+    javaRuntime: resolveJavaRuntime(javaChain),
     manifest: manifest,
     inheritanceDepth: inheritanceDepth,
     ancestors: ancestors,
@@ -1416,6 +1421,7 @@ async function handleParentProfileChange() {
   state.localJvmOptions.clear();
   state.removedJvmOptions.clear();
   refreshJvmOptionsPanel();
+  setParentJavaRuntime(null);
   state.parentRef = null;
   state.parentDepth = 0;
   state.parentManifest = null;
@@ -1501,6 +1507,7 @@ async function handleParentRevisionChange() {
     state.parentConfigSettings = resolved.configSettings;
     state.parentJvmOptions = resolved.jvmOptions;
     refreshJvmOptionsPanel();
+    setParentJavaRuntime(resolved.javaRuntime);
     state.parentRef = resolved.ref;
     state.parentDepth = resolved.inheritanceDepth;
     state.parentManifest = resolved.manifest;
@@ -1985,6 +1992,7 @@ function buildManifest() {
   };
   applyDraftJvmOptions(manifest);
   applyDraftLoader(manifest, minecraft, loaderKind, loaderVersion);
+  applyDraftJavaRuntime(manifest);
 
   const notes = qs('#release-notes').value.trim();
   if (notes) manifest.profile.description = notes;
@@ -2143,7 +2151,8 @@ function summarizeDiff() {
     'Cambios: ' + counts.changed,
     'Eliminaciones: ' + counts.removed,
     'Perfil base: ' + (state.manifest && state.manifest.base ? state.manifest.base.profile_id + ' / ' + state.manifest.base.revision_id : 'ninguno'),
-    'Parámetros JVM: ' + jvmDraftSummary(state.manifest)
+    'Parámetros JVM: ' + jvmDraftSummary(state.manifest),
+    'Java: ' + javaRuntimeDraftSummary(state.manifest)
   ].join('\n');
 }
 

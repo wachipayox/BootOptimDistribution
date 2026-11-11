@@ -33,7 +33,7 @@ func validateManifestShape(raw []byte) error {
 			return err
 		}
 	}
-	profile, err := objectShape(root["profile"], []string{"id", "name", "official"}, []string{"description", "icon"})
+	profile, err := objectShape(root["profile"], []string{"id", "name", "official"}, []string{"description", "icon", "java_runtime"})
 	if err != nil {
 		return fmt.Errorf("profile: %w", err)
 	}
@@ -48,6 +48,11 @@ func validateManifestShape(raw []byte) error {
 	}
 	if raw, ok := profile["description"]; ok {
 		if err := requireString(raw, "profile.description"); err != nil {
+			return err
+		}
+	}
+	if raw, ok := profile["java_runtime"]; ok {
+		if err := javaRuntimeShape(raw); err != nil {
 			return err
 		}
 	}
