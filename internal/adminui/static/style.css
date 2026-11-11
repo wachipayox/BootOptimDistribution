@@ -1243,7 +1243,8 @@ footer {
 .test-profile-table td:nth-child(3), .test-profile-table td:nth-child(5) { min-width: 10rem; font-size: .82rem; }
 
 .launcher-artifact-rows { display: grid; gap: .6rem; margin-bottom: .8rem; }
-.launcher-artifact-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1.4fr) auto; gap: .6rem; align-items: end; }
+.launcher-artifact-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: .6rem; align-items: end; }
+.launcher-artifact-read { grid-column: 1 / -1; margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 760px) { .launcher-artifact-row { grid-template-columns: minmax(0, 1fr); } }
 .launcher-edit { margin-top: 1rem; }
 .is-withdrawn td { color: var(--muted); }

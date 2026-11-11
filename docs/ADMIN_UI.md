@@ -257,3 +257,16 @@ manifest digest, object hashes, pinned inheritance and anti-rollback rules
 independently of browser code. Promotion/rollback of the stable revision
 (`channels/stable` in the API) is implemented in the API; the panel promotes, and
 rollback stays API-only (test profiles get a server-signed rollback, 0.3.0).
+
+## Versiones del launcher
+
+**Publicar versión**: se elige la aplicación, el canal, las notas y, por cada
+plataforma, el binario. Al elegirlo, el panel lo sube y el servidor lee de él
+la versión y el nombre de descarga (`WachilandLauncher-<versión>-<plataforma>`):
+Pandora, del recurso de versión del `.exe`; Android, del `versionName` del APK.
+Se muestran de solo lectura antes de confirmar y no se pueden escribir; si el
+binario no lleva versión, no es de esa plataforma, no es SemVer o esa versión
+ya existe, la fila muestra el error y no se puede publicar. Todas las
+plataformas deben llevar la misma versión. Lo editable después de publicar es
+solo el canal y las notas. Contrato en `PROFILE_PROTOCOL.md` («Panel» de las
+versiones del launcher).
