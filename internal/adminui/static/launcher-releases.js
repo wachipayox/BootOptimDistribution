@@ -7,7 +7,7 @@
 const launcherPanel = { loading: false, releases: [], editing: null };
 const LAUNCHER_APPS = { pandora: 'Pandora', android: 'Android' };
 const LAUNCHER_CHANNELS = { player: 'Jugador', developer: 'Desarrollador' };
-const LAUNCHER_PLATFORMS = ['windows-x86_64', 'linux-x86_64', 'macos-aarch64', 'android-universal'];
+const LAUNCHER_PLATFORMS = ['windows-x86_64', 'windows-aarch64', 'android-universal'];
 
 function launcherDate(value) {
   const date = new Date(value);
@@ -85,6 +85,9 @@ async function loadLauncherReleases() {
   }
 }
 
+// The version and the download name come from the binary itself: choosing a
+// file uploads it and asks the server to read them (POST …/inspect). They are
+// shown read-only; the server checks them again when publishing.
 function addLauncherArtifactRow(platform) {
   const row = make('div', 'launcher-artifact-row');
   const platformLabel = make('label');
@@ -101,79 +104,107 @@ function addLauncherArtifactRow(platform) {
   fileInput.type = 'file';
   fileInput.dataset.role = 'file';
   fileLabel.appendChild(fileInput);
-  const nameLabel = make('label');
-  nameLabel.appendChild(make('span', '', 'Nombre de archivo'));
-  const nameInput = make('input');
-  nameInput.autocomplete = 'off';
-  nameInput.maxLength = 128;
-  nameInput.dataset.role = 'name';
-  nameLabel.appendChild(nameInput);
-  fileInput.addEventListener('change', function () {
-    if (fileInput.files && fileInput.files[0] && !nameInput.value) nameInput.value = fileInput.files[0].name;
-  });
+  const read = make('p', 'launcher-artifact-read microcopy', 'Elige la plataforma y el binario: la versión y el nombre se leen del propio archivo.');
+  read.dataset.role = 'read';
   const remove = make('button', 'button button-secondary button-small', 'Quitar');
   remove.type = 'button';
-  remove.addEventListener('click', function () { row.remove(); });
-  row.append(platformLabel, fileLabel, nameLabel, remove);
+  remove.addEventListener('click', function () { row.remove(); refreshLauncherSummary(); });
+  const inspect = function () { inspectLauncherRow(row); };
+  fileInput.addEventListener('change', inspect);
+  platformInput.addEventListener('change', inspect);
+  qs('#launcher-app').addEventListener('change', inspect);
+  row.append(platformLabel, fileLabel, remove, read);
   qs('#launcher-artifact-rows').appendChild(row);
 }
 
-function collectLauncherArtifacts() {
-  return Array.from(qs('#launcher-artifact-rows').children).map(function (row) {
-    const file = row.querySelector('[data-role="file"]').files[0];
-    return {
-      platform: row.querySelector('[data-role="platform"]').value.trim(),
-      file_name: row.querySelector('[data-role="name"]').value.trim(),
-      file: file
-    };
-  });
+async function inspectLauncherRow(row) {
+  if (!row.isConnected) return;
+  const read = row.querySelector('[data-role="read"]');
+  const file = row.querySelector('[data-role="file"]').files[0];
+  const platform = row.querySelector('[data-role="platform"]').value.trim();
+  const token = {};
+  row.launcherToken = token;
+  row.launcherArtifact = null;
+  refreshLauncherSummary();
+  if (!file || !platform) return;
+  read.className = 'launcher-artifact-read microcopy';
+  try {
+    read.textContent = 'Calculando SHA-256 de ' + file.name + '…';
+    const digest = await hashFile(file);
+    if (row.launcherToken !== token) return;
+    read.textContent = 'Subiendo ' + file.name + ' (' + formatBytes(file.size) + ')…';
+    await request('/v1/admin/objects/sha256/' + encodeURIComponent(digest), {
+      method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file
+    });
+    read.textContent = 'Leyendo la versión del binario…';
+    const object = { sha256: digest, size: file.size };
+    const result = await request('/v1/admin/launcher-releases/inspect', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ app: qs('#launcher-app').value, platform: platform, object: object })
+    });
+    if (row.launcherToken !== token) return;
+    row.launcherArtifact = { platform: platform, object: object, version: result.version, file_name: result.file_name };
+    read.replaceChildren(
+      make('strong', '', 'Versión ' + result.version), document.createTextNode(' · '),
+      make('code', '', result.file_name), document.createTextNode(' · ' + result.detail)
+    );
+  } catch (error) {
+    if (row.launcherToken !== token) return;
+    read.className = 'launcher-artifact-read inline-status error';
+    read.textContent = describeError(error);
+  }
+  refreshLauncherSummary();
+}
+
+// Read-only summary of what will be published; publishing needs every row
+// read and all of them carrying the same version.
+function launcherDraft() {
+  const rows = Array.from(qs('#launcher-artifact-rows').children);
+  const artifacts = rows.map(function (row) { return row.launcherArtifact; });
+  if (!rows.length || artifacts.some(function (a) { return !a; })) return { error: 'Cada plataforma necesita un binario leído sin errores.' };
+  const versions = Array.from(new Set(artifacts.map(function (a) { return a.version; })));
+  if (versions.length !== 1) return { error: 'Los binarios llevan versiones distintas (' + versions.join(', ') + '); una versión publica binarios de la misma versión.' };
+  return { version: versions[0], artifacts: artifacts };
+}
+
+function refreshLauncherSummary() {
+  const draft = launcherDraft();
+  qs('#launcher-version').value = draft.version || '';
+  qs('#launcher-publish').disabled = Boolean(draft.error);
 }
 
 async function publishLauncherRelease(event) {
   event.preventDefault();
   const status = qs('#launcher-status');
   const button = qs('#launcher-publish');
-  const artifacts = collectLauncherArtifacts();
-  if (!artifacts.length || artifacts.some(function (a) { return !a.file || !a.platform || !a.file_name; })) {
-    setStatus(status, 'Cada plataforma necesita nombre, binario y nombre de archivo.', 'error');
+  const draft = launcherDraft();
+  if (draft.error) {
+    setStatus(status, draft.error, 'error');
     return;
   }
   const app = qs('#launcher-app').value;
-  const version = qs('#launcher-version').value.trim();
+  if (!window.confirm('¿Publicar ' + LAUNCHER_APPS[app] + ' ' + draft.version + '? Ese número no se podrá volver a usar, ni retirándola.')) return;
   button.disabled = true;
   try {
-    const payload = [];
-    for (let i = 0; i < artifacts.length; i += 1) {
-      const item = artifacts[i];
-      setStatus(status, 'Calculando SHA-256 de ' + item.file.name + '…');
-      const digest = await hashFile(item.file);
-      setStatus(status, 'Subiendo ' + item.file.name + ' (' + formatBytes(item.file.size) + ')…');
-      await request('/v1/admin/objects/sha256/' + encodeURIComponent(digest), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: item.file
-      });
-      payload.push({ platform: item.platform, file_name: item.file_name, object: { sha256: digest, size: item.file.size } });
-    }
     setStatus(status, 'Firmando y publicando…');
     await request('/v1/admin/launcher-releases', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        app: app, version: version, channel: qs('#launcher-channel').value,
-        notes: qs('#launcher-notes').value, artifacts: payload
+        app: app, version: draft.version, channel: qs('#launcher-channel').value,
+        notes: qs('#launcher-notes').value,
+        artifacts: draft.artifacts.map(function (a) { return { platform: a.platform, file_name: a.file_name, object: a.object }; })
       })
     });
-    setStatus(status, 'Versión ' + version + ' de ' + LAUNCHER_APPS[app] + ' publicada. Ese número ya no se podrá reutilizar.', 'success');
-    qs('#launcher-version').value = '';
+    setStatus(status, 'Versión ' + draft.version + ' de ' + LAUNCHER_APPS[app] + ' publicada. Ese número ya no se podrá reutilizar.', 'success');
     qs('#launcher-notes').value = '';
     qs('#launcher-artifact-rows').replaceChildren();
     addLauncherArtifactRow('');
+    refreshLauncherSummary();
     await loadLauncherReleases();
   } catch (error) {
     setStatus(status, describeError(error), 'error');
-  } finally {
-    button.disabled = false;
+    refreshLauncherSummary();
   }
 }
 
@@ -227,6 +258,7 @@ async function withdrawLauncherRelease(release) {
     datalist.appendChild(option);
   });
   addLauncherArtifactRow('');
+  refreshLauncherSummary();
   qs('#launcher-add-artifact').addEventListener('click', function () { addLauncherArtifactRow(''); });
   qs('#launcher-form').addEventListener('submit', publishLauncherRelease);
   qs('#launcher-edit').addEventListener('submit', saveLauncherEdit);

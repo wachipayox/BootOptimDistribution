@@ -942,8 +942,10 @@ GET /v1/launcher/{app}/releases?platform=<p>[&channel=player|developer][&after=<
 ```
 
 `app` ∈ `pandora`, `android`. `platform` (obligatorio), lista abierta
-`[a-z0-9_-]{1,32}`; previstas `windows-x86_64`, `linux-x86_64`,
-`macos-aarch64` (Pandora) y `android-universal` (Android). `channel` por
+`[a-z0-9_-]{1,32}`. Hoy solo se pueden **publicar** las plataformas cuyo
+binario sabe leer el servidor (ver «Panel»): `windows-x86_64` y
+`windows-aarch64` (Pandora); `android-universal`, `android-arm64-v8a`,
+`android-armeabi-v7a`, `android-x86` y `android-x86_64` (Android). `channel` por
 defecto `player`; `developer` ve también las de `player`.
 
 ```json
@@ -959,7 +961,7 @@ defecto `player`; `developer` ve también las de `player`.
       "notes": "Texto plano.",
       "artifact": {
         "platform": "windows-x86_64",
-        "file_name": "example-launcher-1.4.0.exe",
+        "file_name": "WachilandLauncher-1.4.0-windows-x86_64.exe",
         "url": "/v1/objects/sha256/<sha256>",
         "sha256": "…",
         "size": 41234567,
@@ -1011,13 +1013,42 @@ recanonicalizar. Antes de instalar, el cliente:
 
 ```text
 GET    /v1/admin/launcher-releases
-POST   /v1/admin/launcher-releases                    # {app, version, channel, notes, artifacts:[{platform, file_name, object:{sha256,size}}]}
+POST   /v1/admin/launcher-releases/inspect            # {app, platform, object:{sha256,size}} → {version, file_name, detail}
+POST   /v1/admin/launcher-releases                    # {app, version?, channel, notes, artifacts:[{platform, file_name?, object:{sha256,size}}]}
 PUT    /v1/admin/launcher-releases/{app}/{version}    # {channel?, notes?}
 DELETE /v1/admin/launcher-releases/{app}/{version}    # retirar: deja de ofrecerse
 ```
 
 El binario se sube antes por `POST /v1/admin/objects/sha256/{sha256}` (límite
-del CAS, 2 GiB). Al crear, el servidor firma un statement por artefacto. Una
+del CAS, 2 GiB). Al crear, el servidor firma un statement por artefacto.
+
+**Versión y nombre salen del binario** (decisión del usuario, 2026-11-11: no
+son parámetros elegibles, solo permitían romper la versión). El servidor lee
+el binario guardado, sin herramientas externas, al inspeccionar y otra vez al
+publicar:
+
+- Pandora (`windows-*`): el recurso de versión del PE. `ProductVersion` (la
+  escribe `crates/pandora_launcher/build.rs` desde `PANDORA_RELEASE_VERSION`)
+  es la versión; si también hay `FileVersion`, debe coincidir. La máquina del
+  PE debe ser la de la plataforma (`windows-x86_64` = AMD64, `windows-aarch64`
+  = ARM64). Una build sin `PANDORA_RELEASE_VERSION` no lleva versión y se
+  rechaza.
+- Android (`android-*`): el `AndroidManifest.xml` binario del APK.
+  `versionName` es la versión (literal, no una referencia a recurso), el
+  paquete debe ser `net.wachiland.launcher` y debe haber `versionCode`. El
+  actualizador Android 1.0.0 rechaza un APK cuyo `versionName` no sea la
+  versión publicada, así que no pueden diferir.
+- La versión debe ser SemVer y la misma en todos los artefactos.
+- `file_name` = `WachilandLauncher-<versión>-<plataforma>.exe|.apk`.
+
+En `POST /v1/admin/launcher-releases`, `version` y `file_name` son opcionales;
+si se envían deben ser los derivados (`422 version_mismatch` /
+`file_name_mismatch`). Errores del binario, todos `422`: `platform_unsupported`,
+`platform_mismatch`, `not_pe`, `not_apk`, `bad_manifest`, `version_missing`,
+`version_reference`, `version_conflict`, `version_not_semver`,
+`package_mismatch`. `inspect` responde además `409 release_exists` si esa
+versión ya se usó (también retirada). Un mismo binario ya no puede servir a dos
+versiones ni a las dos apps. Una
 versión retirada no vuelve a publicarse con el mismo número; quien ya la tenga
 no baja de versión.
 

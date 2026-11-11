@@ -9,10 +9,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/wachipayox/BootOptimDistribution/internal/launcherartifact"
+	"github.com/wachipayox/BootOptimDistribution/internal/launcherbinary"
 	"github.com/wachipayox/BootOptimDistribution/internal/releasesigning"
 	"github.com/wachipayox/BootOptimDistribution/internal/revision"
 	"github.com/wachipayox/BootOptimDistribution/internal/storage"
@@ -98,15 +100,31 @@ func releaseBody(app, version, channel, notes string, platforms map[string][3]st
 	return string(raw)
 }
 
+// launcherBinary builds a small synthetic binary that carries version, with
+// content at its end so tests can tell binaries apart.
+func launcherBinary(app, version, content string) string {
+	if app == "android" {
+		return string(launcherbinary.SyntheticAPK(launcherbinary.AndroidPackage, version, 30, []byte(content)...))
+	}
+	return string(launcherbinary.SyntheticPE(0x8664, map[string]string{"ProductVersion": version, "FileVersion": version})) + content
+}
+
+func launcherPlatform(app string) string {
+	if app == "android" {
+		return "android-universal"
+	}
+	return "windows-x86_64"
+}
+
+func sizeText(size int64) string { return strconv.FormatInt(size, 10) }
+
+// publish uploads a binary carrying version and publishes it without
+// file_name (the server derives it).
 func (f *launcherFixture) publish(app, version, channel, content string) *httptest.ResponseRecorder {
 	f.t.Helper()
-	digest, size := f.upload(content)
-	sizeText := ""
-	for n := size; n > 0; n /= 10 {
-		sizeText = string(rune('0'+n%10)) + sizeText
-	}
+	digest, size := f.upload(launcherBinary(app, version, content))
 	return f.call("POST", "/v1/admin/launcher-releases", releaseBody(app, version, channel, "notas "+version,
-		map[string][3]string{"windows-x86_64": {"example-" + version + ".exe", digest, sizeText}}))
+		map[string][3]string{launcherPlatform(app): {"", digest, sizeText(size)}}))
 }
 
 type listedRelease struct {
@@ -159,7 +177,7 @@ func TestLauncherSignatureVerifiesWithPublishedKey(t *testing.T) {
 		t.Fatalf("listing: %+v", out)
 	}
 	a := out.Latest.Artifact
-	if a.URL != "/v1/objects/sha256/"+a.SHA256 || a.Signature.Algorithm != "Ed25519" || a.FileName != "example-1.4.0.exe" {
+	if a.URL != "/v1/objects/sha256/"+a.SHA256 || a.Signature.Algorithm != "Ed25519" || a.FileName != "WachilandLauncher-1.4.0-windows-x86_64.exe" {
 		t.Fatalf("artifact: %+v", a)
 	}
 	// The key comes from /v1/signing-keys, as clients do.
@@ -288,7 +306,7 @@ func TestLauncherChannelsAfterAndOrder(t *testing.T) {
 	if rec := f.publish("android", "1.0.0", "player", "apk"); rec.Code != http.StatusCreated {
 		t.Fatalf("android: %d %s", rec.Code, rec.Body.String())
 	}
-	if rec := f.call("GET", "/v1/launcher/android/releases?platform=windows-x86_64", ""); !strings.Contains(rec.Body.String(), `"1.0.0"`) {
+	if rec := f.call("GET", "/v1/launcher/android/releases?platform=android-universal", ""); !strings.Contains(rec.Body.String(), `"1.0.0"`) {
 		t.Fatalf("android listing: %s", rec.Body.String())
 	}
 }
@@ -342,7 +360,7 @@ func TestLauncherWithdrawalStopsOfferingAndServing(t *testing.T) {
 	f.publish("pandora", "1.1.0", "player", "new binary")
 	out, _ := f.list("platform=windows-x86_64")
 	newest := out.Latest.Artifact
-	if rec := f.call("GET", newest.URL, ""); rec.Code != http.StatusOK || rec.Body.String() != "new binary" {
+	if rec := f.call("GET", newest.URL, ""); rec.Code != http.StatusOK || !strings.HasSuffix(rec.Body.String(), "new binary") {
 		t.Fatalf("download: %d %q", rec.Code, rec.Body.String())
 	}
 	if rec := f.call("DELETE", "/v1/admin/launcher-releases/pandora/1.1.0", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"withdrawn_at":"`) {
@@ -367,22 +385,6 @@ func TestLauncherWithdrawalStopsOfferingAndServing(t *testing.T) {
 	}
 	if rec := f.call("DELETE", "/v1/admin/launcher-releases/pandora/9.9.9", ""); rec.Code != http.StatusNotFound {
 		t.Fatalf("missing: %d", rec.Code)
-	}
-}
-
-func TestLauncherSharedObjectStaysServedWhileReferenced(t *testing.T) {
-	f := newLauncherFixture(t)
-	f.publish("pandora", "1.0.0", "player", "same bytes")
-	f.publish("android", "1.0.0", "player", "same bytes")
-	out, _ := f.list("platform=windows-x86_64")
-	url := out.Latest.Artifact.URL
-	f.call("DELETE", "/v1/admin/launcher-releases/pandora/1.0.0", "")
-	if rec := f.call("GET", url, ""); rec.Code != http.StatusOK {
-		t.Fatalf("still referenced by android: %d", rec.Code)
-	}
-	f.call("DELETE", "/v1/admin/launcher-releases/android/1.0.0", "")
-	if rec := f.call("GET", url, ""); rec.Code != http.StatusNotFound {
-		t.Fatalf("unreferenced: %d", rec.Code)
 	}
 }
 
@@ -431,36 +433,36 @@ func TestLauncherDuplicateByPrecedenceAndImmutability(t *testing.T) {
 
 func TestLauncherCreateValidation(t *testing.T) {
 	f := newLauncherFixture(t)
-	digest, size := f.upload("some binary")
+	digest, size := f.upload(launcherBinary("pandora", "1.0.0", ""))
+	n := sizeText(size)
 	ok := func() map[string][3]string {
-		return map[string][3]string{"windows-x86_64": {"example.exe", digest, "11"}}
+		return map[string][3]string{"windows-x86_64": {"", digest, n}}
 	}
-	if size != 11 {
-		t.Fatal("test size")
-	}
+	apk, apkSize := f.upload(launcherBinary("android", "1.0.0", ""))
 	cases := map[string]struct {
 		body string
 		code int
 		err  string
 	}{
-		"bad app":           {releaseBody("windows", "1.0.0", "player", "", ok()), 422, "invalid_release"},
-		"leading zero":      {releaseBody("pandora", "01.0.0", "player", "", ok()), 422, "invalid_release"},
-		"v prefix":          {releaseBody("pandora", "v1.0.0", "player", "", ok()), 422, "invalid_release"},
-		"two components":    {releaseBody("pandora", "1.0", "player", "", ok()), 422, "invalid_release"},
-		"bad channel":       {releaseBody("pandora", "1.0.0", "beta", "", ok()), 422, "invalid_release"},
-		"bad platform":      {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"Win dows": {"a.exe", digest, "11"}}), 422, "invalid_release"},
-		"slash in file":     {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"w": {"a/b.exe", digest, "11"}}), 422, "invalid_release"},
-		"backslash in file": {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"w": {"a\\b.exe", digest, "11"}}), 422, "invalid_release"},
-		"control in file":   {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"w": {"a\nb.exe", digest, "11"}}), 422, "invalid_release"},
-		"empty file":        {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"w": {"", digest, "11"}}), 422, "invalid_release"},
-		"long file":         {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"w": {strings.Repeat("a", 129), digest, "11"}}), 422, "invalid_release"},
-		"huge notes":        {releaseBody("pandora", "1.0.0", "player", strings.Repeat("n", 16385), ok()), 422, "invalid_release"},
-		"no artifacts":      {releaseBody("pandora", "1.0.0", "player", "", nil), 422, "invalid_release"},
-		"missing object":    {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"w": {"a.exe", strings.Repeat("a", 64), "11"}}), 422, "object_missing"},
-		"wrong size":        {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"w": {"a.exe", digest, "12"}}), 422, "object_size_mismatch"},
-		"bad digest":        {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"w": {"a.exe", "ABC", "11"}}), 422, "invalid_release"},
-		"unknown field":     {`{"app":"pandora","version":"1.0.0","channel":"player","notes":"","artifacts":[],"extra":1}`, 400, ""},
-		"not json":          {`nope`, 400, ""},
+		"bad app":         {releaseBody("windows", "1.0.0", "player", "", ok()), 422, "invalid_release"},
+		"leading zero":    {releaseBody("pandora", "01.0.0", "player", "", ok()), 422, "invalid_release"},
+		"v prefix":        {releaseBody("pandora", "v1.0.0", "player", "", ok()), 422, "invalid_release"},
+		"two components":  {releaseBody("pandora", "1.0", "player", "", ok()), 422, "invalid_release"},
+		"bad channel":     {releaseBody("pandora", "1.0.0", "beta", "", ok()), 422, "invalid_release"},
+		"bad platform":    {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"Win dows": {"", digest, n}}), 422, "invalid_release"},
+		"typed version":   {releaseBody("pandora", "1.0.1", "player", "", ok()), 422, "version_mismatch"},
+		"typed file name": {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"windows-x86_64": {"Wachiland Launcher", digest, n}}), 422, "file_name_mismatch"},
+		"other arch":      {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"windows-aarch64": {"", digest, n}}), 422, "platform_mismatch"},
+		"no reader":       {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"linux-x86_64": {"", digest, n}}), 422, "platform_unsupported"},
+		"apk as pandora":  {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"windows-x86_64": {"", apk, sizeText(apkSize)}}), 422, "not_pe"},
+		"exe as android":  {releaseBody("android", "1.0.0", "player", "", map[string][3]string{"android-universal": {"", digest, n}}), 422, "not_apk"},
+		"huge notes":      {releaseBody("pandora", "1.0.0", "player", strings.Repeat("n", 16385), ok()), 422, "invalid_release"},
+		"no artifacts":    {releaseBody("pandora", "1.0.0", "player", "", nil), 422, "invalid_release"},
+		"missing object":  {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"windows-x86_64": {"", strings.Repeat("a", 64), n}}), 422, "object_missing"},
+		"wrong size":      {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"windows-x86_64": {"", digest, sizeText(size + 1)}}), 422, "object_size_mismatch"},
+		"bad digest":      {releaseBody("pandora", "1.0.0", "player", "", map[string][3]string{"windows-x86_64": {"", "ABC", n}}), 422, "invalid_release"},
+		"unknown field":   {`{"app":"pandora","version":"1.0.0","channel":"player","notes":"","artifacts":[],"extra":1}`, 400, ""},
+		"not json":        {`nope`, 400, ""},
 	}
 	for name, c := range cases {
 		rec := f.call("POST", "/v1/admin/launcher-releases", c.body)
@@ -468,20 +470,27 @@ func TestLauncherCreateValidation(t *testing.T) {
 			t.Errorf("%s: %d %s", name, rec.Code, rec.Body.String())
 		}
 	}
-	dup := `{"app":"pandora","version":"1.0.0","channel":"player","notes":"","artifacts":[` +
-		`{"platform":"w","file_name":"a","object":{"sha256":"` + digest + `","size":11}},` +
-		`{"platform":"w","file_name":"b","object":{"sha256":"` + digest + `","size":11}}]}`
+	object := `"object":{"sha256":"` + digest + `","size":` + n + `}`
+	dup := `{"app":"pandora","channel":"player","notes":"","artifacts":[{"platform":"windows-x86_64",` + object + `},{"platform":"windows-x86_64",` + object + `}]}`
 	if rec := f.call("POST", "/v1/admin/launcher-releases", dup); rec.Code != 422 {
 		t.Errorf("duplicate platform: %d", rec.Code)
 	}
 	if out, _ := f.store.LauncherReleases(context.Background(), ""); len(out) != 0 {
 		t.Fatalf("rejected requests left %d releases", len(out))
 	}
-	// Default channel, several platforms and an app/version path with build metadata.
+	// Version omitted: it comes from the binary, as does the file name.
+	rec := f.call("POST", "/v1/admin/launcher-releases", `{"app":"pandora","artifacts":[{"platform":"windows-x86_64",`+object+`}]}`)
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"version":"1.0.0"`) ||
+		!strings.Contains(rec.Body.String(), `"file_name":"WachilandLauncher-1.0.0-windows-x86_64.exe"`) {
+		t.Fatalf("derived: %d %s", rec.Code, rec.Body.String())
+	}
+	// Default channel, several platforms sharing one APK and build metadata.
+	multiAPK, multiSize := f.upload(launcherBinary("android", "2.0.0-beta.1+build.5", ""))
+	apkObject := `"object":{"sha256":"` + multiAPK + `","size":` + sizeText(multiSize) + `}`
 	multi := `{"app":"android","version":"2.0.0-beta.1+build.5","notes":"n","artifacts":[` +
-		`{"platform":"android-universal","file_name":"app.apk","object":{"sha256":"` + digest + `","size":11}},` +
-		`{"platform":"android-x86","file_name":"app-x86.apk","object":{"sha256":"` + digest + `","size":11}}]}`
-	rec := f.call("POST", "/v1/admin/launcher-releases", multi)
+		`{"platform":"android-universal",` + apkObject + `},` +
+		`{"platform":"android-x86","file_name":"WachilandLauncher-2.0.0-beta.1+build.5-android-x86.apk",` + apkObject + `}]}`
+	rec = f.call("POST", "/v1/admin/launcher-releases", multi)
 	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"channel":"player"`) {
 		t.Fatalf("multi: %d %s", rec.Code, rec.Body.String())
 	}
@@ -495,6 +504,30 @@ func TestLauncherCreateValidation(t *testing.T) {
 	}
 	if rec := f.call("GET", "/v1/launcher/android/releases?platform=android-x86", ""); !strings.Contains(rec.Body.String(), "2.0.0-beta.1+build.5") {
 		t.Fatalf("listing: %s", rec.Body.String())
+	}
+}
+
+func TestLauncherInspect(t *testing.T) {
+	f := newLauncherFixture(t)
+	inspect := func(app, platform, content string) *httptest.ResponseRecorder {
+		digest, size := f.upload(content)
+		return f.call("POST", "/v1/admin/launcher-releases/inspect",
+			`{"app":"`+app+`","platform":"`+platform+`","object":{"sha256":"`+digest+`","size":`+sizeText(size)+`}}`)
+	}
+	rec := inspect("android", "android-universal", launcherBinary("android", "1.0.1", "a"))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"version":"1.0.1"`) ||
+		!strings.Contains(rec.Body.String(), `"file_name":"WachilandLauncher-1.0.1-android-universal.apk"`) || !strings.Contains(rec.Body.String(), "versionCode 30") {
+		t.Fatalf("inspect: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := inspect("android", "android-universal", launcherBinary("pandora", "1.0.1", "b")); rec.Code != 422 || !strings.Contains(rec.Body.String(), "not_apk") {
+		t.Fatalf("wrong kind: %d %s", rec.Code, rec.Body.String())
+	}
+	f.publish("pandora", "1.2.0", "player", "x")
+	if rec := inspect("pandora", "windows-x86_64", launcherBinary("pandora", "1.2.0", "y")); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "release_exists") {
+		t.Fatalf("existing: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := f.call("GET", "/v1/admin/launcher-releases/inspect", ""); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("method: %d", rec.Code)
 	}
 }
 
