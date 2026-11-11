@@ -160,6 +160,11 @@ footer { color: #757b8d; font-size: 12px; }
 .jvm-option-list { display: grid; gap: .6rem; }
 .jvm-option-row { display: grid; gap: .35rem; padding: .8rem; border: 1px solid var(--line); border-radius: .7rem; background: var(--surface-muted); }
 .jvm-option-row.jvm-option-removed { opacity: .65; }
+.java-runtime-platforms { display: grid; gap: .6rem; }
+.java-runtime-row { display: grid; grid-template-columns: minmax(0, 1fr) 6rem; gap: .5rem; align-items: end; }
+.java-runtime-row label { display: grid; gap: .3rem; }
+.java-runtime-row .inline-status { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 520px) { .java-runtime-row { grid-template-columns: 1fr; } }
 .jvm-option-heading { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .jvm-option-heading code { color: var(--muted); }
 .jvm-option-help { margin: 0; font-size: .88rem; }

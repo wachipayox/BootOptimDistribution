@@ -42,6 +42,14 @@ launchers sin soporte no podrán instalar ni actualizar ese perfil. Si no los
 toca, la versión sigue en el esquema 1 o 2. El contrato completo está en
 [`PROFILE_PROTOCOL.md`](PROFILE_PROTOCOL.md#parámetros-jvm-del-perfil-esquema-3-2026-10-14).
 
+Debajo está *Java del perfil*: para PC y para Android, «Java por defecto de
+Mojang» o «Java recomendada por el perfil» con su versión mayor (8–99). En un
+perfil hijo hay además «Heredar de la madre», que muestra lo que hereda. Va en
+`profile.java_runtime`, no cambia el esquema (los launchers que no lo conocen
+usan la Java de Mojang) y el resumen de la publicación lo muestra. Reglas en
+`java-runtime.js`, probadas con `docs/java-runtime-vectors.json`; contrato en
+`PROFILE_PROTOCOL.md`, «Java del perfil».
+
 ## Espacio de trabajo del administrador (0.2.21)
 
 La **Biblioteca** organiza los perfiles raíz y sus ramas en tarjetas con icono,
@@ -249,3 +257,16 @@ manifest digest, object hashes, pinned inheritance and anti-rollback rules
 independently of browser code. Promotion/rollback of the stable revision
 (`channels/stable` in the API) is implemented in the API; the panel promotes, and
 rollback stays API-only (test profiles get a server-signed rollback, 0.3.0).
+
+## Versiones del launcher
+
+**Publicar versión**: se elige la aplicación, el canal, las notas y, por cada
+plataforma, el binario. Al elegirlo, el panel lo sube y el servidor lee de él
+la versión y el nombre de descarga (`WachilandLauncher-<versión>-<plataforma>`):
+Pandora, del recurso de versión del `.exe`; Android, del `versionName` del APK.
+Se muestran de solo lectura antes de confirmar y no se pueden escribir; si el
+binario no lleva versión, no es de esa plataforma, no es SemVer o esa versión
+ya existe, la fila muestra el error y no se puede publicar. Todas las
+plataformas deben llevar la misma versión. Lo editable después de publicar es
+solo el canal y las notas. Contrato en `PROFILE_PROTOCOL.md` («Panel» de las
+versiones del launcher).

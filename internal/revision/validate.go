@@ -43,6 +43,9 @@ func validateManifestValues(m Manifest) error {
 			return errors.New("profile icon must be a PNG object of at most 2 MiB")
 		}
 	}
+	if err := validateJavaRuntime(m.Profile.JavaRuntime); err != nil {
+		return err
+	}
 	if err := validateGame(m); err != nil {
 		return err
 	}

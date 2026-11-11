@@ -1,11 +1,13 @@
 package profileapi
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/wachipayox/BootOptimDistribution/internal/launcherartifact"
+	"github.com/wachipayox/BootOptimDistribution/internal/launcherbinary"
 	"github.com/wachipayox/BootOptimDistribution/internal/revision"
 	"github.com/wachipayox/BootOptimDistribution/internal/semver"
 	"github.com/wachipayox/BootOptimDistribution/internal/storage"
@@ -252,6 +255,16 @@ func (a *API) serveLauncherAdmin(w http.ResponseWriter, r *http.Request) bool {
 		default:
 			a.methodNotAllowed(w, http.MethodGet, http.MethodPost)
 		}
+	case 4:
+		if parts[3] != "inspect" {
+			a.writeError(w, http.StatusNotFound, "not_found", "resource not found")
+			return true
+		}
+		if r.Method != http.MethodPost {
+			a.methodNotAllowed(w, http.MethodPost)
+			return true
+		}
+		a.handleLauncherInspect(w, r, store)
 	case 5:
 		app, version := parts[3], parts[4]
 		switch r.Method {
@@ -321,9 +334,11 @@ func (a *API) handleLauncherCreate(w http.ResponseWriter, r *http.Request, store
 		invalid("app must be pandora or android")
 		return
 	}
-	if _, err := semver.Parse(req.Version); err != nil {
-		invalid("version must be SemVer 2.0 (MAJOR.MINOR.PATCH[-pre][+build])")
-		return
+	if req.Version != "" {
+		if _, err := semver.Parse(req.Version); err != nil {
+			invalid("version must be SemVer 2.0 (MAJOR.MINOR.PATCH[-pre][+build])")
+			return
+		}
 	}
 	if req.Channel == "" {
 		req.Channel = "player"
@@ -353,9 +368,6 @@ func (a *API) handleLauncherCreate(w http.ResponseWriter, r *http.Request, store
 		case seen[item.Platform]:
 			invalid("only one artifact per platform is allowed")
 			return
-		case !launcherFileNameValid(item.FileName):
-			invalid("file_name must be 1-128 bytes without slashes or control characters")
-			return
 		case !validDigest(item.Object.SHA256) || item.Object.Size < 0:
 			invalid("object needs a lowercase sha256 and a non-negative size")
 			return
@@ -365,6 +377,26 @@ func (a *API) handleLauncherCreate(w http.ResponseWriter, r *http.Request, store
 			a.writeLauncherObjectError(w, err)
 			return
 		}
+		// Version and download name come from the binary; the request may only
+		// repeat them (older panels), never choose them.
+		meta, err := a.inspectLauncherBinary(r.Context(), req.App, item.Platform, item.Object.SHA256, item.Object.Size)
+		if err != nil {
+			a.writeLauncherInspectError(w, err)
+			return
+		}
+		if req.Version == "" {
+			req.Version = meta.Version
+			release.Version = meta.Version
+		}
+		if meta.Version != req.Version {
+			a.writeError(w, http.StatusUnprocessableEntity, "version_mismatch", "the "+item.Platform+" binary carries version "+meta.Version+", not "+req.Version)
+			return
+		}
+		if item.FileName != "" && item.FileName != meta.FileName {
+			a.writeError(w, http.StatusUnprocessableEntity, "file_name_mismatch", "the download name is derived from the binary: "+meta.FileName)
+			return
+		}
+		item.FileName = meta.FileName
 		statement := launcherartifact.Statement{
 			Type: launcherartifact.Type, App: req.App, Version: req.Version, Platform: item.Platform,
 			SHA256: item.Object.SHA256, Size: item.Object.Size, IssuedAt: issued.Format(launcherTimeFormat),
@@ -478,4 +510,78 @@ func (a *API) writeETagJSON(w http.ResponseWriter, r *http.Request, body interfa
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(raw)
 	}
+}
+
+type launcherInspectRequest struct {
+	App      string `json:"app"`
+	Platform string `json:"platform"`
+	Object   struct {
+		SHA256 string `json:"sha256"`
+		Size   int64  `json:"size"`
+	} `json:"object"`
+}
+
+// handleLauncherInspect lets the panel show, before publishing, the version
+// and file name the server will take from an uploaded binary.
+func (a *API) handleLauncherInspect(w http.ResponseWriter, r *http.Request, store launcherStore) {
+	var req launcherInspectRequest
+	if err := a.decodeJSON(w, r, &req); err != nil {
+		a.writeBodyReadError(w, err)
+		return
+	}
+	if !launcherAppValid(req.App) {
+		a.writeError(w, http.StatusUnprocessableEntity, "invalid_release", "app must be pandora or android")
+		return
+	}
+	if !launcherPlatformValid(req.Platform) || !validDigest(req.Object.SHA256) || req.Object.Size < 0 {
+		a.writeError(w, http.StatusUnprocessableEntity, "invalid_release", "platform or object is invalid")
+		return
+	}
+	if err := a.objects.Verify(r.Context(), storage.Object{SHA256: req.Object.SHA256, Size: req.Object.Size}); err != nil {
+		a.writeLauncherObjectError(w, err)
+		return
+	}
+	meta, err := a.inspectLauncherBinary(r.Context(), req.App, req.Platform, req.Object.SHA256, req.Object.Size)
+	if err != nil {
+		a.writeLauncherInspectError(w, err)
+		return
+	}
+	if _, err := store.LauncherRelease(r.Context(), req.App, meta.Version); err == nil {
+		a.writeError(w, http.StatusConflict, "release_exists", "version "+meta.Version+" was already published for this app and can never be reused")
+		return
+	} else if !errors.Is(err, storage.ErrLauncherReleaseNotFound) {
+		a.writeError(w, http.StatusInternalServerError, "storage_error", "launcher releases could not be read")
+		return
+	}
+	a.writeJSON(w, http.StatusOK, struct {
+		SchemaVersion int    `json:"schema_version"`
+		App           string `json:"app"`
+		Platform      string `json:"platform"`
+		launcherbinary.Metadata
+	}{SchemaVersion, req.App, req.Platform, meta})
+}
+
+func (a *API) inspectLauncherBinary(ctx context.Context, app, platform, digest string, size int64) (launcherbinary.Metadata, error) {
+	reader, _, err := a.objects.Open(ctx, digest)
+	if err != nil {
+		return launcherbinary.Metadata{}, err
+	}
+	defer reader.Close()
+	at, ok := reader.(io.ReaderAt)
+	if !ok {
+		data, err := io.ReadAll(io.LimitReader(reader, size))
+		if err != nil {
+			return launcherbinary.Metadata{}, err
+		}
+		at = bytes.NewReader(data)
+	}
+	return launcherbinary.Inspect(app, platform, at, size)
+}
+
+func (a *API) writeLauncherInspectError(w http.ResponseWriter, err error) {
+	if e, ok := launcherbinary.AsError(err); ok {
+		a.writeError(w, http.StatusUnprocessableEntity, e.Code, e.Message)
+		return
+	}
+	a.writeLauncherObjectError(w, err)
 }

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Wachiland · Distribución</title>
-  <link rel="stylesheet" href="/admin/assets/style.css?refresh=admin-jvm-options-0223">
-  <link rel="stylesheet" href="/admin/assets/admin-workspace.css?refresh=admin-jvm-options-0223">
+  <link rel="stylesheet" href="/admin/assets/style.css?refresh=admin-java-runtime-1110">
+  <link rel="stylesheet" href="/admin/assets/admin-workspace.css?refresh=admin-java-runtime-1110">
   <link rel="stylesheet" href="/admin/assets/news.css?refresh=admin-news-0410">
 </head>
 <body>
@@ -329,7 +329,7 @@
         <form id="launcher-form" class="launcher-form">
           <div class="form-grid">
             <label><span>Aplicación</span><select id="launcher-app"><option value="pandora">Pandora</option><option value="android">Android</option></select></label>
-            <label><span>Versión <small>(SemVer, p. ej. 1.4.0 o 1.5.0-rc.1)</small></span><input id="launcher-version" autocomplete="off" required placeholder="1.4.0"></label>
+            <label><span>Versión <small>(se lee del binario)</small></span><input id="launcher-version" readonly tabindex="-1" placeholder="Elige un binario"></label>
             <label><span>Canal</span><select id="launcher-channel"><option value="player">Jugador</option><option value="developer">Desarrollador (también ve las de jugador)</option></select></label>
             <label class="span-2"><span>Notas de la versión <small>(texto plano)</small></span><textarea id="launcher-notes" rows="5" maxlength="16384"></textarea></label>
           </div>
@@ -501,17 +501,18 @@
     </form>
   </dialog>
 
-  <script src="/admin/assets/jvm-options-rules.js?refresh=admin-jvm-options-0223" defer></script>
+  <script src="/admin/assets/jvm-options-rules.js?refresh=admin-java-runtime-1110" defer></script>
   <script src="/admin/assets/loaders.js?refresh=admin-loaders-0224" defer></script>
-  <script src="/admin/assets/app.js?refresh=admin-jvm-options-0223" defer></script>
+  <script src="/admin/assets/app.js?refresh=admin-java-runtime-1110" defer></script>
   <script src="/admin/assets/profile-presentation.js?refresh=admin-presentation-0400" defer></script>
-  <script src="/admin/assets/profile-workbench.js?refresh=admin-jvm-options-0223" defer></script>
-  <script src="/admin/assets/admin-workspace.js?refresh=admin-jvm-options-0223" defer></script>
-  <script src="/admin/assets/jvm-options.js?refresh=admin-jvm-options-0223" defer></script>
+  <script src="/admin/assets/profile-workbench.js?refresh=admin-java-runtime-1110" defer></script>
+  <script src="/admin/assets/admin-workspace.js?refresh=admin-java-runtime-1110" defer></script>
+  <script src="/admin/assets/jvm-options.js?refresh=admin-java-runtime-1110" defer></script>
+  <script src="/admin/assets/java-runtime.js?refresh=admin-java-runtime-1110" defer></script>
   <script src="/admin/assets/file-rename.js?refresh=admin-rename-0224" defer></script>
   <script src="/admin/assets/changelog.js?refresh=admin-changelog-0400" defer></script>
   <script src="/admin/assets/test-profiles.js?refresh=admin-test-profiles-0300" defer></script>
   <script src="/admin/assets/news.js?refresh=admin-news-0410" defer></script>
-  <script src="/admin/assets/launcher-releases.js?refresh=admin-launcher-0400" defer></script>
+  <script src="/admin/assets/launcher-releases.js?refresh=admin-launcher-1111" defer></script>
 </body>
 </html>
