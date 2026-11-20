@@ -2652,7 +2652,8 @@ async function normalizedProfileIcon(file) {
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
     if (!blob) throw new Error('No se pudo convertir la imagen.');
     const image = new File([blob], 'profile-icon.png', {type:'image/png'});
-    return { file: image, sha256: await sha256Bytes(await image.arrayBuffer()) };
+    // media_type es obligatorio: el editor de perfil lo envía tal cual y el servidor rechaza el icono sin él.
+    return { file: image, sha256: await sha256Bytes(await image.arrayBuffer()), mediaType: 'image/png' };
   } finally { bitmap.close(); }
 }
 async function selectProfileIcon(file) {

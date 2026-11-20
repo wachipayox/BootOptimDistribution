@@ -37,3 +37,11 @@ test('inherited label', () => {
   assert.strictEqual(p.inheritedLabel(profile, 'logo'), '');
   assert.strictEqual(p.inheritedLabel({}, 'icon'), '');
 });
+
+test('normalized profile icon declares its media type (Editar perfil sends it as media_type)', () => {
+  const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '../static/app.js'), 'utf8');
+  const start = source.indexOf('async function normalizedProfileIcon(');
+  assert.ok(start >= 0);
+  const body = source.slice(start, source.indexOf('\n}\n', start));
+  assert.match(body, /mediaType:\s*'image\/png'/);
+});
