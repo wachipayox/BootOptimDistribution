@@ -57,9 +57,9 @@ async function moveDraftFile(oldPath, newPath, file, label) {
   if (state.parentRef && published) state.removedPaths.add(oldPath);
   else state.removedPaths.delete(oldPath);
   state.modIds.delete(oldPath);
-  if (state.policies.has(oldPath)) {
-    state.policies.set(newPath, state.policies.get(oldPath));
-    state.policies.delete(oldPath);
+  if (state.ownPolicyRules.has(oldPath)) {
+    state.ownPolicyRules.set(newPath, state.ownPolicyRules.get(oldPath));
+    state.ownPolicyRules.delete(oldPath);
   }
   // This branch's own per-setting rules follow the file; inherited rules stay with the parent's path.
   Array.from(state.localConfigSettings.values()).filter(function (rule) { return rule.path === oldPath; }).forEach(function (rule) {

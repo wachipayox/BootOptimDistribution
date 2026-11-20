@@ -117,7 +117,7 @@
               <span class="step-number">1</span>
               <div>
                 <h3 id="identity-title">Información del perfil</h3>
-                <p>El nombre se mostrará en el launcher. Los identificadores se generan automáticamente.</p>
+                <p>El nombre se mostrará en el launcher. El identificador se propone a partir del nombre.</p>
               </div>
             </div>
 
@@ -132,7 +132,11 @@
                 <input id="profile-icon-file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
                 <small id="profile-icon-status">PNG, JPEG o WebP. Se adapta a 256 × 256 píxeles.</small>
               </label>
-              <input id="profile-id" type="hidden">
+              <label class="span-2">
+                <span>Identificador</span>
+                <input id="profile-id" autocomplete="off" spellcheck="false" placeholder="profile_mi-perfil" aria-describedby="profile-id-status">
+                <small id="profile-id-status">Se genera a partir del nombre y puedes cambiarlo. No puede repetir el de un perfil existente ni el de uno borrado.</small>
+              </label>
               <input id="revision-id" type="hidden">
               <input id="revision-sequence" type="hidden" value="1">
               <label class="version-picker">
@@ -217,7 +221,7 @@
               </div>
               <p id="explorer-empty" class="explorer-empty">Arrastra archivos aquí o pulsa «Añadir archivos».</p>
               <div id="explorer-tree" class="explorer-tree" role="list"></div>
-            <p class="explorer-help">Suelta archivos o carpetas para añadirlos o reemplazarlos. Al soltar una carpeta, se importa su contenido sin añadir su nombre a las rutas. «Importar carpeta» sustituye la selección actual. En perfiles derivados, quitar mods y configs crea una exclusión solo para esta rama.</p>
+            <p class="explorer-help">Suelta archivos o carpetas para añadirlos o reemplazarlos. Al soltar una carpeta, se importa su contenido sin añadir su nombre a las rutas. «Importar carpeta» sustituye la selección actual. En perfiles derivados, quitar mods y configs crea una exclusión solo para esta rama. En <code>config/</code>, cada carpeta y cada archivo tiene su política: «Obligatoria» (el launcher la reinstala en cada actualización) o «Valor inicial» (solo se copia si el jugador no la tiene). La regla de una carpeta vale para sus subcarpetas y para los archivos que se añadan después; la de un archivo gana. Los perfiles hijos y la siguiente versión la heredan.</p>
             </div>
 
             <div class="step-subheading">
@@ -229,6 +233,7 @@
             <div id="diff-stats" class="metric-grid compact independent">
               <article class="metric-card"><span class="metric-label">Altas</span><strong id="diff-added">0</strong></article>
               <article id="diff-changed-card" class="metric-card" hidden><span class="metric-label">Cambios</span><strong id="diff-changed">0</strong></article>
+              <article id="diff-policy-card" class="metric-card" hidden><span class="metric-label">Cambios de política</span><strong id="diff-policy">0</strong></article>
               <article id="diff-removed-card" class="metric-card" hidden><span class="metric-label">Eliminaciones</span><strong id="diff-removed">0</strong></article>
               <article class="metric-card"><span class="metric-label">Datos por subir</span><strong id="diff-bytes">0 B</strong></article>
             </div>
@@ -504,6 +509,7 @@
   <script src="/admin/assets/jvm-options-rules.js?refresh=admin-java-runtime-1110" defer></script>
   <script src="/admin/assets/loaders.js?refresh=admin-loaders-0224" defer></script>
   <script src="/admin/assets/app.js?refresh=admin-java-runtime-1110" defer></script>
+  <script src="/admin/assets/config-policies.js?refresh=admin-config-policies-1120" defer></script>
   <script src="/admin/assets/profile-presentation.js?refresh=admin-presentation-0400" defer></script>
   <script src="/admin/assets/profile-workbench.js?refresh=admin-java-runtime-1110" defer></script>
   <script src="/admin/assets/admin-workspace.js?refresh=admin-java-runtime-1110" defer></script>
