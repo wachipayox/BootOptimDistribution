@@ -1541,8 +1541,8 @@ async function handleParentRevisionChange() {
       setStatus(nodes.parentStatus, 'No se puede crear otro perfil derivado: esta base ya tiene 8 niveles heredados. El máximo permitido es 8.', 'error');
     } else {
       setStatus(nodes.parentStatus, isNewest
-        ? 'Base: ' + resolved.ref.profile_id + ' / ' + resolved.ref.revision_id + '. La revisión queda fijada; el seguimiento automático de futuras versiones aún no está disponible.'
-        : 'Base histórica: ' + resolved.ref.profile_id + ' / ' + resolved.ref.revision_id + '. Esta publicación queda fijada a esa revisión y no heredará cambios posteriores.', 'warning');
+        ? 'Base: ' + resolved.ref.profile_id + ' / ' + resolved.ref.revision_id + '. Este perfil seguirá automáticamente las nuevas versiones de ' + resolved.ref.profile_id + ': al publicarse una, el servidor lo vuelve a fijar a ella sin tocar su contenido propio. Si su contenido propio deja de encajar con la nueva versión, no se mueve y el aviso aparece al publicar la madre.'
+        : 'Base histórica: ' + resolved.ref.profile_id + ' / ' + resolved.ref.revision_id + '. Esta versión se publica sobre esa revisión antigua, pero no se queda en ella: en cuanto ' + resolved.ref.profile_id + ' publique otra versión, el servidor volverá a fijar este perfil a la nueva.', 'warning');
     }
     nodes.syntheticHint.textContent = state.parentMap.has('mods/bootoptim-synthetic.jar')
       ? 'El ejemplo mostrará archivos añadidos, modificados y eliminados respecto al perfil base.'
