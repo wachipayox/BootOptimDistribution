@@ -125,3 +125,25 @@ func TestNewsPanelIsLinked(t *testing.T) {
 		t.Fatalf("news.js: %d", script.Code)
 	}
 }
+
+func TestPanelExposesProfileIDAndConfigPolicies(t *testing.T) {
+	handler := NewHandler(EmptyReadModel{}, BuildInfo{})
+	page := httptest.NewRecorder()
+	handler.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/admin/", nil))
+	body := page.Body.String()
+	if strings.Contains(body, `id="profile-id" type="hidden"`) || !strings.Contains(body, `id="profile-id-status"`) {
+		t.Fatal("the profile identifier must be visible and editable")
+	}
+	for _, fragment := range []string{"/admin/assets/config-policies.js?refresh=", `id="diff-policy-card"`} {
+		if !strings.Contains(body, fragment) {
+			t.Errorf("admin page is missing %q", fragment)
+		}
+	}
+	script := httptest.NewRecorder()
+	handler.ServeHTTP(script, httptest.NewRequest(http.MethodGet, "/admin/assets/config-policies.js", nil))
+	for _, fragment := range []string{"function configPolicyFolderControl", "'/config-policies'"} {
+		if !strings.Contains(script.Body.String(), fragment) {
+			t.Errorf("config-policies.js is missing %q", fragment)
+		}
+	}
+}

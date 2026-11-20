@@ -9,7 +9,7 @@ function updateOwnObject(path) {
 function resetPublicationDraft() {
   state.updateProfile = null;
   state.selectedFiles.clear(); state.removedPaths.clear(); state.createdDirs.clear();
-  state.policies.clear(); state.modIds.clear(); state.localConfigSettings.clear();
+  state.inheritedPolicyRules = new Map(); state.ownPolicyRules = new Map(); state.modIds.clear(); state.localConfigSettings.clear();
   state.parentJvmOptions = []; state.localJvmOptions.clear(); state.removedJvmOptions.clear();
   state.pathProblems = []; state.folderSelected = false; state.snapshotMode = false;
   state.icon = null;
@@ -22,7 +22,7 @@ function resetPublicationDraft() {
   qs('#profile-icon-preview').hidden = qs('#remove-profile-icon').hidden = true;
   ['#profile-name', '#release-notes', '#minecraft-version', '#loader-version', '#profile-id'].forEach(id => { qs(id).value = ''; });
   qs('#loader-kind').value = 'neoforge'; refreshLoaderLabels();
-  qs('#profile-name').readOnly = false;
+  qs('#profile-name').readOnly = false; qs('#profile-id').readOnly = false; state.profileIdEdited = false;
   qs('#revision-id').value = generatedRevisionID(); qs('#revision-sequence').value = '1';
   nodes.parentProfile.disabled = false; nodes.parentProfile.value = '';
   nodes.parentRevision.disabled = true;
@@ -32,6 +32,7 @@ function resetPublicationDraft() {
   nodes.publishButton.textContent = 'Publicar versión';
   nodes.stageButton.disabled = false;
   invalidatePrepared();
+  renderProfileIdStatus();
   refreshJvmOptionsPanel();
   resetJavaRuntimeDraft();
 }
@@ -59,8 +60,9 @@ async function startProfileUpdate(profile) {
     state.parentManifest = base ? base.manifest : null;
     state.parentDepth = resolved.inheritanceDepth;
     state.folderSelected = true;
+    await loadDraftConfigPolicyRules(resolved.ancestors || [], profileId(profile));
     resolved.map.forEach((entry, path) => { if (entry.kind === 'mod') state.modIds.set(path, entry.id); });
-    qs('#profile-id').value = profileId(profile);
+    qs('#profile-id').value = profileId(profile); qs('#profile-id').readOnly = true;
     qs('#profile-name').value = profileName(profile); qs('#profile-name').readOnly = true;
     qs('#release-notes').value = resolved.manifest.profile.description || '';
     qs('#minecraft-version').value = resolved.manifest.game.minecraft;
@@ -122,6 +124,12 @@ function buildProfileUpdateManifest() {
       if (inherited.kind === 'mod') manifest.remove_mods.push({ id: inherited.id, expect_base_object_sha256: objectDigest(inherited) });
       else if (inherited.kind === 'config') manifest.remove_configs.push({ path: entry.path, expect_base_object_sha256: objectDigest(inherited) });
       else throw new Error('No se puede retirar el objeto heredado ' + entry.path + '.');
+      return;
+    }
+    if (entry.status === 'policy') {
+      const item = { path: entry.path, object: publishedObjectRef(entry.parent), policy: entry.policy };
+      if (inherited) item.expect_base_object_sha256 = objectDigest(inherited);
+      manifest.configs.push(item);
       return;
     }
     const item = { path: entry.path, object: objectRef(entry.local) };

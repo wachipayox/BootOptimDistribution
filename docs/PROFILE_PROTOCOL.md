@@ -54,6 +54,9 @@ Java properties keys, and physical `.txt` line selectors with `enforced` or
 after checking the immediate parent's config permissions. Unsupported or
 ambiguous selectors are rejected. Unselected lines and values remain local.
 The broader `user_owned` file policy is still not part of the accepted schema.
+Folder policies chosen in the admin panel are **not** part of the manifest: the
+panel expands them into each `configs[].policy` before signing, so launchers
+keep reading only per-file policies (see `ADMIN_UI.md`, «Políticas de configs»).
 
 The launcher applies these setting rules while reconciling the selected
 revision inside its existing per-profile transaction. Enforced changes keep a
@@ -109,6 +112,8 @@ POST /v1/admin/profiles/{profile_id}/channels/{name}/promote   # revisión estab
 POST /v1/admin/profiles/{profile_id}/channels/{name}/rollback
 PUT  /v1/admin/profiles/{profile_id}/presentation
 DELETE /v1/admin/profiles/{profile_id}
+GET  /v1/admin/deleted-profiles                       # tombstoned ids (cannot be republished)
+GET|PUT /v1/admin/profiles/{profile_id}/config-policies   # panel-only folder/file policy rules (unsigned)
 GET  /v1/admin/test-api                               # token state, quotas, test profiles
 POST /v1/admin/test-api/token                         # generate/rotate the shared test token
 ```

@@ -9,6 +9,9 @@ const state = {
   overview: null,
   build: {},
   profiles: [],
+  // Tombstoned profile ids: publication answers immutable_conflict for them.
+  deletedProfileIds: new Set(),
+  profileIdEdited: false,
   recentRevisions: [],
   parentMap: new Map(),
   parentRef: null,
@@ -26,7 +29,10 @@ const state = {
   editorPath: '',
   pathProblems: [],
   diff: [],
-  policies: new Map(),
+  // Config policy rules (config-policies.js): Map path -> {policy, origin}
+  // inherited from the mother chain, and Map path -> policy of this profile.
+  inheritedPolicyRules: new Map(),
+  ownPolicyRules: new Map(),
   parentConfigSettings: new Map(),
   localConfigSettings: new Map(),
   // Profile JVM options: inherited effective list, this revision's own options and removals.
@@ -954,6 +960,14 @@ function renderExplorer() {
     identity.append(path, make('span', 'explorer-file-meta', kindLabel((entry.local || entry.parent || {}).kind) + ' · ' + formatBytes(entry.local ? entry.local.size : Number((entry.parent && entry.parent.object && entry.parent.object.size) || 0))));
     const stateLabel = entry.status === 'inherited' ? 'Heredado' : entry.status === 'added' ? 'Añadido' : entry.status === 'changed' ? 'Modificado' : 'Excluido';
     const actions = make('div', 'explorer-actions');
+    const entryKind = (entry.local || entry.parent || {}).kind;
+    if (entryKind === 'config' && entry.status !== 'removed') {
+      const control = configPolicyFileControl(entry);
+      actions.appendChild(control);
+      if (entry.parent && entry.parent.policy && control.dataset.policy !== entry.parent.policy) {
+        actions.appendChild(make('span', 'change-badge change-policy', 'Política'));
+      }
+    }
     if (isEditableText(entry.path, 'text/plain')) {
       actions.appendChild(smallAction(entry, 'Comparar con versión anterior y madres', '⇄', function () { openDraftWorkbench(entry.path); }));
     }
@@ -995,6 +1009,7 @@ function renderExplorer() {
     });
     folderRow.append(toggle, make('span', 'tree-folder-icon', '▰'), make('strong', 'tree-folder-name', directory.name));
     const folderActions = make('div', 'tree-folder-actions');
+    if (isConfigPolicyPath(directory.path)) folderActions.appendChild(configPolicyFolderControl(directory.path));
     folderActions.appendChild(smallAction(directory, 'Añadir archivos a esta carpeta', '+', function () {
       state.pendingReplacePath = '';
       state.pendingFolderPath = directory.path;
@@ -1426,6 +1441,7 @@ async function handleParentProfileChange() {
   state.parentDepth = 0;
   state.parentManifest = null;
   state.removedPaths.clear();
+  state.inheritedPolicyRules = new Map();
 
   const id = nodes.parentProfile.value;
   nodes.parentRevision.disabled = !id;
@@ -1491,6 +1507,7 @@ async function handleParentRevisionChange() {
   state.parentDepth = 0;
   state.parentManifest = null;
   state.removedPaths.clear();
+  state.inheritedPolicyRules = new Map();
 
   const profile = nodes.parentProfile.value;
   const revision = nodes.parentRevision.value;
@@ -1511,6 +1528,9 @@ async function handleParentRevisionChange() {
     state.parentRef = resolved.ref;
     state.parentDepth = resolved.inheritanceDepth;
     state.parentManifest = resolved.manifest;
+    const ownRules = state.ownPolicyRules;
+    await loadDraftConfigPolicyRules([resolved].concat(resolved.ancestors || []), '');
+    state.ownPolicyRules = ownRules;
     copyParentGameVersions(resolved.manifest);
     setStatus(nodes.folderStatus, resolved.map.size + (resolved.map.size === 1
       ? ' archivo heredado listo para esta rama.'
@@ -1549,7 +1569,8 @@ function invalidatePrepared() {
 }
 
 async function recomputeDiff() {
-  if (!state.folderSelected) {
+  // A derived profile without files of its own can still change policies.
+  if (!state.folderSelected && !state.parentRef) {
     state.diff = [];
     renderDiff();
     return;
@@ -1593,6 +1614,18 @@ async function recomputeDiff() {
     }
   });
 
+  // Same bytes, different policy: a folder or file rule changed the policy of
+  // an unchanged config, so the revision re-lists it with the new policy.
+  state.parentMap.forEach(function (parent, path) {
+    if (parent.kind !== 'config' || state.removedPaths.has(path)) return;
+    const local = state.selectedFiles.get(path);
+    if (local ? objectDigest(parent) !== local.sha256 : state.snapshotMode) return;
+    const policy = configPolicyFor(path, parent).policy;
+    if (policy !== (parent.policy || 'default_once')) {
+      diff.push({ status: 'policy', path: path, kind: 'config', size: 0, local: null, parent: parent, policy: policy });
+    }
+  });
+
   state.parentMap.forEach(function (parent, path) {
     if (state.selectedFiles.has(path) || (!state.snapshotMode && !state.removedPaths.has(path))) return;
     if (parent.kind === 'mod' || parent.kind === 'config' || updateOwnObject(path)) {
@@ -1626,13 +1659,12 @@ function changeLabel(status) {
   if (status === 'added') return 'Alta';
   if (status === 'changed') return 'Cambio';
   if (status === 'removed') return 'Eliminación';
+  if (status === 'policy') return 'Política';
   return 'No compatible';
 }
 
 function policyFor(entry) {
-  if (state.policies.has(entry.path)) return state.policies.get(entry.path);
-  if (entry.parent && entry.parent.policy) return entry.parent.policy;
-  return 'default_once';
+  return configPolicyFor(entry.path, entry.parent).policy;
 }
 
 function configRuleID(path, key) { return path + '\0' + key; }
@@ -1804,7 +1836,7 @@ function syncConfigRulesFromEditor() {
 }
 
 function renderDiff() {
-  const counts = { added: 0, changed: 0, removed: 0, unsupported: 0 };
+  const counts = { added: 0, changed: 0, removed: 0, unsupported: 0, policy: 0 };
   let stagingBytes = 0;
   state.diff.forEach(function (entry) {
     counts[entry.status] = (counts[entry.status] || 0) + 1;
@@ -1813,6 +1845,8 @@ function renderDiff() {
 
   qs('#diff-added').textContent = String(counts.added);
   qs('#diff-changed').textContent = String(counts.changed);
+  qs('#diff-policy').textContent = String(counts.policy);
+  qs('#diff-policy-card').hidden = !counts.policy;
   qs('#diff-removed').textContent = String(counts.removed);
   qs('#diff-bytes').textContent = formatBytes(stagingBytes);
   const hasBase = Boolean(state.parentRef);
@@ -1868,20 +1902,7 @@ function renderDiff() {
       if (entry.status === 'removed') {
         policyCell.textContent = entry.parent && entry.parent.policy ? entry.parent.policy : '—';
       } else {
-        const select = make('select', 'policy-select');
-        select.setAttribute('aria-label', 'Regla de ' + entry.path);
-        [['enforced', 'Obligatoria'], ['default_once', 'Valor inicial']].forEach(function (policy) {
-          const option = document.createElement('option');
-          option.value = policy[0];
-          option.textContent = policy[1];
-          select.appendChild(option);
-        });
-        select.value = policyFor(entry);
-        select.addEventListener('change', function () {
-          state.policies.set(entry.path, select.value);
-          invalidatePrepared();
-        });
-        policyCell.appendChild(select);
+        policyCell.textContent = CONFIG_POLICY_LABELS[policyFor(entry)];
       }
     } else if (entry.kind === 'mod' && entry.status !== 'removed' && entry.status !== 'unsupported') {
       const input = make('input', 'policy-select');
@@ -1914,6 +1935,14 @@ function objectRef(local) {
   return ref;
 }
 
+// Object reference of an already published entry (policy-only changes).
+function publishedObjectRef(entry) {
+  const object = entry.object || {};
+  const ref = { sha256: object.sha256, size: object.size };
+  if (object.media_type) ref.media_type = object.media_type;
+  return ref;
+}
+
 function requiredValue(selector, label) {
   const value = qs(selector).value.trim();
   if (!value) throw new Error('Falta ' + label + '.');
@@ -1929,6 +1958,8 @@ function buildManifest() {
   }
 
   const profile = requiredValue('#profile-id', 'el ID del perfil');
+  const idProblem = profileIdProblem(profile);
+  if (idProblem) throw new Error(idProblem);
   const name = requiredValue('#profile-name', 'el nombre del perfil');
   const revision = requiredValue('#revision-id', 'el ID de revisión');
   const minecraft = requiredValue('#minecraft-version', 'la versión de Minecraft');
@@ -2029,6 +2060,11 @@ function buildManifest() {
         if (expected) object.expect_base_object_sha256 = expected;
         manifest.objects.push(object);
       }
+    } else if (entry.status === 'policy') {
+      const expected = objectDigest(entry.parent);
+      const config = { path: entry.path, object: publishedObjectRef(entry.parent), policy: entry.policy };
+      if (expected) config.expect_base_object_sha256 = expected;
+      manifest.configs.push(config);
     } else if (entry.status === 'removed') {
       const expected = objectDigest(entry.parent);
       if (!expected) throw new Error('La eliminación de ' + entry.path + ' no tiene SHA-256 madre verificable.');
@@ -2202,6 +2238,12 @@ async function publishEnvelope() {
       if (promotionError) setStatus(nodes.publishStatus, 'Versión publicada, pero no activada: ' + promotionError + '. Puedes activarla desde «Ver revisiones».', 'warning');
       else setStatus(nodes.publishStatus, 'Versión ' + state.manifest.revision.sequence + ' publicada' + (qs('#activate-update').checked ? ' y activada para los launchers.' : '. Puedes activarla desde «Ver revisiones».'), 'success');
     }
+    try {
+      const saved = await saveConfigPolicyRules(state.manifest.profile.id);
+      if (saved) appendPublishNote(saved + ' regla(s) de política guardadas para la próxima versión y los perfiles hijos.');
+    } catch (error) {
+      setStatus(nodes.publishStatus, 'Versión publicada con sus políticas por archivo, pero no se guardaron las reglas por carpeta: ' + describeError(error) + '. Vuelve a marcarlas en la próxima versión.', 'warning');
+    }
     await savePublishChangelog(revision);
     appendAutoFollowSummary(published && published.auto_follow);
     updatePublishEnabled();
@@ -2239,6 +2281,10 @@ async function savePublishChangelog(revision) {
 
 // Child profiles always follow their parent: the server re-pins them on publish
 // and reports which were published and which were skipped with a warning.
+function appendPublishNote(note) {
+  setStatus(nodes.publishStatus, nodes.publishStatus.textContent + ' ' + note, nodes.publishStatus.dataset.tone);
+}
+
 function appendAutoFollowSummary(results) {
   if (!Array.isArray(results) || results.length === 0) return;
   const done = results.filter(function (item) { return item.status === 'published'; });
@@ -2281,17 +2327,54 @@ function bindInvalidation() {
     node.addEventListener('change', invalidatePrepared);
   });
   qs('#profile-name').addEventListener('input', function () {
-    if (state.updateProfile) return;
+    if (state.updateProfile || state.profileIdEdited) return;
     qs('#profile-id').value = generatedProfileID(qs('#profile-name').value);
+    renderProfileIdStatus();
     invalidatePrepared();
   });
+  qs('#profile-id').addEventListener('input', function () {
+    if (state.updateProfile) return;
+    state.profileIdEdited = qs('#profile-id').value.trim() !== '';
+    renderProfileIdStatus();
+  });
+}
+
+const PROFILE_ID_HELP = 'Se genera a partir del nombre y puedes cambiarlo. No puede repetir el de un perfil existente ni el de uno borrado.';
+
+// Mirrors revision.validProfileID and the server's tombstones (deleted_profiles).
+function profileIdProblem(id) {
+  if (!id) return '';
+  if (!/^profile_[a-z0-9][a-z0-9_-]{2,63}$/.test(id)) return 'Usa «profile_» seguido de 3 a 64 minúsculas, números, «-» o «_».';
+  if (state.updateProfile) return '';
+  if (state.deletedProfileIds.has(id)) return 'Este identificador perteneció a un perfil borrado y el servidor no lo acepta. Elige otro.';
+  if (state.profiles.some(function (profile) { return profileId(profile) === id; })) return 'Ya existe un perfil con este identificador. Para cambiarlo usa «Publicar actualización».';
+  return '';
+}
+
+function renderProfileIdStatus() {
+  const node = qs('#profile-id-status');
+  if (!node) return;
+  const problem = profileIdProblem(qs('#profile-id').value.trim());
+  node.textContent = problem || PROFILE_ID_HELP;
+  node.classList.toggle('field-error', Boolean(problem));
+}
+
+async function loadDeletedProfiles() {
+  try {
+    const payload = await request('/v1/admin/deleted-profiles');
+    state.deletedProfileIds = new Set(Array.isArray(payload && payload.deleted_profile_ids) ? payload.deleted_profile_ids : []);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 404) recordError('No se pudo cargar la lista de perfiles borrados', error, false);
+  }
+  if (!state.updateProfile && !state.profileIdEdited && qs('#profile-name').value) qs('#profile-id').value = generatedProfileID(qs('#profile-name').value);
+  renderProfileIdStatus();
 }
 
 function generatedProfileID(name) {
   const base = String(name || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 44);
   if (!base) return '';
-  const used = new Set(state.profiles.map(profileId));
+  const used = new Set(state.profiles.map(profileId).concat(Array.from(state.deletedProfileIds)));
   const candidate = 'profile_' + base;
   if (!used.has(candidate)) return candidate;
   let suffix = 2;
@@ -2539,6 +2622,7 @@ async function init() {
   }
   await loadOverview();
   await loadProfiles();
+  await loadDeletedProfiles();
   renderExplorer();
   await loadGameVersions();
 }

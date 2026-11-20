@@ -60,7 +60,7 @@ El instalador y el actualizador mantienen el binario del checkout y el binario r
 
 1. Abre `https://<dominio>:8444/admin/` desde la LAN e inicia sesión con el usuario administrador configurado (`wachi`) y la contraseña elegida al crear el verificador. No hay una contraseña predeterminada.
 2. En Perfiles globales, crea o selecciona el perfil y prepara el contenido/revisión. Para una hija, comprueba la versión base y los permisos heredados antes de publicar.
-3. Revisa los archivos y reglas y pulsa **Preparar archivos**. Sólo se suben los objetos necesarios.
+3. Revisa los archivos y reglas y pulsa **Preparar archivos**. Sólo se suben los objetos necesarios. La política de cada config («Obligatoria» o «Valor inicial») se elige en el explorador, por archivo o por carpeta entera (ver `ADMIN_UI.md`, «Políticas de configs»).
 4. Marca que has revisado los cambios y pulsa **Publicar versión**. Confirma la publicación. El servidor valida, firma y almacena la revisión automáticamente.
 5. Comprueba el historial. No hay descarga de solicitudes ni subida de archivos firmados.
 

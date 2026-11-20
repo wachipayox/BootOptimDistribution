@@ -301,7 +301,18 @@ func (a *API) serveAdmin(w http.ResponseWriter, r *http.Request) {
 		a.handlePublishRevision(w, r)
 		return
 	}
+	if r.URL.Path == "/v1/admin/deleted-profiles" {
+		a.handleDeletedProfiles(w, r)
+		return
+	}
 	parts := pathParts(r.URL.Path)
+	if len(parts) == 5 && parts[0] == "v1" && parts[1] == "admin" && parts[2] == "profiles" && parts[4] == "config-policies" {
+		if a.rejectAdminTestProfile(w, parts[3]) {
+			return
+		}
+		a.handleConfigPolicies(w, r, parts[3])
+		return
+	}
 	if len(parts) == 4 && parts[0] == "v1" && parts[1] == "admin" && parts[2] == "profiles" {
 		if r.Method != http.MethodDelete {
 			a.methodNotAllowed(w, http.MethodDelete)
