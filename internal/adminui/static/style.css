@@ -1252,3 +1252,10 @@ footer {
 .publish-changelog { display: grid; gap: .6rem; margin: 1rem 0; padding: .9rem 1rem; border: 1px solid var(--line, #2a2a30); border-radius: 10px; }
 .publish-changelog label { display: grid; gap: .3rem; }
 .publish-changelog legend { padding: 0 .3rem; font-weight: 600; }
+
+/* Config policies in the explorer (config-policies.js). */
+.explorer-policy { width: auto; max-width: 15rem; min-height: 1.6rem; padding: .1rem .35rem; font-size: .72rem; }
+.folder-policy { margin-right: .3rem; }
+.tree-folder-actions:has(.folder-policy) { opacity: 1; }
+.change-policy { color: #e3b341; }
+.field-error { color: #ffaaa4; }

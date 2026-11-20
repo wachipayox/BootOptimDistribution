@@ -13,6 +13,58 @@
   rama acompañan a un archivo de configuración renombrado. En el manifiesto es un
   retiro más un alta, así que no hay cambio de esquema.
 
+## Identificador del perfil
+
+El paso 1 muestra el identificador (`profile_…`). Se propone a partir del
+nombre saltando los de perfiles existentes **y** los de perfiles borrados
+(`GET /v1/admin/deleted-profiles`): el servidor reserva un id borrado y
+rechaza publicarlo con `immutable_conflict`. Se puede escribir a mano; el
+panel avisa al momento y «Preparar archivos» se niega si el id no es válido,
+ya existe o perteneció a un perfil borrado. En una actualización es de solo
+lectura.
+
+## Políticas de configs (obligatoria / valor inicial)
+
+Cada archivo de `config/` tiene una política en su fila del explorador:
+
+- **Obligatoria** (`enforced`): el launcher la reinstala en cada
+  actualización. Pandora guarda una copia si el jugador la había editado;
+  Android la guarda siempre en la copia de la transacción.
+- **Valor inicial** (`default_once`): solo se copia si el jugador no la tiene;
+  después es suya. Es lo que se usa si no se elige nada.
+
+Cada carpeta de `config/` (incluida `config/` misma) tiene también un
+selector: su regla vale para todos sus archivos y subcarpetas, y para los que
+se añadan después. **Gana la regla más específica**: la de un archivo, luego
+la de la subcarpeta más profunda. Al poner la regla de una carpeta que ya
+tiene excepciones propias dentro, el panel pregunta si quitarlas. En el
+archivo, la primera opción («Según config/x/: …», «Heredada: …»,
+«Publicada: …») significa «sin regla propia» y muestra lo que se aplicará.
+
+**Dónde se guardan.** Los launchers solo leen `configs[].policy` y Pandora
+rechaza campos desconocidos en el manifiesto, así que las reglas de carpeta no
+entran en él. El panel las **expande** a la política de cada archivo al
+preparar la revisión (los archivos sin cambios cuyo resultado cambia se
+vuelven a listar con el mismo objeto y la nueva política: tarjeta «Cambios de
+política») y, tras publicar, guarda las reglas propias del perfil como
+metadatos sin firmar (`PUT /v1/admin/profiles/{id}/config-policies`). Al
+preparar la siguiente versión o un perfil hijo, el panel las vuelve a leer de
+toda la cadena de madres: se ven como «Carpeta heredada» y se aplican a los
+archivos nuevos. Un perfil sin reglas guardadas conserva tal cual las
+políticas publicadas.
+
+**Seguimiento automático.** Cuando la madre publica, el servidor re-fija los
+hijos sin aplicar sus reglas. Si la madre cambia la política de un archivo que
+el hijo tenía como excepción, el hijo hereda la de la madre hasta su siguiente
+actualización manual, en la que el panel detecta la diferencia y la propone
+como «Cambio de política».
+
+**Fuera de `config/`** (resourcepacks, shaderpacks, `options.txt`,
+`servers.dat`…) los archivos van como `objects`, que no tienen política: los
+launchers los tratan como obligatorios (Pandora, salvo `options.txt` y
+`servers.dat`, que trata como valor inicial). El selector no aparece ahí;
+darles política exigiría cambiar el contrato de los launchers.
+
 ## Modloader del perfil (esquema 4)
 
 El paso 1 de «Nuevo perfil global» permite elegir NeoForge, Fabric o Forge. La
